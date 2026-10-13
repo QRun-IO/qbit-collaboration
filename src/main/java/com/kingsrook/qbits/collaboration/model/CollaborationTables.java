@@ -26,13 +26,19 @@ import java.util.ArrayList;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
 import com.kingsrook.qbits.collaboration.CollaborationSecurity;
+import com.kingsrook.qbits.collaboration.attachments.AttachmentPreviewCustomizer;
+import com.kingsrook.qbits.collaboration.attachments.AttachmentSecurity;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
+import com.kingsrook.qqq.backend.core.actions.customizers.TableCustomizers;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.AuditLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.QAuditRules;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.AdornmentType;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.FieldAdornment;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.QVirtualFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QIcon;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.QPermissionRules;
@@ -40,6 +46,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleVal
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSource;
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSourceType;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QFieldSection;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.QFieldSectionAlternativeType;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.Tier;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
@@ -51,6 +58,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String ATTACHMENT = "collaboration_attachment";
    public static final String FEATURE_SETTING = "collaboration_feature_setting";
    public static final String FAVORITE = "collaboration_favorite";
    public static final String RECENT = "collaboration_recent";
@@ -78,7 +86,7 @@ public final class CollaborationTables
    {
       return (List.of(
          enumSource(TARGET_TYPE, "TABLE", "APP", "RECORD", "PROCESS", "REPORT", "SAVED_VIEW"),
-         QPossibleValueSource.newForTable(FAVORITE), QPossibleValueSource.newForTable(RECENT),
+         QPossibleValueSource.newForTable(ATTACHMENT), QPossibleValueSource.newForTable(FAVORITE), QPossibleValueSource.newForTable(RECENT),
          enumSource(SCOPE_TYPE, "INSTANCE", "APP", "TABLE"),
          enumSource(FEATURE, "ATTACHMENTS", "TAGS", "CUSTOM_FIELDS", "COMMENTS", "PRESENCE", "SHARING",
             "FAVORITES", "FOLLOW", "TIMELINE", "RECENTS", "TASKS", "ASSIGNMENT"),
@@ -144,7 +152,7 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("lastViewedAt", QFieldType.DATE_TIME).withLabel("Last Viewed At").withIsRequired(true))
          .withField(new QFieldMetaData("viewCount", QFieldType.INTEGER).withLabel("View Count").withIsRequired(true).withDefaultValue(1))
          .withSection(new QFieldSection("details", new QIcon("history"), Tier.T2, List.of("label", "lastViewedAt", "viewCount")).withLabel("Details"));
-      List<QTableMetaData> tables = List.of(settings, people, favorites, recents);
+      List<QTableMetaData> tables = List.of(settings, people, favorites, recents, attachment(config));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
@@ -200,4 +208,48 @@ public final class CollaborationTables
    {
       return (new QFieldMetaData(name, QFieldType.STRING).withLabel(label).withMaxLength(length));
    }
+
+   /*******************************************************************************
+    ** Main attachment table; virtual URLs never have backend columns.
+    *******************************************************************************/
+   private static QTableMetaData attachment(CollaborationQBitConfig config)
+   {
+      return (base(config, ATTACHMENT, "Attachments", "attach_file")
+         .withPermissionRules(CollaborationPermissions.permissionRules()
+            .withCustomPermissionChecker(new QCodeReference(AttachmentSecurity.class)))
+         .withRecordLabelFormatAndFields("%s", "fileName")
+         .withSearchFields(List.of("fileName", "description"))
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+         .withField(string("tableName", "Table", 128).withIsRequired(true))
+         .withField(string("recordId", "Record ID", 64).withIsRequired(true))
+         .withField(string("fileName", "File Name", 255).withIsRequired(true))
+         .withField(string("contentType", "Content Type", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("sizeBytes", QFieldType.LONG).withLabel("Size (bytes)").withIsRequired(true))
+         .withField(string("sha256", "SHA-256", 64).withIsRequired(true))
+         .withField(string("bucketName", "Bucket", 255).withIsRequired(true))
+         .withField(string("storageKey", "Storage Key", 1024).withIsRequired(true))
+         .withField(string("thumbnailKey", "Thumbnail Key", 1024))
+         .withField(new QFieldMetaData("description", QFieldType.TEXT).withLabel("Description"))
+         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("parentDeleted", QFieldType.BOOLEAN).withLabel("Parent Deleted").withIsRequired(true).withDefaultValue(false))
+         .withVirtualField(new QVirtualFieldMetaData("previewUrl", QFieldType.STRING).withLabel("Preview").withIsEditable(false).withIsQuerySelectable(true)
+            .withFieldAdornment(AdornmentType.FilePreviewValues.newFieldAdornment()
+               .withValue(AdornmentType.FilePreviewValues.FILE_NAME_FIELD, "fileName")
+               .withValue(AdornmentType.FilePreviewValues.MIME_TYPE_FIELD, "contentType")
+               .withValue(AdornmentType.FilePreviewValues.SIZE_BYTES_FIELD, "sizeBytes")
+               .withValue(AdornmentType.FilePreviewValues.THUMBNAIL_MAX_SIZE, 48)))
+         .withVirtualField(new QVirtualFieldMetaData("downloadUrl", QFieldType.STRING).withLabel("Download").withIsEditable(false).withIsQuerySelectable(true)
+            .withFieldAdornment(new FieldAdornment(AdornmentType.FILE_DOWNLOAD)
+               .withValue(AdornmentType.FileDownloadValues.FILE_NAME_FIELD, "fileName")
+               .withValue(AdornmentType.FileDownloadValues.DOWNLOAD_URL_DYNAMIC, true)))
+         .withCustomizer(TableCustomizers.POST_QUERY_RECORD, new QCodeReference(AttachmentPreviewCustomizer.class))
+         .withSection(new QFieldSection("file", new QIcon("attach_file"), Tier.T1,
+            List.of("fileName", "contentType", "sizeBytes", "description")).withLabel("File")
+            .withAlternative(QFieldSectionAlternativeType.RECORD_VIEW, section -> section.setFieldNames(List.of("previewUrl", "downloadUrl", "fileName", "contentType", "sizeBytes", "description"))))
+         .withSection(new QFieldSection("parent", new QIcon("link"), Tier.T2,
+            List.of("tableName", "recordId", "createdByUserId", "parentDeleted")).withLabel("Parent"))
+         .withSection(new QFieldSection("storage", new QIcon("storage"), Tier.T3,
+            List.of("id", "bucketName", "storageKey", "thumbnailKey", "sha256")).withLabel("Storage")));
+   }
+
 }

@@ -82,7 +82,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(List.of(HOME_WIDGET))
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.ATTACHMENT, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -139,7 +139,33 @@ public final class CollaborationHome
       html.append("</section>");
       personalSummary(html, CollaborationTables.FAVORITE, "Favorites");
       personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
+      attachmentSummary(html);
       return (html.append("</div>").toString());
+   }
+
+
+
+   /*******************************************************************************
+    ** Real table aggregates, restricted to readable parent tables. Parent locks
+    ** are post-filtered on rows, so these aggregate totals are approximate.
+    *******************************************************************************/
+   private static void attachmentSummary(StringBuilder html) throws QException
+   {
+      Aggregate count = new Aggregate().withFieldName("id").withOperator(AggregateOperator.COUNT);
+      Aggregate bytes = new Aggregate().withFieldName("sizeBytes").withOperator(AggregateOperator.SUM);
+      AggregateInput input = new AggregateInput(CollaborationTables.ATTACHMENT).withAggregates(List.of(count, bytes));
+      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
+      List<AggregateResult> results = new AggregateAction().execute(input).getResults();
+      Object rowCount = results.isEmpty() ? 0 : results.getFirst().getAggregateValue(count);
+      Object totalBytes = results.isEmpty() ? 0 : results.getFirst().getAggregateValue(bytes);
+      html.append("<section><h3>Attachments</h3><p>Attachments: ").append(rowCount)
+         .append("</p><p>Total size (bytes): ").append(totalBytes == null ? 0 : totalBytes)
+         .append("</p><p>Approximate totals: parent record locks are applied when browsing attachments.</p>");
+      if("0".equals(String.valueOf(rowCount)))
+      {
+         html.append("<p>No attachments yet.</p>");
+      }
+      html.append("</section>");
    }
 
 
