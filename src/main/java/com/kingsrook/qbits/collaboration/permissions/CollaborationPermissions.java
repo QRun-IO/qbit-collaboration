@@ -29,7 +29,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.permissions.QPermissionRule
 
 
 /*******************************************************************************
- ** Full permission names; fields and tags management are reserved for later phases.
+ ** Full permission names; fields management is reserved for a later phase.
  *******************************************************************************/
 public final class CollaborationPermissions
 {

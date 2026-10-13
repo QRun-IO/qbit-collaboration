@@ -61,6 +61,7 @@ public class AttachmentCleanup
       {
          return;
       }
+      new com.kingsrook.qbits.collaboration.tags.TagsService().onParentsDeleted(table, ids);
       while(true)
       {
          List<QRecord> rows = AttachmentRecords.query(new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)

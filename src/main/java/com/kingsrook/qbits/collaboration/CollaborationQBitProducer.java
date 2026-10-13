@@ -137,6 +137,11 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       {
          instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(com.kingsrook.qbits.collaboration.follow.FollowChangeBatcher.class));
       }
+      com.kingsrook.qbits.collaboration.tags.TagProcesses.management().forEach(output::add);
+      for(String table : qBitConfig.getTagActionTables())
+      {
+         com.kingsrook.qbits.collaboration.tags.TagProcesses.processesFor(table).forEach(output::add);
+      }
       output.add(DeleteAttachmentsProcess.metadata());
       for(QPossibleValueSource source : CollaborationTables.possibleValueSources())
       {

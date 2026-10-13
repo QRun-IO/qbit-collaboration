@@ -94,10 +94,22 @@ public final class ParentRecordAccess
    public static void requireFeature(String tableName, Serializable recordId, String feature) throws QException
    {
       requireVisibleParent(tableName, recordId);
+      requireTableFeature(tableName, feature);
+   }
+
+   /*******************************************************************************
+    ** Authorize vocabulary creation without requiring an arbitrary parent record.
+    *******************************************************************************/
+   public static void requireTableFeature(String tableName, String feature) throws QException
+   {
+      if(!canReadTable(tableName))
+      {
+         throw (new QNotFoundException("Not found"));
+      }
       QTableMetaData table = QContext.getQInstance().getTable(tableName);
       String base = table.getPermissionRules() == null ? null : table.getPermissionRules().getPermissionBaseName();
       base = base == null || base.isBlank() ? tableName : base;
-      if(!QContext.getQSession().hasPermission(base + "." + feature)
+      if(!QContext.getQSession().hasPermission(tableName + "." + feature) && !QContext.getQSession().hasPermission(base + "." + feature)
          && !PermissionsHelper.hasTablePermission(new AbstractActionInput(), tableName, TablePermissionSubType.EDIT))
       {
          throw (new QPermissionDeniedException("This needs the " + base + "." + feature + " permission or table EDIT."));

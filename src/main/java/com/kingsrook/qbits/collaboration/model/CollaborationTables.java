@@ -58,6 +58,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String TAG = "collaboration_tag";
+   public static final String RECORD_TAG = "collaboration_record_tag";
    public static final String COMMENT = "collaboration_comment";
    public static final String COMMENT_REVISION = "collaboration_comment_revision";
    public static final String MENTION = "collaboration_mention";
@@ -91,6 +93,7 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         QPossibleValueSource.newForTable(TAG), QPossibleValueSource.newForTable(RECORD_TAG),
          QPossibleValueSource.newForTable(COMMENT), QPossibleValueSource.newForTable(COMMENT_REVISION), QPossibleValueSource.newForTable(MENTION), QPossibleValueSource.newForTable(FOLLOW), QPossibleValueSource.newForTable(ACTIVITY), QPossibleValueSource.newForTable(FOLLOW_DIGEST),
          enumSource(TARGET_TYPE, "TABLE", "APP", "RECORD", "PROCESS", "REPORT", "SAVED_VIEW"),
          QPossibleValueSource.newForTable(ATTACHMENT), QPossibleValueSource.newForTable(FAVORITE), QPossibleValueSource.newForTable(RECENT),
@@ -161,6 +164,7 @@ public final class CollaborationTables
          .withSection(new QFieldSection("details", new QIcon("history"), Tier.T2, List.of("label", "lastViewedAt", "viewCount")).withLabel("Details"));
       List<QTableMetaData> tables = new ArrayList<>(List.of(settings, people, favorites, recents, attachment(config)));
       tables.addAll(conversationTables(config));
+      tables.addAll(tagTables(config));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
@@ -342,5 +346,40 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("parentDeleted", QFieldType.BOOLEAN).withIsRequired(true).withDefaultValue(false))
          .withRecordLabelFormatAndFields("%s", "id")
          .withSection(new QFieldSection("parent", new QIcon("link"), Tier.T2, List.of("tableName", "recordId", "parentDeleted")).withLabel("Parent")));
+   }
+
+   /*******************************************************************************
+    ** Vocabulary is visible; assignments inherit parent restrictions and locks.
+    *******************************************************************************/
+   private static List<QTableMetaData> tagTables(CollaborationQBitConfig config)
+   {
+      QTableMetaData tags = base(config, TAG, "Tags", "label")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.tags.TagSecurity.class)))
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+         .withSearchFields(List.of("label"))
+         .withRecordLabelFormatAndFields("%s", "label")
+         .withField(string("name", "Name", 60).withIsRequired(true))
+         .withField(string("label", "Label", 255).withIsRequired(true))
+         .withField(string("color", "Color", 64))
+         .withField(string("tableName", "Table", 128))
+         .withField(new QFieldMetaData("approved", QFieldType.BOOLEAN).withIsRequired(true))
+         .withField(new QFieldMetaData("description", QFieldType.TEXT))
+         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("usageCount", QFieldType.INTEGER).withIsRequired(true).withDefaultValue(0))
+         .withField(new QFieldMetaData("mergedIntoTagId", QFieldType.INTEGER).withPossibleValueSourceName(TAG))
+         .withUniqueKey(new UniqueKey("tableName", "name"))
+         .withSection(new QFieldSection("details", new QIcon("label"), Tier.T1,
+            List.of("id", "name", "label", "color", "tableName", "approved", "description", "createdByUserId", "usageCount", "mergedIntoTagId")).withLabel("Details"));
+      QTableMetaData links = referenced(config, RECORD_TAG, "Record Tags", "label")
+         .withField(new QFieldMetaData("tagId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(TAG))
+         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withUniqueKey(new UniqueKey("tableName", "recordId", "tagId"))
+         .withSection(new QFieldSection("details", new QIcon("label"), Tier.T1, List.of("id", "tagId", "createdByUserId")).withLabel("Details"));
+      for(QTableMetaData table : List.of(tags, links))
+      {
+         table.getFields().values().forEach(field -> field.setIsEditable(false));
+      }
+      return (List.of(tags, links));
    }
 }
