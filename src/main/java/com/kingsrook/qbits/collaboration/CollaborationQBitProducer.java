@@ -128,6 +128,15 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();
       CollaborationSecurity.buildSecurityKeyTypes().forEach(output::add);
       output.add(TrimRecentsProcess.metadata(qBitConfig));
+      output.add(com.kingsrook.qbits.collaboration.follow.SendFollowDigestsProcess.metadata(qBitConfig));
+      for(String table : qBitConfig.getFollowActionTables())
+      {
+         com.kingsrook.qbits.collaboration.follow.FollowProcesses.processesFor(table).forEach(output::add);
+      }
+      if(!qBitConfig.getFollowChangeTables().isEmpty())
+      {
+         instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(com.kingsrook.qbits.collaboration.follow.FollowChangeBatcher.class));
+      }
       output.add(DeleteAttachmentsProcess.metadata());
       for(QPossibleValueSource source : CollaborationTables.possibleValueSources())
       {
@@ -144,6 +153,7 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          output.add(CollaborationHome.app(qBitConfig));
       }
       output.addSelfToInstance(instance);
+      com.kingsrook.qbits.collaboration.model.ConversationChildren.install(instance);
       if(Boolean.TRUE.equals(qBitConfig.getAdminApp()) && qBitConfig.getParentAppName() != null)
       {
          QAppMetaData parent = instance.getApp(qBitConfig.getParentAppName());

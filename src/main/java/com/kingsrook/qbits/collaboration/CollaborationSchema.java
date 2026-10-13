@@ -70,6 +70,12 @@ public final class CollaborationSchema
          }
       }
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_attachment_parent ON collaboration_attachment (table_name, record_id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_comment_parent ON collaboration_comment (table_name, record_id, last_activity_at, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_comment_created ON collaboration_comment (table_name, record_id, create_date)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_comment_thread ON collaboration_comment (thread_id, create_date, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_revision_comment ON collaboration_comment_revision (comment_id, edited_at, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_activity_parent ON collaboration_activity (table_name, record_id, at, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_digest_due ON collaboration_follow_digest (due_at)");
       return (String.join(";\n", statements) + ";\n");
    }
 

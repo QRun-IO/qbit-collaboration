@@ -92,6 +92,7 @@ public class AttachmentsService
     *******************************************************************************/
    public AttachmentEntry upload(String tableName, Serializable recordId, String fileName, String contentType, InputStream stream, String description) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       ParentRecordAccess.requireFeature(tableName, recordId, "attach");
       String user = requireUser();
       String id = canonicalId(tableName, recordId);
@@ -130,6 +131,7 @@ public class AttachmentsService
          {
             storage.put(bucket, PutRequest.of(key, upload).withContentLength(size).withContentType(type).withContentDisposition("inline"));
          }
+         boolean rowSaved = false;
          try
          {
             QRecord row = new QRecord().withValue("tableName", tableName).withValue("recordId", id).withValue("fileName", name)
@@ -140,13 +142,18 @@ public class AttachmentsService
             input.withPermissionBypass("AttachmentsService checked parent and attach permission before upload.");
             List<QRecord> records = new InsertAction().execute(input).getRecords();
             AttachmentRecords.checkErrors(records);
+            rowSaved = true;
+            com.kingsrook.qbits.collaboration.activity.ActivityWriter.write(tableName, id, "FILE_ADDED", "File added", CollaborationTables.ATTACHMENT, records.getFirst().getValueString("id"));
             return (entry(records.getFirst()));
          }
          catch(QException | RuntimeException failure)
          {
             try
             {
-               storage.delete(bucket, key);
+               if(!rowSaved)
+               {
+                  storage.delete(bucket, key);
+               }
             }
             catch(RuntimeException cleanupFailure)
             {
@@ -180,6 +187,7 @@ public class AttachmentsService
     *******************************************************************************/
    public List<AttachmentEntry> list(String tableName, Serializable recordId) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       String id = canonicalId(tableName, recordId);
       List<AttachmentEntry> entries = new ArrayList<>();
       for(QRecord row : AttachmentRecords.query(new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, tableName)
@@ -197,6 +205,7 @@ public class AttachmentsService
     *******************************************************************************/
    public URL downloadUrl(Serializable attachmentId, boolean inline) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       return (url(requireRow(attachmentId), inline));
    }
 
@@ -218,6 +227,7 @@ public class AttachmentsService
     *******************************************************************************/
    public void delete(List<? extends Serializable> attachmentIds) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       List<QRecord> rows = new ArrayList<>();
       for(Serializable id : attachmentIds.stream().distinct().toList())
       {
@@ -226,6 +236,7 @@ public class AttachmentsService
       for(QRecord row : rows)
       {
          deleteStoredRow(row);
+         com.kingsrook.qbits.collaboration.activity.ActivityWriter.write(row.getValueString("tableName"), row.getValueString("recordId"), "FILE_REMOVED", "File removed", CollaborationTables.ATTACHMENT, row.getValueString("id"));
       }
    }
 
@@ -235,6 +246,7 @@ public class AttachmentsService
     *******************************************************************************/
    public AttachmentEntry rename(Serializable attachmentId, String fileName, String description) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       QRecord row = requireMutable(attachmentId);
       QRecord change = new QRecord().withValue("id", row.getValue("id"));
       if(fileName != null)
@@ -265,6 +277,7 @@ public class AttachmentsService
     *******************************************************************************/
    public QRecord requireMutable(Serializable attachmentId) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       QRecord row = requireRow(attachmentId);
       requireUser();
       if(!canDelete(row))

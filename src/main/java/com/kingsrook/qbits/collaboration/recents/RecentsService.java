@@ -61,6 +61,7 @@ public final class RecentsService
     *******************************************************************************/
    public static void recordView(String targetType, String targetName, Serializable recordId) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       String userId = PersonalRecords.currentUserId();
       FavoriteEntry target = TargetResolver.require(targetType, targetName, recordId);
       QQueryFilter filter = PersonalRecords.targetFilter(targetType, targetName, target.recordId());
@@ -102,6 +103,7 @@ public final class RecentsService
     *******************************************************************************/
    public static List<FavoriteEntry> list(Integer limit) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       if(limit == null || limit < 1 || limit > 50)
       {
          throw (new QException("Limit must be between 1 and 50"));

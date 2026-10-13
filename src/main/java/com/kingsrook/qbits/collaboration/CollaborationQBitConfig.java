@@ -23,7 +23,9 @@ package com.kingsrook.qbits.collaboration;
 
 
 import java.util.List;
+import com.kingsrook.qbits.collaboration.notify.NoOpNotifier;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitConfig;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 
@@ -36,6 +38,10 @@ public class CollaborationQBitConfig implements QBitConfig
    public static final String TABLE_NAME_PREFIX = "collaboration_";
    public static final String PERMISSION_BASE_NAME = "collaboration";
 
+   private QCodeReference notifier = new QCodeReference(NoOpNotifier.class);
+   private QCodeReference userSessionSupplier = null;
+   private List<String> followActionTables = List.of();
+   private List<String> followChangeTables = List.of();
    private String backendName;
    private String schedulerName;
    private String appName = "collaboration";
@@ -244,6 +250,15 @@ public class CollaborationQBitConfig implements QBitConfig
       {
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
       }
+      assertCondition(notifier != null, "notifier is required", errors);
+      for(List<String> tables : List.of(followActionTables, followChangeTables))
+      {
+         for(String table : tables)
+         {
+            assertCondition(table != null && !table.startsWith(TABLE_NAME_PREFIX) && instance.getTable(table) != null
+               && instance.getTable(table).getPrimaryKeyField() != null, "Follow configuration needs a host table with a primary key: " + table, errors);
+         }
+      }
       assertCondition(StringUtils.hasContent(attachmentsBucketName), "attachmentsBucketName is required", errors);
       assertCondition(defaultMaxBytes != null && defaultMaxBytes > 0, "defaultMaxBytes must be positive", errors);
       assertCondition(blockedExtensions != null && blockedExtensions.stream().allMatch(value -> value != null && !value.isBlank()), "blockedExtensions must contain nonblank extensions", errors);
@@ -354,6 +369,74 @@ public class CollaborationQBitConfig implements QBitConfig
    public CollaborationQBitConfig withBlockedExtensions(List<String> blockedExtensions)
    {
       setBlockedExtensions(blockedExtensions);
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Get notifier.
+    *******************************************************************************/
+   public QCodeReference getNotifier()
+   {
+      return (notifier);
+   }
+
+   /*******************************************************************************
+    ** Configure notifier.
+    *******************************************************************************/
+   public CollaborationQBitConfig withNotifier(QCodeReference notifier)
+   {
+      this.notifier = notifier;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Get userSessionSupplier.
+    *******************************************************************************/
+   public QCodeReference getUserSessionSupplier()
+   {
+      return (userSessionSupplier);
+   }
+
+   /*******************************************************************************
+    ** Configure userSessionSupplier.
+    *******************************************************************************/
+   public CollaborationQBitConfig withUserSessionSupplier(QCodeReference userSessionSupplier)
+   {
+      this.userSessionSupplier = userSessionSupplier;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Get followActionTables.
+    *******************************************************************************/
+   public List<String> getFollowActionTables()
+   {
+      return (followActionTables);
+   }
+
+   /*******************************************************************************
+    ** Configure followActionTables.
+    *******************************************************************************/
+   public CollaborationQBitConfig withFollowActionTables(List<String> followActionTables)
+   {
+      this.followActionTables = followActionTables;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Get followChangeTables.
+    *******************************************************************************/
+   public List<String> getFollowChangeTables()
+   {
+      return (followChangeTables);
+   }
+
+   /*******************************************************************************
+    ** Configure followChangeTables.
+    *******************************************************************************/
+   public CollaborationQBitConfig withFollowChangeTables(List<String> followChangeTables)
+   {
+      this.followChangeTables = followChangeTables;
       return (this);
    }
 }
