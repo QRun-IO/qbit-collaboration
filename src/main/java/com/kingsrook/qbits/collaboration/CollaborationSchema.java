@@ -66,9 +66,10 @@ public final class CollaborationSchema
             index++;
             List<String> names = key.getFieldNames().stream().map(name -> table.getField(name).getBackendName()).toList();
             statements.add("CREATE UNIQUE INDEX IF NOT EXISTS uq_" + table.getName() + "_" + index + " ON " + table.getName() + " (" + String.join(", ", names) + ")"
-               + (key.getFieldNames().contains("recordId") ? " NULLS NOT DISTINCT" : ""));
+               + (key.getFieldNames().stream().anyMatch(name -> !Boolean.TRUE.equals(table.getField(name).getIsRequired())) ? " NULLS NOT DISTINCT" : ""));
          }
       }
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_record_tag_tag ON collaboration_record_tag (tag_id)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_attachment_parent ON collaboration_attachment (table_name, record_id)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_comment_parent ON collaboration_comment (table_name, record_id, last_activity_at, id)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_comment_created ON collaboration_comment (table_name, record_id, create_date)");

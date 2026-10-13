@@ -42,6 +42,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateRe
 import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetOutput;
@@ -82,7 +83,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(List.of(HOME_WIDGET))
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -140,6 +141,7 @@ public final class CollaborationHome
       personalSummary(html, CollaborationTables.FAVORITE, "Favorites");
       personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
       attachmentSummary(html);
+      tagSummary(html);
       html.append("<section><h3>Comments this week</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
          .withCriteria("createDate", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
          .withCriteria("createDate", QCriteriaOperator.LESS_THAN_OR_EQUALS, now).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");
@@ -155,6 +157,27 @@ public final class CollaborationHome
    }
 
 
+
+   /*******************************************************************************
+    ** Caller-filtered vocabulary totals and five most used active tags.
+    *******************************************************************************/
+   private static void tagSummary(StringBuilder html) throws QException
+   {
+      QQueryFilter active = new QQueryFilter().withCriteria("mergedIntoTagId", QCriteriaOperator.IS_BLANK);
+      html.append("<section><h3>Tags</h3><p>Vocabulary size: ").append(count(CollaborationTables.TAG, active))
+         .append("</p><p>Pending suggestions: ").append(count(CollaborationTables.TAG, new QQueryFilter()
+            .withCriteria("mergedIntoTagId", QCriteriaOperator.IS_BLANK).withCriteria("approved", QCriteriaOperator.EQUALS, false)))
+         .append("</p><ul>");
+      com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput input = new com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput(CollaborationTables.TAG)
+         .withFilter(active.withCriteria("approved", QCriteriaOperator.EQUALS, true).withOrderBy(new QFilterOrderBy("usageCount", false)).withOrderBy(new QFilterOrderBy("label")).withLimit(5));
+      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
+      for(com.kingsrook.qqq.backend.core.model.data.QRecord tag : new com.kingsrook.qqq.backend.core.actions.tables.QueryAction().execute(input).getRecords())
+      {
+         html.append("<li>").append(tag.getValueString("label").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+            .append(": ").append(tag.getValueInteger("usageCount")).append("</li>");
+      }
+      html.append("</ul></section>");
+   }
 
    /*******************************************************************************
     ** Real table aggregates, restricted to readable parent tables. Parent locks

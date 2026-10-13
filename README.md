@@ -1,6 +1,6 @@
 # QBit Collaboration
 
-Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Tags (d) and phases f to i remain planned; stored settings are not yet applied as runtime overrides.
+Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and standalone filter translation. Phases f to i remain planned; general runtime overrides are still deferred. TAGS mode settings are read directly by the service.
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
@@ -218,3 +218,66 @@ Offline verification: `./mvnw -o -q verify` (Windows: `./mvnw.cmd -o -q verify`)
 ## License
 
 [Apache License 2.0](LICENSE). Copyright 2026 Kingsrook, LLC; see [NOTICE](NOTICE).
+
+## Tags
+
+Phase d builds against **QQQ 4.1.0-RC.5**. Register host actions with
+`config.withTagActionTables(List.of("order"))`; `withDefaultTagMode("FREE")` is the
+default. Set `collaboration_feature_setting.feature = TAGS` and JSON
+`{"mode":"APPROVED_ONLY"}` to require approval. The service reads settings as the
+system, in TABLE → preferred APP → INSTANCE order, falling back to config. The
+first scope containing `mode` wins; `enabled` remains part of future general
+feature resolution. Invalid policy JSON or mode fails closed.
+
+`TagsService` provides:
+
+- `vocabulary(table, query, limit)`: global and table vocabulary, approved tags plus
+  the caller's pending suggestions, excluding merged aliases; usage descending,
+  then label. Default limit 20, maximum 100.
+- `create(tableOrNull, label, color)`: trimmed, lowercase, collapsed name of 1–60
+  characters; the label retains its case. Duplicate names reuse the existing tag.
+  Per-table creation requires `<table>.tag` or table EDIT and READ. FREE creates
+  approved tags; APPROVED_ONLY creates suggestions unless the caller holds
+  `collaboration.tags.manage`. Global creation always requires that manage grant.
+- `tagsFor(table, recordId)` and `apply(table, recordId, add, remove)`: parent READ
+  and record locks are checked first. Writes also require the tag feature grant or
+  EDIT. Numeric values are tag IDs; strings are labels. Unknown add labels are
+  created in FREE; in APPROVED_ONLY they fail with
+  “Pick an approved tag (or suggest one)”. Pending tags cannot be applied by anyone.
+  Repeated changes are idempotent; actual changes write TAGGED/UNTAGGED activity,
+  recount usage, and do not notify followers.
+
+Tags is a main navigation table with FIELD auditing and native label search.
+Record Tags is a secured child list. Both use service-managed writes. Standard
+streamed **Approve tags**, **Merge tags**, and **Delete tags** actions require
+`collaboration.tags.manage`; Delete Review counts distinct affected parents.
+Merge deduplicates references and retains the source as an alias. Targets must be
+approved and in the source scope or global; a global source cannot merge into a
+single table's vocabulary.
+
+Host **Add tags** and **Remove tags** actions use the table-type
+`collaboration_tag` PVS, filtered to approved, unmerged global or same-table tags.
+Each record is rechecked during Review and execution. Input `tags` is a list of
+integer IDs (comma-separated IDs are also accepted); `targetTagId` is a scalar.
+The picker step exposes `EDIT_FORM` with `multiSelectFields = ["tags"]`. RC.5 has
+no native multi-valued field type: rendering this component-value contract as a
+multi-select belongs to the separate Next UI phase. The qbit tests exercise the
+submitted arrays and real streamed Review/Result lifecycle.
+
+`AttachmentCleanup.onParentsDeleted` now also removes tag assignments and
+recounts vocabulary usage. Hosts keep using this trusted callback until the core
+cleanup registration contract ships. The home shows session-visible vocabulary
+size, pending suggestions, and the five most-used approved tags.
+
+`TagFilterTranslator.recordIds(table, operatorName, tags)` supports `IN` (any),
+`CONTAINS_ALL`, `NOT_IN` (none), `IS_BLANK`, and `IS_NOT_BLANK`. Every operator
+returns matching visible parent IDs as strings, including complements. Exactly
+10,000 results are allowed; larger results throw. Unknown tags match nothing;
+empty IN matches nothing and empty CONTAINS_ALL/NOT_IN match all visible parents.
+Numeric inputs are IDs, strings are normalized names; if a global and local tag
+share a name, the global tag wins (use IDs to disambiguate).
+
+**Filter/quick-search integration lands after QRun-IO/qqq#1140 is released.** This
+phase does not register a virtual filter field, core expander, `QSubQuery`, tag
+column filler, or `#tag`/host-record quick-search provider. The standalone
+translator deliberately imports none of those unreleased types.

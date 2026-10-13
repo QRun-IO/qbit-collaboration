@@ -48,6 +48,12 @@ public final class ConversationChildren
     *******************************************************************************/
    public static void install(QInstance instance)
    {
+      QJoinMetaData tagJoin = new QJoinMetaData().withLeftTable(CollaborationTables.TAG).withRightTable(CollaborationTables.RECORD_TAG)
+         .withInferredName().withType(JoinType.ONE_TO_MANY).withJoinOns(List.of(new JoinOn("id", "tagId")));
+      instance.addJoin(tagJoin);
+      instance.addWidget(ChildRecordListRenderer.widgetMetaDataBuilder(tagJoin).withLabel("Record Tags").withCanAddChildRecord(false).getWidgetMetaData());
+      instance.getTable(CollaborationTables.TAG).withSection(new QFieldSection("recordTags", new QIcon("list"), Tier.T2)
+         .withLabel("Record Tags").withWidgetName(tagJoin.getName()));
       child(instance, CollaborationTables.COMMENT_REVISION, "Comment History", List.of(new JoinOn("id", "commentId")));
       child(instance, CollaborationTables.MENTION, "Mentions", List.of(new JoinOn("id", "commentId")));
       child(instance, CollaborationTables.FOLLOW, "Followers", List.of(new JoinOn("tableName", "tableName"), new JoinOn("recordId", "recordId")));

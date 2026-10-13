@@ -41,3 +41,44 @@ See [README](../README.md#attachments) for the service contract, permissions and
 - **User-facing metadata.** Comments and admin-only Activity are main nav tables. Revisions, mentions and Followers are child lists; digest/follow tables are admin-browsable with HIDDEN deny behavior. Follow actions use generic streamed ETL Review/Result against any host key. The home reads real session-scoped comments/open-thread/follower counts. Standard QQQ writes remain available to host ESB listeners.
 
 The service API and configuration are documented in [README](../README.md#comments-follow-and-timeline). Endpoints remain deferred to QRun-IO/qqq#1128; no unreleased core dependency, runtime overlay, mirrored-lock implementation or realtime/UI delivery is introduced.
+
+## Phase-d implementation choices
+
+- **RC.5 boundary.** `tags/TagFilterTranslator` uses operator names, QQQ queries and
+  string parent IDs. It returns matching rows for all operators, so NOT_IN and
+  IS_BLANK enumerate the visible host-table complement. The 10,000 limit applies
+  to final matching IDs, not assignment count. It pages parent reads under the
+  caller's permissions and locks. Filter/quick-search integration lands after
+  QRun-IO/qqq#1140 is released; no unreleased core types or virtual fields are used.
+- **Vocabulary versus assignments.** Tag names are unique per nullable scope;
+  PostgreSQL DDL emits NULLS NOT DISTINCT for nullable unique-key components.
+  Record Tags inherits `ParentTableRestriction` and the parent row customizer,
+  including the existing approximation for aggregate counts and short pages.
+  Vocabulary pickers need no collaboration.view grant: ordinary users see
+  approved tags and their own suggestions in readable scopes, while manage sees
+  all vocabulary for moderation. Direct writes are denied; services/actions
+  preserve normalization, approval and counts.
+- **Policy lookup.** Settings are read in a temporary system context, retaining
+  the transaction and restoring the caller. TABLE overrides preferred APP (QQQ's
+  app-affinity path), then INSTANCE, then `defaultTagMode`. Missing mode inherits;
+  malformed JSON/invalid mode throws. General enabled/permission-mode runtime
+  overrides remain outside this phase. Name collision resolution prefers global
+  vocabulary; IDs provide an unambiguous selection.
+- **Mutation boundaries.** Like existing services, writes participate in the
+  caller's QQQ transaction and serialize within the installed config's monitor.
+  Unique keys enforce assignment identity. Counts are recomputed from stored
+  links, including merge deduplication, deletion and trusted parent cleanup.
+  This is not a cross-pod lock: concurrent writers in separate instances need
+  host transaction/serialization coordination for exact denormalized counts.
+  Standard ETL runs with its process transaction. Activity is generated only for
+  actual apply/remove changes and never calls follower notification services.
+- **Review and Result.** Actions derive operation and table from installed process
+  metadata. Management requires collaboration.tags.manage at both stages. Bulk
+  actions resolve approved PVS selections and recheck every parent and feature
+  permission at both stages. Review is read-only, counts already-satisfied rows,
+  and Delete reports distinct affected parents. Result reports successful and
+  failed records separately. The picker exposes multiSelectFields on EDIT_FORM
+  for the separate Next client; RC.5 itself has no native multi-value form field.
+- **Presentation.** Tags is in the admin app nav; Record Tags is a child widget.
+  The home queries under the caller session and HTML-escapes labels. Native tag
+  label search metadata is present; host-record tag search awaits #1140.

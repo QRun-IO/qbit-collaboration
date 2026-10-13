@@ -489,11 +489,13 @@ public class ConversationServicesTest extends PersonalServiceFixture
       installed.addSecurityKeyType(instance.getSecurityKeyType("tenant"));
       installed.addScheduler(new com.kingsrook.qqq.backend.core.model.metadata.scheduleing.simple.SimpleSchedulerMetaData().withName("minute"));
       CollaborationQBitConfig configured = new CollaborationQBitConfig().withBackendName("memory").withFollowActionTables(List.of("document"))
-         .withFollowChangeTables(List.of("document")).withSchedulerName("minute");
+         .withFollowChangeTables(List.of("document")).withTagActionTables(List.of("document")).withSchedulerName("minute");
       new CollaborationQBitProducer().withQBitConfig(configured).produce(installed);
       assertThat(installed.getProcess("collaborationFollow_document").getLabel()).isEqualTo("Follow");
       assertThat(installed.getProcess("collaborationUnfollow_document").getLabel()).isEqualTo("Unfollow");
       assertThat(installed.getRecordChangeListeners()).hasSize(1);
+      assertThat(installed.getProcess("collaborationAddTags_document").getLabel()).isEqualTo("Add tags");
+      assertThat(installed.getProcess("collaborationRemoveTags_document").getLabel()).isEqualTo("Remove tags");
       assertThat(installed.getProcess(SendFollowDigestsProcess.NAME).getSchedule().getRepeatSeconds()).isEqualTo(60);
       assertThat(installed.getProcess(SendFollowDigestsProcess.NAME).getIsHidden()).isTrue();
       String sql = CollaborationSchema.postgresScript(config);

@@ -40,6 +40,8 @@ public class CollaborationQBitConfig implements QBitConfig
 
    private QCodeReference notifier = new QCodeReference(NoOpNotifier.class);
    private QCodeReference userSessionSupplier = null;
+   private String defaultTagMode = "FREE";
+   private List<String> tagActionTables = List.of();
    private List<String> followActionTables = List.of();
    private List<String> followChangeTables = List.of();
    private String backendName;
@@ -250,8 +252,9 @@ public class CollaborationQBitConfig implements QBitConfig
       {
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
       }
+      assertCondition(List.of("FREE", "APPROVED_ONLY").contains(defaultTagMode == null ? "" : defaultTagMode), "defaultTagMode must be FREE or APPROVED_ONLY", errors);
       assertCondition(notifier != null, "notifier is required", errors);
-      for(List<String> tables : List.of(followActionTables, followChangeTables))
+      for(List<String> tables : List.of(followActionTables, followChangeTables, tagActionTables))
       {
          for(String table : tables)
          {
@@ -437,6 +440,40 @@ public class CollaborationQBitConfig implements QBitConfig
    public CollaborationQBitConfig withFollowChangeTables(List<String> followChangeTables)
    {
       this.followChangeTables = followChangeTables;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Default vocabulary policy when no persisted override supplies a mode.
+    *******************************************************************************/
+   public String getDefaultTagMode()
+   {
+      return (defaultTagMode);
+   }
+
+   /*******************************************************************************
+    ** Configure the default tag policy.
+    *******************************************************************************/
+   public CollaborationQBitConfig withDefaultTagMode(String mode)
+   {
+      this.defaultTagMode = mode;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Host tables receiving Add tags and Remove tags actions.
+    *******************************************************************************/
+   public List<String> getTagActionTables()
+   {
+      return (tagActionTables);
+   }
+
+   /*******************************************************************************
+    ** Configure host tag actions.
+    *******************************************************************************/
+   public CollaborationQBitConfig withTagActionTables(List<String> tables)
+   {
+      this.tagActionTables = tables;
       return (this);
    }
 }
