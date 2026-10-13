@@ -42,6 +42,9 @@ public class CollaborationQBitConfig implements QBitConfig
    private String parentAppName;
    private Boolean adminApp = true;
    private Integer recentsPerUser = 200;
+   private String attachmentsBucketName = "collaboration";
+   private Long defaultMaxBytes = 100L * 1024 * 1024;
+   private List<String> blockedExtensions = List.of();
 
 
 
@@ -241,6 +244,9 @@ public class CollaborationQBitConfig implements QBitConfig
       {
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
       }
+      assertCondition(StringUtils.hasContent(attachmentsBucketName), "attachmentsBucketName is required", errors);
+      assertCondition(defaultMaxBytes != null && defaultMaxBytes > 0, "defaultMaxBytes must be positive", errors);
+      assertCondition(blockedExtensions != null && blockedExtensions.stream().allMatch(value -> value != null && !value.isBlank()), "blockedExtensions must contain nonblank extensions", errors);
       assertCondition(recentsPerUser != null && recentsPerUser > 0, "recentsPerUser must be positive", errors);
       if(schedulerName != null)
       {
@@ -265,5 +271,89 @@ public class CollaborationQBitConfig implements QBitConfig
    public String getDefaultBackendNameForTables()
    {
       return (backendName);
+   }
+
+
+   /*******************************************************************************
+    ** Getter for attachmentsBucketName.
+    *******************************************************************************/
+   public String getAttachmentsBucketName()
+   {
+      return (attachmentsBucketName);
+   }
+
+
+   /*******************************************************************************
+    ** Setter for attachmentsBucketName.
+    *******************************************************************************/
+   public void setAttachmentsBucketName(String attachmentsBucketName)
+   {
+      this.attachmentsBucketName = attachmentsBucketName;
+   }
+
+
+   /*******************************************************************************
+    ** Fluent setter for attachmentsBucketName.
+    *******************************************************************************/
+   public CollaborationQBitConfig withAttachmentsBucketName(String attachmentsBucketName)
+   {
+      setAttachmentsBucketName(attachmentsBucketName);
+      return (this);
+   }
+
+
+   /*******************************************************************************
+    ** Getter for defaultMaxBytes.
+    *******************************************************************************/
+   public Long getDefaultMaxBytes()
+   {
+      return (defaultMaxBytes);
+   }
+
+
+   /*******************************************************************************
+    ** Setter for defaultMaxBytes.
+    *******************************************************************************/
+   public void setDefaultMaxBytes(Long defaultMaxBytes)
+   {
+      this.defaultMaxBytes = defaultMaxBytes;
+   }
+
+
+   /*******************************************************************************
+    ** Fluent setter for defaultMaxBytes.
+    *******************************************************************************/
+   public CollaborationQBitConfig withDefaultMaxBytes(Long defaultMaxBytes)
+   {
+      setDefaultMaxBytes(defaultMaxBytes);
+      return (this);
+   }
+
+
+   /*******************************************************************************
+    ** Getter for blockedExtensions.
+    *******************************************************************************/
+   public List<String> getBlockedExtensions()
+   {
+      return (blockedExtensions);
+   }
+
+
+   /*******************************************************************************
+    ** Setter for blockedExtensions.
+    *******************************************************************************/
+   public void setBlockedExtensions(List<String> blockedExtensions)
+   {
+      this.blockedExtensions = blockedExtensions;
+   }
+
+
+   /*******************************************************************************
+    ** Fluent setter for blockedExtensions.
+    *******************************************************************************/
+   public CollaborationQBitConfig withBlockedExtensions(List<String> blockedExtensions)
+   {
+      setBlockedExtensions(blockedExtensions);
+      return (this);
    }
 }

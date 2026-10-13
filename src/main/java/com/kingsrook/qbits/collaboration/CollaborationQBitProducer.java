@@ -23,6 +23,7 @@ package com.kingsrook.qbits.collaboration;
 
 
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
+import com.kingsrook.qbits.collaboration.attachments.DeleteAttachmentsProcess;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.recents.TrimRecentsProcess;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -127,6 +128,7 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();
       CollaborationSecurity.buildSecurityKeyTypes().forEach(output::add);
       output.add(TrimRecentsProcess.metadata(qBitConfig));
+      output.add(DeleteAttachmentsProcess.metadata());
       for(QPossibleValueSource source : CollaborationTables.possibleValueSources())
       {
          output.add(source);

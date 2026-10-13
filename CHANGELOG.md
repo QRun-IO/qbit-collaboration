@@ -6,6 +6,12 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
+- Phase-c attachments against QQQ 4.1.0-RC.5 and object storage 0.1.0-RC.2: parent-checked upload/list/download/rename/describe/delete service, bounded streaming, SHA-256 and configurable byte/extension limits.
+- Visible `collaboration_attachment` table, FIELD auditing, file-name/description search fields, virtual presigned FILE_PREVIEW/FILE_DOWNLOAD adornments, PostgreSQL BIGINT size and parent index, and an approximate count/bytes home card.
+- Temporary `ParentRecordAccess`, readable-table query restriction through RC.5's permission hook and parent post-filtering. Panel calls do not require the admin browse grant; direct attachment table writes are service-managed.
+- Streamed ETL **Delete attachments** Review/Result record action and retryable `AttachmentCleanup.onParentsDeleted` callback. No Attach files table action; endpoint integration awaits #1128 and cleanup registration awaits core.
+- Memory-backed attachment/security/process tests. Thumbnails use FILE_PREVIEW; `thumbnailKey` remains nullable/unused because object storage has no generator.
+
 - Repository scaffold; feature settings and people tables.
 - Phase-b favorites and recents on QQQ 4.1.0-RC.5: visible `collaboration_favorite` and `collaboration_recent` tables, target-type possible values, unique personal targets and audit disabled for high-volume data.
 - `CollaborationSecurity` owner locks based on the session user's ID reference, with admin all-access keys and automatic initialization before enforced table actions and in services/home. No collaboration permission is required to manage one's own rows.
