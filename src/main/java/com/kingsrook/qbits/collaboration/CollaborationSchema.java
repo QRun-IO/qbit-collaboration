@@ -65,7 +65,8 @@ public final class CollaborationSchema
          {
             index++;
             List<String> names = key.getFieldNames().stream().map(name -> table.getField(name).getBackendName()).toList();
-            statements.add("CREATE UNIQUE INDEX IF NOT EXISTS uq_" + table.getName() + "_" + index + " ON " + table.getName() + " (" + String.join(", ", names) + ")");
+            statements.add("CREATE UNIQUE INDEX IF NOT EXISTS uq_" + table.getName() + "_" + index + " ON " + table.getName() + " (" + String.join(", ", names) + ")"
+               + (key.getFieldNames().contains("recordId") ? " NULLS NOT DISTINCT" : ""));
          }
       }
       return (String.join(";\n", statements) + ";\n");

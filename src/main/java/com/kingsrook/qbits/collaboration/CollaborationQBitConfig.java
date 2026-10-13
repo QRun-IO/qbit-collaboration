@@ -41,6 +41,7 @@ public class CollaborationQBitConfig implements QBitConfig
    private String appName = "collaboration";
    private String parentAppName;
    private Boolean adminApp = true;
+   private Integer recentsPerUser = 200;
 
 
 
@@ -200,6 +201,37 @@ public class CollaborationQBitConfig implements QBitConfig
 
 
    /*******************************************************************************
+    ** Maximum retained recent targets per user.
+    *******************************************************************************/
+   public Integer getRecentsPerUser()
+   {
+      return (recentsPerUser);
+   }
+
+
+
+   /*******************************************************************************
+    ** Configure retention; validated when the producer is installed.
+    *******************************************************************************/
+   public void setRecentsPerUser(Integer recentsPerUser)
+   {
+      this.recentsPerUser = recentsPerUser;
+   }
+
+
+
+   /*******************************************************************************
+    ** Fluent retention configuration.
+    *******************************************************************************/
+   public CollaborationQBitConfig withRecentsPerUser(Integer recentsPerUser)
+   {
+      setRecentsPerUser(recentsPerUser);
+      return (this);
+   }
+
+
+
+   /*******************************************************************************
     ** Validate the configured backend and app placement.
     *******************************************************************************/
    @Override
@@ -208,6 +240,11 @@ public class CollaborationQBitConfig implements QBitConfig
       if(assertCondition(StringUtils.hasContent(backendName), "backendName is required for Collaboration", errors))
       {
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
+      }
+      assertCondition(recentsPerUser != null && recentsPerUser > 0, "recentsPerUser must be positive", errors);
+      if(schedulerName != null)
+      {
+         assertCondition(instance.getScheduler(schedulerName) != null, "Unknown Collaboration scheduler: " + schedulerName, errors);
       }
       if(Boolean.TRUE.equals(adminApp))
       {

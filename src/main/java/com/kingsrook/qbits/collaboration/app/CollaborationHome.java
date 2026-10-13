@@ -26,12 +26,19 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
+import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionEnforcement;
+import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
 import com.kingsrook.qqq.backend.core.actions.tables.CountAction;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.Aggregate;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateResult;
 import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
@@ -100,6 +107,7 @@ public final class CollaborationHome
     *******************************************************************************/
    public static String render(Instant now) throws QException
    {
+      CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
       StringBuilder html = new StringBuilder("<div style=\"display:flex;flex-direction:column;gap:1rem;width:100%;overflow-wrap:anywhere;\"><section><h3>Feature settings</h3>");
       long settings = count(CollaborationTables.FEATURE_SETTING, new QQueryFilter());
       if(settings == 0)
@@ -128,7 +136,26 @@ public final class CollaborationHome
       {
          html.append("<p>No people yet: the directory will be filled by collaboration calls when the feature services are installed.</p>");
       }
-      return (html.append("</section></div>").toString());
+      html.append("</section>");
+      personalSummary(html, CollaborationTables.FAVORITE, "Favorites");
+      personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
+      return (html.append("</div>").toString());
+   }
+
+
+
+   /*******************************************************************************
+    ** Aggregate rows and distinct owners without loading high-volume personal data.
+    *******************************************************************************/
+   private static void personalSummary(StringBuilder html, String table, String label) throws QException
+   {
+      Aggregate rows = new Aggregate().withFieldName("id").withOperator(AggregateOperator.COUNT);
+      Aggregate users = new Aggregate().withFieldName("userId").withOperator(AggregateOperator.COUNT_DISTINCT);
+      AggregateInput input = new AggregateInput(table).withAggregates(List.of(rows, users));
+      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
+      List<AggregateResult> results = new AggregateAction().execute(input).getResults();
+      html.append("<section><h3>").append(label).append("</h3><p>Rows: ").append(results.isEmpty() ? 0 : results.getFirst().getAggregateValue(rows))
+         .append("</p><p>Distinct users: ").append(results.isEmpty() ? 0 : results.getFirst().getAggregateValue(users)).append("</p></section>");
    }
 
 

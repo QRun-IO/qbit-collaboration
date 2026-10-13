@@ -85,7 +85,7 @@ class CollaborationTest
       instance.setEnforcePermissionsInCoreActions(true);
       config = new CollaborationQBitConfig().withBackendName("memory");
       new CollaborationQBitProducer().withQBitConfig(config).produce(instance);
-      QContext.init(instance, new QSession().withPermissions(CollaborationPermissions.ADMIN));
+      QContext.init(instance, new QSession().withUser(new com.kingsrook.qqq.backend.core.model.session.QUser().withIdReference("admin")).withPermissions(CollaborationPermissions.ADMIN));
    }
 
 
@@ -177,7 +177,7 @@ class CollaborationTest
       QInstance headless = new QInstance();
       headless.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
       new CollaborationQBitProducer().withQBitConfig(config.withAdminApp(false)).produce(headless);
-      assertThat(headless.getTables()).hasSize(2);
+      assertThat(headless.getTables()).hasSize(4);
       assertThat(headless.getApps()).isEmpty();
       assertThat(headless.getWidgets()).isEmpty();
    }
@@ -255,7 +255,7 @@ class CollaborationTest
       seed(CollaborationTables.USER, person("visible", now), person("hidden", now));
       instance.addSecurityKeyType(new QSecurityKeyType().withName("person").withAllAccessKeyName("allPeople"));
       instance.getTable(CollaborationTables.USER).withRecordSecurityLock(new RecordSecurityLock().withSecurityKeyType("person").withFieldName("userId"));
-      QContext.init(instance, new QSession().withPermissions(CollaborationPermissions.VIEW).withSecurityKeyValue("person", "visible"));
+      QContext.init(instance, new QSession().withUser(new com.kingsrook.qqq.backend.core.model.session.QUser().withIdReference("viewer")).withPermissions(CollaborationPermissions.VIEW).withSecurityKeyValue("person", "visible"));
       assertThat(CollaborationHome.render(now)).contains("People known: 1", "Active in the last 7 days: 1");
       instance.setEnforcePermissionsInCoreActions(false);
       QContext.getQSession().setPermissions(new java.util.HashSet<>());

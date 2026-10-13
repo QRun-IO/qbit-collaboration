@@ -25,13 +25,17 @@ package com.kingsrook.qbits.collaboration.model;
 import java.util.ArrayList;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
+import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.AuditLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.QAuditRules;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QIcon;
+import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
+import com.kingsrook.qqq.backend.core.model.metadata.permissions.QPermissionRules;
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValue;
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSource;
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSourceType;
@@ -48,6 +52,9 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
 public final class CollaborationTables
 {
    public static final String FEATURE_SETTING = "collaboration_feature_setting";
+   public static final String FAVORITE = "collaboration_favorite";
+   public static final String RECENT = "collaboration_recent";
+   public static final String TARGET_TYPE = "collaboration_target_type";
    public static final String USER = "collaboration_user";
    public static final String SCOPE_TYPE = "collaboration_scope_type";
    public static final String FEATURE = "collaboration_feature";
@@ -70,6 +77,8 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         enumSource(TARGET_TYPE, "TABLE", "APP", "RECORD", "PROCESS", "REPORT", "SAVED_VIEW"),
+         QPossibleValueSource.newForTable(FAVORITE), QPossibleValueSource.newForTable(RECENT),
          enumSource(SCOPE_TYPE, "INSTANCE", "APP", "TABLE"),
          enumSource(FEATURE, "ATTACHMENTS", "TAGS", "CUSTOM_FIELDS", "COMMENTS", "PRESENCE", "SHARING",
             "FAVORITES", "FOLLOW", "TIMELINE", "RECENTS", "TASKS", "ASSIGNMENT"),
@@ -127,7 +136,15 @@ public final class CollaborationTables
       {
          field.setIsEditable(false);
       }
-      List<QTableMetaData> tables = List.of(settings, people);
+      QTableMetaData favorites = personal(config, FAVORITE, "Favorites", "star")
+         .withField(new QFieldMetaData("sortOrder", QFieldType.INTEGER).withLabel("Sort Order").withIsRequired(true).withDefaultValue(0))
+         .withField(string("folder", "Folder", 255))
+         .withSection(new QFieldSection("details", new QIcon("star"), Tier.T2, List.of("label", "sortOrder", "folder")).withLabel("Details"));
+      QTableMetaData recents = personal(config, RECENT, "Recently Viewed", "history")
+         .withField(new QFieldMetaData("lastViewedAt", QFieldType.DATE_TIME).withLabel("Last Viewed At").withIsRequired(true))
+         .withField(new QFieldMetaData("viewCount", QFieldType.INTEGER).withLabel("View Count").withIsRequired(true).withDefaultValue(1))
+         .withSection(new QFieldSection("details", new QIcon("history"), Tier.T2, List.of("label", "lastViewedAt", "viewCount")).withLabel("Details"));
+      List<QTableMetaData> tables = List.of(settings, people, favorites, recents);
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
@@ -148,6 +165,30 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("id", QFieldType.INTEGER).withLabel("ID").withIsEditable(false))
          .withField(new QFieldMetaData("createDate", QFieldType.DATE_TIME).withLabel("Created").withIsEditable(false))
          .withField(new QFieldMetaData("modifyDate", QFieldType.DATE_TIME).withLabel("Modified").withIsEditable(false)));
+   }
+
+
+
+   /*******************************************************************************
+    ** Personal high-volume data: owner locks replace a table-level permission.
+    ** Kept out of app navigation; the standard tables remain addressable by admins.
+    *******************************************************************************/
+   private static QTableMetaData personal(CollaborationQBitConfig config, String name, String label, String icon)
+   {
+      return (base(config, name, label, icon)
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(CollaborationSecurity.class)))
+         .withRecordSecurityLock(CollaborationSecurity.ownerLock("userId"))
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.NONE))
+         .withRecordLabelFormatAndFields("%s", "label")
+         .withField(string("userId", "User ID", 255).withIsRequired(true))
+         .withField(string("targetType", "Target Type", 20).withIsRequired(true).withPossibleValueSourceName(TARGET_TYPE))
+         .withField(string("targetName", "Target Name", 255).withIsRequired(true))
+         .withField(string("recordId", "Record ID", 255))
+         .withField(string("label", "Label", 1024))
+         .withUniqueKey(new UniqueKey("userId", "targetType", "targetName", "recordId"))
+         .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1,
+            List.of("id", "userId", "targetType", "targetName", "recordId")).withLabel("Identity")));
    }
 
 
