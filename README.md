@@ -7,7 +7,7 @@ Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/
 ## Requirements
 
 - Java 21.
-- QQQ 4.1.0-RC.5 or newer compatible 4.1 release. The build pins RC.5.
+- QQQ `4.1.0-SNAPSHOT` installed from develop, including UI API extension point #1128. The build will move to `4.1.0-RC.6` once released; middleware Javalin is a compile dependency.
 - A configured QQQ backend supporting query, get, insert, update, delete, count and aggregate actions. PostgreSQL 15+ is the intended persistent store (the generated personal-target indexes use `NULLS NOT DISTINCT`); tests use the memory backend.
 - Attachments require `qbit-object-storage:0.1.0-RC.2` (a pinned dependency), installed with a PRIVATE bucket alias matching `attachmentsBucketName`. Configure its connection and credentials in the host; this qbit does not provision buckets.
 - Later phases and runtime overrides need the core contracts from the QQQ collaboration PRs. Favorites and recents use only APIs released in RC.5. String enum ids match the spec until the core collaboration enums are released.
@@ -99,7 +99,6 @@ List<FavoriteEntry> recents = RecentsService.list(50);
 - Hrefs mirror Next's accepted flat routes: `/app/<table>/`, `/app/<table>/<id>/`, `/app/<app-or-process-or-report>/`, and `/app/<table>/savedView/<id>/`. Segments are URL-encoded. This avoids reconstructing nested app paths; trailing slashes support dotted process names.
 - Record views upsert a unique personal target. If its persisted `lastViewedAt` is less than 60 seconds ago, nothing is written; otherwise its timestamp, cached label and count update. The hidden backend-only `collaborationTrimRecents` process retains the newest `recentsPerUser` targets independently for each user, breaking timestamp ties by ID.
 
-The UI API endpoints in spec Â§10.2 will arrive in a **follow-up PR once QQQ's UI API extension point ([QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128)) is released**. This PR adds no endpoint or unreleased core dependency. Runtime feature overrides and the record-feature summary SPI also await released core contracts; the home counts are implemented now.
 
 ## Attachments
 
@@ -129,7 +128,7 @@ RC.5 has no PRE_QUERY customizer. `AttachmentSecurity` uses its custom permissio
 
 **Actions and cleanup.** `Delete attachments` is a standard streamed ETL record action with Review/Result counts, skipped unauthorized rows, permission rechecks at execution and per-row failure summaries. It is not in navigation. Soft deletion follows the bucket's versioning/trash; without either, deletion is permanent. There is deliberately no **Attach files** table action: uploads come through the API/panel. The current browse action requires `collaboration.view`; the panel may call the service without that grant.
 
-After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. Wiring to core's `RecordReferenceCleanupInterface` waits for its release. UI API endpoints and the panel transport wait for [#1128](https://github.com/QRun-IO/qqq/pull/1128); direct/presigned upload endpoints and realtime events remain future integrations. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
+After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. Wiring to core's `RecordReferenceCleanupInterface` waits for its release. UI API endpoints use the merged #1128 extension point from the locally installed snapshot; direct/presigned upload endpoints and realtime events remain future integrations. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
 
 Tests use real QQQ memory actions and record locks plus an in-memory `AttachmentStorage` adapter. Object storage RC.2 exposes no fake bucket; its provider conformance suite uses MinIO/Testcontainers. This suite requires no Docker and does not claim MinIO/S3 conformance.
 
@@ -177,7 +176,7 @@ Classes live in the `comments`, `follow`, `timeline`, `people` and `notify` pack
 
 The main comments/activity tables, revision/mention child joins and Followers child list are ordinary QQQ metadata. Direct API writes are refused; services authorize the actual parent. Shared `ParentTableRestriction` protects attachment and conversation queries/counts/aggregates; parent post-filtering protects row reads. Aggregate counts remain approximate and browse pages can be short for unmirrored parent locks. Raw persistence, activity writing and change-hook helpers are trusted internal boundaries and must not become public endpoints.
 
-UI API endpoints remain deferred to [QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128). Runtime feature enablement, mirrored WRITE locks and core record-access/session contracts remain replacement points; the services do not claim to resolve feature-setting overrides. QAlerts.notify integration waits for #1125. Host-configured ESB listeners receive ordinary QQQ writes; realtime/UI and Quick Search provider registration remain host/later-phase integrations.
+UI API endpoints are described below. Runtime feature enablement, mirrored WRITE locks and core record-access/session contracts remain replacement points; the services do not claim to resolve feature-setting overrides. QAlerts.notify integration waits for #1125. Host-configured ESB listeners receive ordinary QQQ writes; realtime/UI and Quick Search provider registration remain host/later-phase integrations.
 
 ## Configuration
 
@@ -203,7 +202,7 @@ UI API endpoints remain deferred to [QRun-IO/qqq#1128](https://github.com/QRun-I
 2. For PostgreSQL, generate `CollaborationSchema.postgresScript(config)` and apply it with the host's migration tool. It creates tables and unique indexes, never executes DDL, and does not migrate existing schemas. QQQ owns date/default values on writes.
 3. Grant `collaboration.view` and `collaboration.admin` as appropriate; wire the host's audit persistence for FIELD audit events.
 4. Validate the assembled instance. Navigate to Collaboration for Comments, Attachments, Activity (admins), Feature Settings and People. People populate as signed-in users call collaboration services.
-5. Wait for the released core contracts and later qbit phases before enabling collaboration features on host records. Favorites, recents, attachments, comments, follow and timeline services can be used now. This phase installs no endpoints or host-table overlays; scheduled work is opt-in.
+5. Wait for the released core contracts and later qbit phases before enabling collaboration features on host records. Favorites, recents, attachments, comments, follow and timeline services can be used now. The versioned UI API is enabled by default; host-table overlays remain separate and scheduled work is opt-in.
 
 ## Build
 
@@ -281,3 +280,96 @@ share a name, the global tag wins (use IDs to disambiguate).
 phase does not register a virtual filter field, core expander, `QSubQuery`, tag
 column filler, or `#tag`/host-record quick-search provider. The standalone
 translator deliberately imports none of those unreleased types.
+
+
+## UI API
+
+The producer registers extension `collaboration` version `1.0.0` at
+`/qqq/v1/qbit/collaboration`. It uses the signed-in user's session and existing
+services. Disable registration with `new CollaborationQBitConfig().withUiApi(false)`.
+Presence, shares, tasks, my-work, direct upload and thumbnail routes are not part
+of this extension version.
+
+All successes return HTTP 200. All bodies have named `Collaboration*V1` schemas
+in [the extension contract](src/main/resources/openapi/qqq-v1/collaboration.yaml).
+The server publishes these alongside core at `/qqq/v1/openapi.yaml` and `.json`.
+
+| Method | Path (relative to `/qqq/v1/qbit/collaboration`) | Purpose | Request schema | Response schema |
+|---|---|---|---|---|
+| GET | `/favorites` | List personal favorites | — | `CollaborationFavoriteListV1` |
+| PUT | `/favorites` | Star a target | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| DELETE | `/favorites` | Unstar a target | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| POST | `/recents` | Record a recent view | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| PATCH | `/favorites/order` | Reorder personal favorites | `CollaborationFavoriteOrderRequestV1` | `CollaborationMutationResultV1` |
+| GET | `/recents` | List recent targets | — | `CollaborationRecentListV1` |
+| GET | `/records/{table}/{pk}/attachments` | List record attachments | — | `CollaborationAttachmentListV1` |
+| GET | `/attachments/{id}/download` | Get a temporary download URL; clients follow url | — | `CollaborationDownloadV1` |
+| GET | `/attachments/{id}/preview` | Get a temporary preview URL; clients follow url | — | `CollaborationDownloadV1` |
+| PATCH | `/attachments/{id}` | Rename or describe an attachment | `CollaborationAttachmentPatchRequestV1` | `CollaborationAttachmentV1` |
+| DELETE | `/attachments/{id}` | Delete an attachment | — | `CollaborationMutationResultV1` |
+| GET | `/tags` | Search table tag vocabulary | — | `CollaborationTagListV1` |
+| POST | `/tags` | Create or suggest a tag | `CollaborationTagCreateRequestV1` | `CollaborationTagV1` |
+| GET | `/records/{table}/{pk}/tags` | List applied record tags | — | `CollaborationTagListV1` |
+| PUT | `/records/{table}/{pk}/tags` | Add and remove record tags | `CollaborationTagApplyRequestV1` | `CollaborationTagListV1` |
+| GET | `/records/{table}/{pk}/comments` | Page record comment threads | — | `CollaborationCommentPageV1` |
+| POST | `/records/{table}/{pk}/comments` | Post a comment or reply | `CollaborationCommentPostRequestV1` | `CollaborationCommentV1` |
+| PATCH | `/comments/{id}` | Edit the caller's comment | `CollaborationCommentEditRequestV1` | `CollaborationCommentV1` |
+| DELETE | `/comments/{id}` | Delete a comment thread | — | `CollaborationMutationResultV1` |
+| POST | `/comments/{id}/resolve` | Resolve a comment thread | — | `CollaborationMutationResultV1` |
+| POST | `/comments/{id}/reopen` | Reopen a comment thread | — | `CollaborationMutationResultV1` |
+| GET | `/comments/{id}/history` | Read comment edit history | — | `CollaborationCommentHistoryV1` |
+| GET | `/mentions/candidates` | Find people to mention on a record | — | `CollaborationMentionCandidateListV1` |
+| GET | `/records/{table}/{pk}/follow` | Get the caller's follow state | — | `CollaborationFollowStateV1` |
+| PUT | `/records/{table}/{pk}/follow` | Follow a record and configure notifications | `CollaborationFollowRequestV1` | `CollaborationFollowStateV1` |
+| DELETE | `/records/{table}/{pk}/follow` | Unfollow a record | — | `CollaborationFollowStateV1` |
+| GET | `/records/{table}/{pk}/followers` | List record followers | — | `CollaborationFollowerListV1` |
+| GET | `/records/{table}/{pk}/timeline` | Page the merged record timeline | — | `CollaborationTimelinePageV1` |
+| GET | `/people` | Search the active people directory | — | `CollaborationPersonListV1` |
+| GET | `/people/{userId}` | Get an active directory person | — | `CollaborationPersonV1` |
+| POST | `/records/{table}/{pk}/attachments` | Upload one file (multipart) | `CollaborationAttachmentUploadRequestV1` | `CollaborationAttachmentV1` |
+
+List requests accept `limit` (default 20, range 1-100). Responses include
+`nextCursor`: pass it as `cursor` to continue. Comments page root threads by last
+activity; replies are oldest first. Timeline uses its `(at, kind, id)` keyset and
+also accepts `before` as an alias for `cursor` (supply only one), plus comma-separated
+`types` (`AUDIT`, `ACTIVITY`, or activity names such as `COMMENTED`). Complete-list
+services use opaque offset cursors and recheck visibility on every request;
+concurrent list changes may shift offsets. Recents and mention candidates retain
+their service's 50-item window. People and vocabulary search accept `q` and `limit`
+only and return null `nextCursor`; narrow the search to find more matches. Tag apply
+returns the full resulting tag set.
+
+Upload is real `multipart/form-data`, with exactly one binary part named `file`
+and an optional text `description`. The direct `AbstractEndpointSpec` reads Javalin's
+uploaded parts and streams the file to `AttachmentsService`, which enforces parent
+access, filename rules and bounded storage. Hosts retain the default
+`AttachmentStorage` adapter backed by object storage RC.2; an alternative adapter
+can be configured with `withAttachmentStorage(new QCodeReference(Adapter.class))`.
+
+Download and preview both return `CollaborationDownloadV1 {url}` with status 200:
+**clients follow url**. The presigned URL lasts five minutes. Download requests an
+attachment filename; preview requests inline content. QQQ's current OpenAPI
+`Response` model cannot declare the `Location` header, so this contract uses the
+JSON URL alternative consistently.
+
+A missing or invisible parent returns identical `404 {"error":"Not found"}`.
+Missing write permissions return 403; invalid input returns 400 with an `error`
+message through QQQ's exception mapper. Provider/backend failures remain server
+errors. Services continue to own author, record-lock and permission checks.
+Mention candidates expose `canRead` as the string enum `"true"`, `"false"`,
+`"unknown"`; unknown does not imply the recipient can read the record.
+
+QQQ's schema model currently lacks object-property `required` and numeric
+minimum/maximum keywords. Required fields and limit bounds are described in the
+schemas and enforced at runtime; the request body itself is marked required.
+
+Regenerate the fragment after intentionally changing the contract:
+
+```powershell
+.\mvnw.cmd -o -q '-Dtest=CollaborationApiContractTest' '-Dcollaboration.openapi.update=true' test
+```
+
+Normal `mvnw.cmd -o -q verify` checks the fragment without modifying it, runs real
+HTTP integration tests on a free port with the memory backend, and retains the
+70% instruction / 90% class coverage gates. This is the first release of the
+extension, so there is no prior release baseline yet.

@@ -38,7 +38,9 @@ import com.kingsrook.qqq.backend.core.actions.permissions.TablePermissionSubType
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.exceptions.QValueException;
 import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
@@ -81,7 +83,7 @@ public final class TargetResolver
       if(type == null || !TYPES.contains(type) || name == null || name.isBlank()
          || ("RECORD".equals(type) ? id == null || id.isBlank() : id != null))
       {
-         throw (new QException("Invalid target"));
+         throw (new QBadRequestException("Invalid target"));
       }
       if("RECORD".equals(type))
       {
@@ -94,7 +96,7 @@ public final class TargetResolver
             }
             catch(QValueException expected)
             {
-               throw (new QException("Not found"));
+               throw (new QNotFoundException("Not found"));
             }
          }
       }
@@ -122,7 +124,7 @@ public final class TargetResolver
       }
       if(!entry.available())
       {
-         throw (new QException("Not found"));
+         throw (new QNotFoundException("Not found"));
       }
       return (entry);
    }

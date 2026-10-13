@@ -31,6 +31,7 @@ import java.util.Set;
 import com.kingsrook.qbits.collaboration.PersonalRecords;
 import com.kingsrook.qbits.collaboration.TargetResolver;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
@@ -123,13 +124,13 @@ public final class FavoritesService
       Set<Integer> owned = new HashSet<>(rows.stream().map(row -> row.getValueInteger("id")).toList());
       if(ids == null || folders == null || new HashSet<>(ids).size() != ids.size() || !owned.containsAll(ids) || !owned.containsAll(folders.keySet()))
       {
-         throw (new QException("Invalid favorite ids"));
+         throw (new QBadRequestException("Invalid favorite ids"));
       }
       for(String folder : folders.values())
       {
          if(folder != null && folder.length() > 255)
          {
-            throw (new QException("Folder is too long"));
+            throw (new QBadRequestException("Folder is too long"));
          }
       }
       List<Integer> order = new ArrayList<>(ids);

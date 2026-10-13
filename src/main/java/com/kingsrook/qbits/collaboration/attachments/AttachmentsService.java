@@ -49,6 +49,7 @@ import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
@@ -73,8 +74,9 @@ public class AttachmentsService
     *******************************************************************************/
    public AttachmentsService()
    {
-      this((CollaborationQBitConfig) QContext.getQInstance().getQBits().values().stream()
-         .filter(qbit -> qbit.getConfig() instanceof CollaborationQBitConfig).findFirst().orElseThrow().getConfig(), new AttachmentStorage());
+      this.config = (CollaborationQBitConfig) QContext.getQInstance().getQBits().values().stream()
+         .filter(qbit -> qbit.getConfig() instanceof CollaborationQBitConfig).findFirst().orElseThrow().getConfig();
+      this.storage = com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader.getAdHoc(AttachmentStorage.class, config.getAttachmentStorage());
    }
 
    /*******************************************************************************
@@ -102,7 +104,7 @@ public class AttachmentsService
       if(tableName.length() > 128 || id.length() > 64 || user.length() > 255 || bucket.length() > 255 || key.length() > 1024
          || (contentType != null && contentType.length() > 255))
       {
-         throw (new QException("Attachment metadata exceeds the supported field lengths."));
+         throw (new QBadRequestException("Attachment metadata exceeds the supported field lengths."));
       }
       long limit = Math.min(config.getDefaultMaxBytes(), storage.maxBytes(bucket));
       Path temporary = null;
@@ -119,7 +121,7 @@ public class AttachmentsService
             {
                if(read > limit - size)
                {
-                  throw (new QException("Attachment exceeds the size limit of " + limit + " bytes."));
+                  throw (new QBadRequestException("Attachment exceeds the size limit of " + limit + " bytes."));
                }
                size += read;
                digest.update(buffer, 0, read);
@@ -373,18 +375,18 @@ public class AttachmentsService
    {
       if(fileName == null || fileName.isBlank())
       {
-         throw (new QException("A file name is required."));
+         throw (new QBadRequestException("A file name is required."));
       }
       String name = fileName.replace('\\', '/');
       name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[^A-Za-z0-9._ -]", "_").strip();
       if(name.isBlank() || name.equals(".") || name.equals("..") || name.length() > 255)
       {
-         throw (new QException("Invalid file name."));
+         throw (new QBadRequestException("Invalid file name."));
       }
       String extension = name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
       if(config.getBlockedExtensions().stream().anyMatch(blocked -> extension.equals(blocked.replaceFirst("^\\.", "").toLowerCase(Locale.ROOT))))
       {
-         throw (new QException("This file extension is blocked."));
+         throw (new QBadRequestException("This file extension is blocked."));
       }
       return (name);
    }

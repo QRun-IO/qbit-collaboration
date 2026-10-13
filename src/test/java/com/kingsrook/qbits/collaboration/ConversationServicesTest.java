@@ -296,7 +296,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       comments.post("document", 1, "new reply", first.id(), null);
       assertThat(comments.list("document", 1, null, 1).threads().getFirst().id()).isEqualTo(first.id());
       assertThatThrownBy(() -> comments.list("document", 1, "bad!", 20)).hasMessage("Invalid cursor");
-      assertThatThrownBy(() -> comments.list("document", 1, null, 51)).hasMessageContaining("Limit");
+      assertThatThrownBy(() -> comments.list("document", 1, null, 101)).hasMessageContaining("Limit");
       assertThatThrownBy(() -> comments.post("document", 1, " ", null, null)).hasMessageContaining("body");
       assertThatThrownBy(() -> comments.post("document", 1, "a".repeat(20001), null, null)).hasMessageContaining("body");
       assertThatThrownBy(() -> comments.post("document", 1, "ok", null, "missing")).hasMessage("Unknown field");
@@ -363,7 +363,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       assertThat(comments.mentionCandidates("document", 1, "eve").getFirst().canRead()).contains(false);
       CollaborationRecords.update(CollaborationTables.USER, new QRecord().withValue("id", eve.getValue("id")).withValue("active", false));
       assertThat(new PeopleService().search("eve", 50)).isEmpty();
-      assertThatThrownBy(() -> new PeopleService().search("", 51)).hasMessageContaining("Limit");
+      assertThatThrownBy(() -> new PeopleService().search("", 101)).hasMessageContaining("Limit");
    }
 
    /*******************************************************************************

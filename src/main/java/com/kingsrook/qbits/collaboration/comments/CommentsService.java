@@ -45,6 +45,7 @@ import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
 import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
@@ -81,7 +82,7 @@ public class CommentsService
       }
       if(fieldName != null && !QContext.getQInstance().getTable(table).getFields().containsKey(fieldName))
       {
-         throw (new QException("Unknown field"));
+         throw (new QBadRequestException("Unknown field"));
       }
       Instant now = Instant.now();
       QRecord row = CollaborationRecords.insert(CollaborationTables.COMMENT, reference(table, id).withValue("body", body)
@@ -106,7 +107,7 @@ public class CommentsService
       RecordCursor before = cursor == null ? null : RecordCursor.decode(cursor);
       if(before != null && !before.kind().equals("COMMENT"))
       {
-         throw (new QException("Invalid comment cursor"));
+         throw (new QBadRequestException("Invalid comment cursor"));
       }
       QQueryFilter filter = CollaborationRecords.parent(table, id).withCriteria("threadId", QCriteriaOperator.IS_BLANK)
          .withOrderBy(new QFilterOrderBy("lastActivityAt", false)).withOrderBy(new QFilterOrderBy("id", false));
@@ -197,7 +198,7 @@ public class CommentsService
       requireCommentFeature(row);
       if(row.getValue("threadId") != null)
       {
-         throw (new QException("Resolve or reopen the root comment."));
+         throw (new QBadRequestException("Resolve or reopen the root comment."));
       }
       Instant now = Instant.now();
       CollaborationRecords.update(CollaborationTables.COMMENT, new QRecord().withValue("id", row.getValue("id"))
@@ -244,7 +245,7 @@ public class CommentsService
    {
       if(body == null || body.isBlank() || body.length() > 20000)
       {
-         throw (new QException("Comment body must contain 1 to 20000 characters."));
+         throw (new QBadRequestException("Comment body must contain 1 to 20000 characters."));
       }
       Set<String> users = new LinkedHashSet<>();
       Matcher matcher = MENTION.matcher(body);
@@ -252,13 +253,13 @@ public class CommentsService
       {
          if(matcher.group(1).length() > 255)
          {
-            throw (new QException("Mention user ID is too long."));
+            throw (new QBadRequestException("Mention user ID is too long."));
          }
          users.add(matcher.group(1));
       }
       if(users.size() > 50)
       {
-         throw (new QException("A comment may mention at most 50 users."));
+         throw (new QBadRequestException("A comment may mention at most 50 users."));
       }
       return (users);
    }
@@ -388,9 +389,9 @@ public class CommentsService
     *******************************************************************************/
    private void requireLimit(Integer limit) throws QException
    {
-      if(limit == null || limit < 1 || limit > 50)
+      if(limit == null || limit < 1 || limit > 100)
       {
-         throw (new QException("Limit must be between 1 and 50"));
+         throw (new QBadRequestException("Limit must be between 1 and 100"));
       }
    }
 

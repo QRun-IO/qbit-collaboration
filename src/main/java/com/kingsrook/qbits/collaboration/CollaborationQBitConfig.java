@@ -49,10 +49,46 @@ public class CollaborationQBitConfig implements QBitConfig
    private String appName = "collaboration";
    private String parentAppName;
    private Boolean adminApp = true;
+   private Boolean uiApi = true;
+   private QCodeReference attachmentStorage = new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentStorage.class);
    private Integer recentsPerUser = 200;
    private String attachmentsBucketName = "collaboration";
    private Long defaultMaxBytes = 100L * 1024 * 1024;
    private List<String> blockedExtensions = List.of();
+
+   /*******************************************************************************
+    ** Whether the versioned collaboration UI API is registered.
+    *******************************************************************************/
+   public Boolean getUiApi()
+   {
+      return (uiApi);
+   }
+
+   /*******************************************************************************
+    ** Enable or disable the versioned UI API (enabled by default).
+    *******************************************************************************/
+   public CollaborationQBitConfig withUiApi(Boolean uiApi)
+   {
+      this.uiApi = uiApi;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Storage boundary used by attachment operations, including HTTP uploads.
+    *******************************************************************************/
+   public QCodeReference getAttachmentStorage()
+   {
+      return (attachmentStorage);
+   }
+
+   /*******************************************************************************
+    ** Configure a storage adapter; the default uses qbit-object-storage.
+    *******************************************************************************/
+   public CollaborationQBitConfig withAttachmentStorage(QCodeReference attachmentStorage)
+   {
+      this.attachmentStorage = attachmentStorage;
+      return (this);
+   }
 
 
 

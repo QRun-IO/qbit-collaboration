@@ -158,6 +158,10 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          output.add(CollaborationHome.app(qBitConfig));
       }
       output.addSelfToInstance(instance);
+      if(Boolean.TRUE.equals(qBitConfig.getUiApi()))
+      {
+         com.kingsrook.qbits.collaboration.api.CollaborationApi.register(instance);
+      }
       com.kingsrook.qbits.collaboration.model.ConversationChildren.install(instance);
       if(Boolean.TRUE.equals(qBitConfig.getAdminApp()) && qBitConfig.getParentAppName() != null)
       {

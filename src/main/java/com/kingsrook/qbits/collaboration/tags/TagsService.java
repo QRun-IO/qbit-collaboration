@@ -36,6 +36,7 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
@@ -63,7 +64,7 @@ public class TagsService
       String name = label == null ? "" : label.strip().toLowerCase(Locale.ROOT).replaceAll("(?U)\\s+", " ").strip();
       if(name.isEmpty() || name.length() > 60)
       {
-         throw (new QException("Tag names must contain 1 to 60 characters."));
+         throw (new QBadRequestException("Tag names must contain 1 to 60 characters."));
       }
       return (name);
    }
@@ -185,7 +186,7 @@ public class TagsService
             if(row.getValue("mergedIntoTagId") != null || (!Boolean.TRUE.equals(row.getValueBoolean("approved"))
                && !PersonalRecords.currentUserId().equals(row.getValueString("createdByUserId")) && !canManage()))
             {
-               throw (new QException("Tag name is already reserved."));
+               throw (new QBadRequestException("Tag name is already reserved."));
             }
             return (entry(row));
          }
@@ -235,7 +236,7 @@ public class TagsService
          {
             if(!createMissing || value instanceof Number || !mode(table).equals("FREE"))
             {
-               throw (new QException("Pick an approved tag (or suggest one)"));
+               throw (new QBadRequestException("Pick an approved tag (or suggest one)"));
             }
             row = requireTag(create(table, value.toString(), null).id());
          }
@@ -245,7 +246,7 @@ public class TagsService
          }
          if(!Boolean.TRUE.equals(row.getValueBoolean("approved")))
          {
-            throw (new QException("Pick an approved tag (or suggest one)"));
+            throw (new QBadRequestException("Pick an approved tag (or suggest one)"));
          }
          result.put(row.getValueInteger("id"), row);
       }

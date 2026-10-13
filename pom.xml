@@ -77,6 +77,10 @@
          <artifactId>qqq-backend-core</artifactId>
       </dependency>
       <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-middleware-javalin</artifactId>
+      </dependency>
+      <dependency>
          <groupId>org.junit.jupiter</groupId>
          <artifactId>junit-jupiter</artifactId>
          <scope>test</scope>
@@ -173,14 +177,15 @@
    <profiles>
       <!-- Built against qqq 4.1 (QBitMetaDataProducer). Until qbit-build-parent  -->
       <!-- imports the released 4.1 BOM, this profile is active by default and     -->
-      <!-- imports qqq-bom-pom 4.1.0-RC.5 ahead of the parent's 4.0.0 BOM.         -->
+      <!-- imports qqq-bom-pom 4.1.0-SNAPSHOT ahead of the parent's 4.0.0 BOM.     -->
       <profile>
          <id>qqq-snapshot</id>
          <activation>
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-RC.5</qqq.snapshot.version>
+            <!-- TODO: 4.1.0-RC.6 once released -->
+            <qqq.snapshot.version>4.1.0-SNAPSHOT</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>

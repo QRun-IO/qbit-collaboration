@@ -37,6 +37,7 @@ import com.kingsrook.qqq.backend.core.actions.metadata.personalization.TableMeta
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionEnforcement;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.metadata.personalization.TableMetaDataPersonalizerInput;
@@ -61,14 +62,14 @@ public class TimelineService
    public TimelinePage timeline(String table, Serializable recordId, String beforeCursor, Integer limit, Set<String> types) throws QException
    {
       String id = FollowService.canonicalId(table, recordId);
-      if(limit == null || limit < 1 || limit > 50)
+      if(limit == null || limit < 1 || limit > 100)
       {
-         throw (new QException("Limit must be between 1 and 50"));
+         throw (new QBadRequestException("Limit must be between 1 and 100"));
       }
       RecordCursor before = beforeCursor == null ? null : RecordCursor.decode(beforeCursor);
       if(before != null && before.kind().equals("COMMENT"))
       {
-         throw (new QException("Invalid timeline cursor"));
+         throw (new QBadRequestException("Invalid timeline cursor"));
       }
       List<TimelineItem> items = new ArrayList<>();
       boolean all = types == null || types.isEmpty();
