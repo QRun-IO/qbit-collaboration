@@ -44,6 +44,9 @@ public class CollaborationQBitConfig implements QBitConfig
    private List<String> tagActionTables = List.of();
    private List<String> followActionTables = List.of();
    private List<String> followChangeTables = List.of();
+   private String frontendBaseUrl;
+   private QCodeReference permissionHolderDirectory;
+   private List<String> assignActionTables = List.of();
    private String backendName;
    private String schedulerName;
    private String appName = "collaboration";
@@ -254,7 +257,7 @@ public class CollaborationQBitConfig implements QBitConfig
       }
       assertCondition(List.of("FREE", "APPROVED_ONLY").contains(defaultTagMode == null ? "" : defaultTagMode), "defaultTagMode must be FREE or APPROVED_ONLY", errors);
       assertCondition(notifier != null, "notifier is required", errors);
-      for(List<String> tables : List.of(followActionTables, followChangeTables, tagActionTables))
+      for(List<String> tables : List.of(followActionTables, followChangeTables, tagActionTables, assignActionTables))
       {
          for(String table : tables)
          {
@@ -474,6 +477,57 @@ public class CollaborationQBitConfig implements QBitConfig
    public CollaborationQBitConfig withTagActionTables(List<String> tables)
    {
       this.tagActionTables = tables;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Host configuration for frontendBaseUrl.
+    *******************************************************************************/
+   public String getFrontendBaseUrl()
+   {
+      return (frontendBaseUrl);
+   }
+
+   /*******************************************************************************
+    ** Configure frontendBaseUrl.
+    *******************************************************************************/
+   public CollaborationQBitConfig withFrontendBaseUrl(String value)
+   {
+      this.frontendBaseUrl = value;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Host configuration for permissionHolderDirectory.
+    *******************************************************************************/
+   public QCodeReference getPermissionHolderDirectory()
+   {
+      return (permissionHolderDirectory);
+   }
+
+   /*******************************************************************************
+    ** Configure permissionHolderDirectory.
+    *******************************************************************************/
+   public CollaborationQBitConfig withPermissionHolderDirectory(QCodeReference value)
+   {
+      this.permissionHolderDirectory = value;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Host configuration for assignActionTables.
+    *******************************************************************************/
+   public List<String> getAssignActionTables()
+   {
+      return (assignActionTables);
+   }
+
+   /*******************************************************************************
+    ** Configure assignActionTables.
+    *******************************************************************************/
+   public CollaborationQBitConfig withAssignActionTables(List<String> value)
+   {
+      this.assignActionTables = value;
       return (this);
    }
 }

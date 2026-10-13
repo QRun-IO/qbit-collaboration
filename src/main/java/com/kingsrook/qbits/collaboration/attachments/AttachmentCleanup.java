@@ -61,6 +61,7 @@ public class AttachmentCleanup
       {
          return;
       }
+      new com.kingsrook.qbits.collaboration.WorkCleanup().onParentsDeleted(table, ids);
       new com.kingsrook.qbits.collaboration.tags.TagsService().onParentsDeleted(table, ids);
       while(true)
       {

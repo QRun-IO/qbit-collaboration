@@ -21,8 +21,6 @@
 
 package com.kingsrook.qbits.collaboration.notify;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
 import com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader;
@@ -57,6 +55,22 @@ public final class Notifications
     *******************************************************************************/
    public static void send(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt) throws QException
    {
+      send(notification, receipt, true);
+   }
+
+   /*******************************************************************************
+    ** Only for access-request notices containing no parent data or sender message.
+    *******************************************************************************/
+   public static void sendAccessNotice(CollaborationNotification notification) throws QException
+   {
+      send(notification, null, false);
+   }
+
+   /*******************************************************************************
+    ** Both safe notices and parent-data delivery respect transaction completion.
+    *******************************************************************************/
+   private static void send(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt, boolean checkParent) throws QException
+   {
       CapturedContext context = new CapturedContext(QContext.getQInstance(), QContext.getQSession());
       if(QContext.getQBackendTransaction() != null)
       {
@@ -64,7 +78,7 @@ public final class Notifications
          {
             try
             {
-               QContext.withTemporaryContext(context, () -> deliver(notification, receipt));
+               QContext.withTemporaryContext(context, () -> deliver(notification, receipt, checkParent));
             }
             catch(QException e)
             {
@@ -74,16 +88,16 @@ public final class Notifications
       }
       else
       {
-         deliver(notification, receipt);
+         deliver(notification, receipt, checkParent);
       }
    }
 
    /*******************************************************************************
     ** Re-check immediately before exposing record data to the transport.
     *******************************************************************************/
-   private static void deliver(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt) throws QException
+   private static void deliver(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt, boolean checkParent) throws QException
    {
-      if(new OtherUserAccess().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
+      if(!checkParent || new OtherUserAccess().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
       {
          CollaborationNotifier notifier = QCodeLoader.getAdHoc(CollaborationNotifier.class, CollaborationRecords.config().getNotifier());
          notifier.notify(notification);
@@ -99,7 +113,6 @@ public final class Notifications
     *******************************************************************************/
    public static String link(String table, String id)
    {
-      return ("/app/" + URLEncoder.encode(table, StandardCharsets.UTF_8).replace("+", "%20") + "/"
-         + URLEncoder.encode(id, StandardCharsets.UTF_8).replace("+", "%20"));
+      return (com.kingsrook.qbits.collaboration.TargetResolver.recordHref(table, id));
    }
 }
