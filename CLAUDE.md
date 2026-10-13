@@ -1,17 +1,53 @@
-# qbit-template-extension
+# CLAUDE.md
 
-GitHub template repository for scaffolding QQQ "Extension QBits" (infrastructure-level plugins: table customizers, auth, audit, action wrappers). Not a shipping library — consumers click "Use this template" and rename the `com.kingsrook.qbits.example` package.
+This file provides guidance to Claude Code when working with code in this repository.
 
-## QQQ 4.0 baseline — 2026-09-24
+## Project Overview
 
-The historical review below predates the 4.0 migration. This template targets Java 21 and the public QQQ 4.0.0 release from Maven Central. The corrected APIs, license references and actual template commands are in README.md and docs/00-getting-started.md. Preserve the documented multi-instance and scaffold limitations.
+**QBit Collaboration**: record collaboration for QQQ. Phase a implements feature settings, people tables and the app home. Design: [QRun-IO/qqq#1136](https://github.com/QRun-IO/qqq/pull/1136) (`docs/COLLABORATION.md`). Phases b to i are planned.
 
-## Knowledge base
+## Build Commands
 
-Reviewed dossiers for this repo and the wider QQQ platform live in the second-brain vault:
+```bash
+./mvnw compile          # Compile (always use the wrapper: Maven 3.10 cannot read the parent POM)
+./mvnw test             # Unit tests
+./mvnw verify           # Unit tests + JaCoCo gate (70% instructions, 90% classes)
+```
 
-- Hub / entry point: `R:/Git.Local/KofTwentyTwo/second-brain/knowledge/qqq/qqq-hub.md`
-- This repo's dossier: `R:/Git.Local/KofTwentyTwo/second-brain/knowledge/qqq/repos/qbit-template-extension.md`
-- QBit mechanics refresher: `R:/Git.Local/KofTwentyTwo/second-brain/knowledge/qqq/architecture/metadata-model.md`
+## Architecture
 
-Reviewed at commit `e7d4b4d672cc` (branch `main`, 2026-05-21). Known drift as of that review: no `qbit-build-parent` parent pom (org convention), qqq pinned at 0.35.0 on main (0.40.0-SNAPSHOT on develop), README still claims AGPL-3.0 while LICENSE/NOTICE are Apache-2.0, and README references `scripts/customize_template.py` / `actions/ExampleActionCustomizer.java` which do not exist. See the dossier's "Maturity & risks" and "v4.0 impact" sections before modifying the scaffold.
+**Entry point:** `CollaborationQBitProducer implements QBitMetaDataProducer<CollaborationQBitConfig>` in `com.kingsrook.qbits.collaboration`. The producer registers table metadata, possible values and the optional app home.
+
+## Invariants
+
+- The home reads real data with the current session.
+- People are a service-managed directory; direct user writes are denied.
+- Feature settings are audited at FIELD level; writes require `collaboration.admin`.
+- Runtime override application and record feature services await the core contracts.
+
+## Naming (owner rule)
+
+- Tables are lowercase snake_case prefixed with the full qbit name: `collaboration_<name>`. The QQQ table name and the backend (SQL) name are identical; possible-value sources take the table name.
+- Permissions use the full qbit name: `collaboration.<action>` (for example `collaboration.view`, `collaboration.admin`).
+- Qbit data lives in standard, visible QQQ tables, secured by permissions and record security locks, never hidden.
+- Processes run as table or record actions, never in the nav.
+
+## Code Style
+
+- 3-space indentation, opening braces on the next line, `return (x);`.
+- Javadoc flower-box comments (`/*****` with `**` lines) on every class and method.
+- Fluent setters (`withX()`).
+- Wrapper types (`Integer`, `Boolean`) in config and entities.
+
+## Dependencies
+
+- Java 21.
+- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.5` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Tests: JUnit 5, AssertJ.
+
+## Release
+
+- CircleCI qqq-orb 0.6.8.
+- `develop` publishes SNAPSHOTs.
+- A `release/*` branch publishes RCs (the orb bumps the version).
+- A `v*` tag publishes the release.
