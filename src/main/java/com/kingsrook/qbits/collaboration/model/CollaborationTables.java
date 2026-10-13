@@ -58,6 +58,12 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String COMMENT = "collaboration_comment";
+   public static final String COMMENT_REVISION = "collaboration_comment_revision";
+   public static final String MENTION = "collaboration_mention";
+   public static final String FOLLOW = "collaboration_follow";
+   public static final String ACTIVITY = "collaboration_activity";
+   public static final String FOLLOW_DIGEST = "collaboration_follow_digest";
    public static final String ATTACHMENT = "collaboration_attachment";
    public static final String FEATURE_SETTING = "collaboration_feature_setting";
    public static final String FAVORITE = "collaboration_favorite";
@@ -85,6 +91,7 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         QPossibleValueSource.newForTable(COMMENT), QPossibleValueSource.newForTable(COMMENT_REVISION), QPossibleValueSource.newForTable(MENTION), QPossibleValueSource.newForTable(FOLLOW), QPossibleValueSource.newForTable(ACTIVITY), QPossibleValueSource.newForTable(FOLLOW_DIGEST),
          enumSource(TARGET_TYPE, "TABLE", "APP", "RECORD", "PROCESS", "REPORT", "SAVED_VIEW"),
          QPossibleValueSource.newForTable(ATTACHMENT), QPossibleValueSource.newForTable(FAVORITE), QPossibleValueSource.newForTable(RECENT),
          enumSource(SCOPE_TYPE, "INSTANCE", "APP", "TABLE"),
@@ -152,7 +159,8 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("lastViewedAt", QFieldType.DATE_TIME).withLabel("Last Viewed At").withIsRequired(true))
          .withField(new QFieldMetaData("viewCount", QFieldType.INTEGER).withLabel("View Count").withIsRequired(true).withDefaultValue(1))
          .withSection(new QFieldSection("details", new QIcon("history"), Tier.T2, List.of("label", "lastViewedAt", "viewCount")).withLabel("Details"));
-      List<QTableMetaData> tables = List.of(settings, people, favorites, recents, attachment(config));
+      List<QTableMetaData> tables = new ArrayList<>(List.of(settings, people, favorites, recents, attachment(config)));
+      tables.addAll(conversationTables(config));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
@@ -252,4 +260,87 @@ public final class CollaborationTables
             List.of("id", "bucketName", "storageKey", "thumbnailKey", "sha256")).withLabel("Storage")));
    }
 
+
+   /*******************************************************************************
+    ** Conversation tables share immutable parent references and service-only writes.
+    *******************************************************************************/
+   private static List<QTableMetaData> conversationTables(CollaborationQBitConfig config)
+   {
+      QTableMetaData comments = referenced(config, COMMENT, "Comments", "forum")
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+         .withSearchFields(List.of("body"))
+         .withField(new QFieldMetaData("threadId", QFieldType.INTEGER).withPossibleValueSourceName(COMMENT))
+         .withField(new QFieldMetaData("parentCommentId", QFieldType.INTEGER).withPossibleValueSourceName(COMMENT))
+         .withField(new QFieldMetaData("body", QFieldType.TEXT).withMaxLength(20000))
+         .withField(string("fieldName", "Field", 128))
+         .withField(string("authorUserId", "Author", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("lastActivityAt", QFieldType.DATE_TIME).withIsRequired(true))
+         .withField(new QFieldMetaData("editedAt", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("resolvedAt", QFieldType.DATE_TIME))
+         .withField(string("resolvedByUserId", "Resolved By", 255))
+         .withField(new QFieldMetaData("deletedAt", QFieldType.DATE_TIME))
+         .withField(string("deletedByUserId", "Deleted By", 255))
+         .withRecordLabelFormatAndFields("Comment %s", "id");
+      QTableMetaData revisions = referenced(config, COMMENT_REVISION, "Comment History", "history")
+         .withField(new QFieldMetaData("commentId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(COMMENT))
+         .withField(new QFieldMetaData("body", QFieldType.TEXT))
+         .withField(new QFieldMetaData("editedAt", QFieldType.DATE_TIME).withIsRequired(true))
+         .withField(string("editedByUserId", "Edited By", 255));
+      QTableMetaData mentions = referenced(config, MENTION, "Mentions", "alternate_email")
+         .withField(new QFieldMetaData("commentId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(COMMENT))
+         .withField(string("mentionedUserId", "Mentioned User", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("visible", QFieldType.BOOLEAN).withIsRequired(true))
+         .withField(new QFieldMetaData("notifiedAt", QFieldType.DATE_TIME))
+         .withUniqueKey(new UniqueKey("commentId", "mentionedUserId"));
+      QTableMetaData follows = referenced(config, FOLLOW, "Followers", "notifications")
+         .withField(string("userId", "User", 255).withIsRequired(true))
+         .withField(string("reason", "Reason", 32).withIsRequired(true))
+         .withField(new QFieldMetaData("notifyOnChange", QFieldType.BOOLEAN).withIsRequired(true))
+         .withField(new QFieldMetaData("notifyOnComment", QFieldType.BOOLEAN).withIsRequired(true))
+         .withField(new QFieldMetaData("mutedUntil", QFieldType.DATE_TIME))
+         .withUniqueKey(new UniqueKey("tableName", "recordId", "userId"));
+      QTableMetaData activity = referenced(config, ACTIVITY, "Activity", "history")
+         .withoutCapabilities(com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_INSERT,
+            com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_UPDATE, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_DELETE)
+         .withField(new QFieldMetaData("at", QFieldType.DATE_TIME).withIsRequired(true))
+         .withField(string("actorUserId", "Actor", 255))
+         .withField(string("type", "Type", 64).withIsRequired(true))
+         .withField(new QFieldMetaData("summary", QFieldType.TEXT))
+         .withField(string("refTableName", "Reference Table", 128))
+         .withField(string("refId", "Reference ID", 64));
+      QTableMetaData digests = referenced(config, FOLLOW_DIGEST, "Follow Digests", "notifications")
+         .withField(string("userId", "Recipient", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("dueAt", QFieldType.DATE_TIME).withIsRequired(true))
+         .withField(new QFieldMetaData("changes", QFieldType.TEXT))
+         .withUniqueKey(new UniqueKey("tableName", "recordId", "userId"));
+      List<QTableMetaData> tables = List.of(comments, revisions, mentions, follows, activity, digests);
+      for(QTableMetaData table : tables)
+      {
+         table.withSection(new QFieldSection("details", new QIcon("info"), Tier.T1,
+            table.getFields().keySet().stream().filter(name -> !List.of("createDate", "modifyDate", "tableName", "recordId", "parentDeleted").contains(name)).toList()).withLabel("Details"));
+         for(QFieldMetaData field : table.getFields().values())
+         {
+            field.setIsEditable(false);
+         }
+      }
+      return (tables);
+   }
+
+   /*******************************************************************************
+    ** Denormalized references on children permit the same pre-query security.
+    *******************************************************************************/
+   private static QTableMetaData referenced(CollaborationQBitConfig config, String name, String label, String icon)
+   {
+      return (base(config, name, label, icon)
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.NONE))
+         .withPermissionRules(CollaborationPermissions.permissionRules()
+            .withDenyBehavior(com.kingsrook.qqq.backend.core.model.metadata.permissions.DenyBehavior.HIDDEN)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.security.CollaborationRowSecurity.class)))
+         .withCustomizer(TableCustomizers.POST_QUERY_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.security.ParentRowCustomizer.class))
+         .withField(string("tableName", "Table", 128).withIsRequired(true))
+         .withField(string("recordId", "Record ID", 64).withIsRequired(true))
+         .withField(new QFieldMetaData("parentDeleted", QFieldType.BOOLEAN).withIsRequired(true).withDefaultValue(false))
+         .withRecordLabelFormatAndFields("%s", "id")
+         .withSection(new QFieldSection("parent", new QIcon("link"), Tier.T2, List.of("tableName", "recordId", "parentDeleted")).withLabel("Parent")));
+   }
 }

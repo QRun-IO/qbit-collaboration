@@ -57,6 +57,7 @@ public final class FavoritesService
     *******************************************************************************/
    public static void star(String targetType, String targetName, Serializable recordId) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       String userId = PersonalRecords.currentUserId();
       FavoriteEntry target = TargetResolver.require(targetType, targetName, recordId);
       QQueryFilter filter = PersonalRecords.targetFilter(targetType, targetName, target.recordId());
@@ -90,6 +91,7 @@ public final class FavoritesService
     *******************************************************************************/
    public static void unstar(String targetType, String targetName, Serializable recordId) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       String id = TargetResolver.recordId(targetType, targetName, recordId);
       List<QRecord> rows = PersonalRecords.query(CollaborationTables.FAVORITE, PersonalRecords.targetFilter(targetType, targetName, id));
       PersonalRecords.delete(CollaborationTables.FAVORITE, rows.stream().map(row -> row.getValue("id")).toList());
@@ -102,6 +104,7 @@ public final class FavoritesService
     *******************************************************************************/
    public static List<FavoriteEntry> list() throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       return (TargetResolver.refresh(PersonalRecords.query(CollaborationTables.FAVORITE, PersonalRecords.ownFilter()
          .withOrderBy(new QFilterOrderBy("sortOrder")).withOrderBy(new QFilterOrderBy("id")))));
    }
@@ -114,6 +117,7 @@ public final class FavoritesService
     *******************************************************************************/
    public static void reorder(List<Integer> ids, Map<Integer, String> folders) throws QException
    {
+      new com.kingsrook.qbits.collaboration.people.PeopleService().touch();
       List<QRecord> rows = PersonalRecords.query(CollaborationTables.FAVORITE, PersonalRecords.ownFilter()
          .withOrderBy(new QFilterOrderBy("sortOrder")).withOrderBy(new QFilterOrderBy("id")));
       Set<Integer> owned = new HashSet<>(rows.stream().map(row -> row.getValueInteger("id")).toList());

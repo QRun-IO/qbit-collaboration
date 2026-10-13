@@ -6,6 +6,14 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
+- Phase-e comments/mentions, one-level threads, edit revisions, author/admin soft deletion, resolve/reopen, ranked mention candidates and keyset pagination on QQQ 4.1.0-RC.5.
+- Comments, Comment History, Mentions, Followers, Activity and durable Follow Digests tables, child-list widgets, service-only writes, shared parent-table query restrictions, schema indexes and real home counts.
+- Lazy people-directory upserts with ten-minute throttling from comments/follow/favorites/recents/attachments entry points; bounded active-name/email search.
+- Configurable notifier and recipient-session stand-ins, default no-op and recording transports, conservative unknown-access handling and RC.5 after-commit delivery with fresh access checks.
+- Follow preferences, generic streamed ETL Follow/Unfollow actions, configured RC.5 change listeners and a hidden minute scheduler for five-minute digests.
+- Timeline merging enforced core audit reads with collaboration activity, field-visibility filtering and tuple cursors. Attachments now record FILE_ADDED/FILE_REMOVED activity.
+- Memory-backed tests for recipient access, transactions, moderation, pagination, real ETL Review/Result, digest batching, directory ranking, schema and audit timeline security. Existing JaCoCo gates retained; endpoint publication deferred to #1128.
+
 - Phase-c attachments against QQQ 4.1.0-RC.5 and object storage 0.1.0-RC.2: parent-checked upload/list/download/rename/describe/delete service, bounded streaming, SHA-256 and configurable byte/extension limits.
 - Visible `collaboration_attachment` table, FIELD auditing, file-name/description search fields, virtual presigned FILE_PREVIEW/FILE_DOWNLOAD adornments, PostgreSQL BIGINT size and parent index, and an approximate count/bytes home card.
 - Temporary `ParentRecordAccess`, readable-table query restriction through RC.5's permission hook and parent post-filtering. Panel calls do not require the admin browse grant; direct attachment table writes are service-managed.
@@ -18,4 +26,4 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 - `FavoritesService` and `FavoriteEntry`: idempotent star/unstar, reorder/folders, refreshed labels, batched record visibility checks, unavailable-target redaction and Next UI paths.
 - `RecentsService`: persisted one-minute throttling, visible newest-first lists (up to 50), and hidden daily `collaborationTrimRecents` scheduling with configurable per-user retention (default 200).
 - Home row/distinct-user summaries, PostgreSQL 15+ unique indexes that treat null record IDs as equal, and memory-backend security/service/retention tests.
-- UI API endpoints (§10.2) deferred to a follow-up PR after QQQ's UI API extension point ([QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128)) is released; no unreleased core classes are required.
+- UI API endpoints (Â§10.2) deferred to a follow-up PR after QQQ's UI API extension point ([QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128)) is released; no unreleased core classes are required.

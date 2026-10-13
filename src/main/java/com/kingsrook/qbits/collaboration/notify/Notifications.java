@@ -1,0 +1,105 @@
+/*
+ * QQQ - Low-code Application Framework for Engineers.
+ * Copyright (C) 2021-2025.  Kingsrook, LLC
+ * 651 N Broad St Ste 205 # 6917 | Middletown DE 19709 | United States
+ * contact@kingsrook.com
+ * https://github.com/Kingsrook/
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+package com.kingsrook.qbits.collaboration.notify;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import com.kingsrook.qbits.collaboration.CollaborationRecords;
+import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader;
+import com.kingsrook.qqq.backend.core.context.CapturedContext;
+import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.utils.lambdas.UnsafeVoidVoidMethod;
+
+/*******************************************************************************
+ ** Notification delivery uses RC.5 after-commit callbacks and fresh recipient access.
+ ** replace with a QAlerts.notify adapter when QRun-IO/qqq#1125 is released
+ *******************************************************************************/
+public final class Notifications
+{
+   /*******************************************************************************
+    ** Static transport boundary.
+    *******************************************************************************/
+   private Notifications()
+   {
+   }
+
+   /*******************************************************************************
+    ** Capture instance/session, but never carry a completed transaction into delivery.
+    *******************************************************************************/
+   public static void send(CollaborationNotification notification) throws QException
+   {
+      send(notification, null);
+   }
+
+   /*******************************************************************************
+    ** Optional receipt runs only after actual transport delivery, never on rollback.
+    *******************************************************************************/
+   public static void send(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt) throws QException
+   {
+      CapturedContext context = new CapturedContext(QContext.getQInstance(), QContext.getQSession());
+      if(QContext.getQBackendTransaction() != null)
+      {
+         QContext.getQBackendTransaction().addAfterCommitCallback(() ->
+         {
+            try
+            {
+               QContext.withTemporaryContext(context, () -> deliver(notification, receipt));
+            }
+            catch(QException e)
+            {
+               throw (new IllegalStateException("Collaboration notification failed after commit", e));
+            }
+         });
+      }
+      else
+      {
+         deliver(notification, receipt);
+      }
+   }
+
+   /*******************************************************************************
+    ** Re-check immediately before exposing record data to the transport.
+    *******************************************************************************/
+   private static void deliver(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt) throws QException
+   {
+      if(new OtherUserAccess().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
+      {
+         CollaborationNotifier notifier = QCodeLoader.getAdHoc(CollaborationNotifier.class, CollaborationRecords.config().getNotifier());
+         notifier.notify(notification);
+         if(receipt != null && !(notifier instanceof NoOpNotifier))
+         {
+            receipt.run();
+         }
+      }
+   }
+
+   /*******************************************************************************
+    ** Relative canonical frontend link with separately encoded path segments.
+    *******************************************************************************/
+   public static String link(String table, String id)
+   {
+      return ("/app/" + URLEncoder.encode(table, StandardCharsets.UTF_8).replace("+", "%20") + "/"
+         + URLEncoder.encode(id, StandardCharsets.UTF_8).replace("+", "%20"));
+   }
+}

@@ -82,7 +82,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(List.of(HOME_WIDGET))
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.ATTACHMENT, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -140,6 +140,17 @@ public final class CollaborationHome
       personalSummary(html, CollaborationTables.FAVORITE, "Favorites");
       personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
       attachmentSummary(html);
+      html.append("<section><h3>Comments this week</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
+         .withCriteria("createDate", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
+         .withCriteria("createDate", QCriteriaOperator.LESS_THAN_OR_EQUALS, now).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");
+      html.append("<section><h3>Open threads</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
+         .withCriteria("threadId", QCriteriaOperator.IS_BLANK).withCriteria("resolvedAt", QCriteriaOperator.IS_BLANK)
+         .withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");
+      if(QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN))
+      {
+         html.append("<section><h3>Followers</h3><p>").append(count(CollaborationTables.FOLLOW, new QQueryFilter())).append("</p></section>");
+      }
+      html.append("<p>Conversation totals are approximate where parent record locks require post-filtering.</p>");
       return (html.append("</div>").toString());
    }
 

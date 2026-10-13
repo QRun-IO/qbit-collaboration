@@ -21,18 +21,13 @@
 
 package com.kingsrook.qbits.collaboration.attachments;
 
-import java.util.List;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissionChecker;
-import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.actions.permissions.CustomPermissionChecker;
-import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.QueryOrCountInputInterface;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.MetaDataWithPermissionRules;
 
@@ -66,15 +61,6 @@ public class AttachmentSecurity implements CustomPermissionChecker
     *******************************************************************************/
    public static void restrict(QueryOrCountInputInterface input)
    {
-      List<String> readable = QContext.getQInstance().getTables().keySet().stream().filter(ParentRecordAccess::canReadTable).toList();
-      QQueryFilter original = input.getFilter();
-      QQueryFilter filter = new QQueryFilter().withCriteria("tableName", QCriteriaOperator.IN, readable)
-         .withCriteria("parentDeleted", QCriteriaOperator.EQUALS, false);
-      if(original != null)
-      {
-         filter.withSubFilter(original).withLimit(original.getLimit()).withSkip(original.getSkip());
-         filter.setOrderBys(original.getOrderBys());
-      }
-      input.setFilter(filter);
+      com.kingsrook.qbits.collaboration.security.ParentTableRestriction.restrict(input);
    }
 }
