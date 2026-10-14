@@ -116,13 +116,67 @@ public final class CollaborationRecords
    }
 
    /*******************************************************************************
+    ** Trusted after-delete reads must see children whose parent no longer exists.
+    *******************************************************************************/
+   public static List<QRecord> cleanupQuery(String table, QQueryFilter filter) throws QException
+   {
+      QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true);
+      input.setTableMetaData(cleanupMetadata(table));
+      input.withPermissionBypass("Core after-commit parent cleanup.");
+      return (new QueryAction().execute(input).getRecords());
+   }
+
+   /*******************************************************************************
+    ** Delete only identifiers selected by a trusted cleanup provider.
+    *******************************************************************************/
+   public static void cleanupDelete(String table, Serializable id) throws QException
+   {
+      DeleteInput input = new DeleteInput(table).withPrimaryKeys(List.of(id));
+      input.setTableMetaData(cleanupMetadata(table));
+      input.withPermissionBypass("Core after-commit parent cleanup.");
+      check(new DeleteAction().execute(input).getRecordsWithErrors());
+   }
+
+   /*******************************************************************************
+    ** Private metadata for derived cleanup, never installed on the instance.
+    *******************************************************************************/
+   public static QTableMetaData cleanupMetadata(String table)
+   {
+      QTableMetaData metadata = serviceMetadata(table);
+      metadata.getSupplementalMetaData().remove(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData.NAME);
+      metadata.setRecordSecurityLocks(null);
+      return (metadata);
+   }
+
+   /*******************************************************************************
+    ** A verified share recipient may acknowledge a share without reading its parent.
+    *******************************************************************************/
+   public static void acknowledgeShare(Integer id, java.time.Instant openedAt) throws QException
+   {
+      QRecord row = WorkSupport.row(com.kingsrook.qbits.collaboration.model.CollaborationTables.SHARE, id);
+      if(!PersonalRecords.currentUserId().equals(row.getValueString("toUserId")))
+      {
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QNotFoundException("Not found"));
+      }
+      UpdateInput input = new UpdateInput(com.kingsrook.qbits.collaboration.model.CollaborationTables.SHARE)
+         .withRecords(List.of(new QRecord().withValue("id", id).withValue("openedAt", openedAt))).withTransaction(QContext.getQBackendTransaction());
+      input.setTableMetaData(cleanupMetadata(com.kingsrook.qbits.collaboration.model.CollaborationTables.SHARE));
+      input.withPermissionBypass("Verified share recipient acknowledges receipt; no parent data is changed.");
+      check(new UpdateAction().execute(input).getRecords());
+   }
+
+   /*******************************************************************************
     ** Access-request services enforce requester/approver authority explicitly.
     ** Bypass only that owner lock on a private metadata clone, retaining the caller
     ** for audit attribution. Standard actions always retain the installed lock.
     *******************************************************************************/
    private static QTableMetaData serviceMetadata(String table)
    {
-      QTableMetaData metadata = QContext.getQInstance().getTable(table).clone().withCustomizers(null);
+      QTableMetaData metadata = QContext.getQInstance().getTable(table).clone();
+      if(!table.equals(com.kingsrook.qbits.collaboration.model.CollaborationTables.FEATURE_SETTING))
+      {
+         metadata.withCustomizers(null);
+      }
       if(table.equals(com.kingsrook.qbits.collaboration.model.CollaborationTables.ACCESS_REQUEST))
       {
          metadata.setRecordSecurityLocks(null);

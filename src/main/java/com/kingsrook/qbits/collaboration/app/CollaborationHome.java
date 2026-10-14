@@ -125,7 +125,7 @@ public final class CollaborationHome
                .withCriteria(new QFilterCriteria("enabled", QCriteriaOperator.EQUALS, true)));
             html.append("<li>").append(scope).append(": ").append(enabled).append("</li>");
          }
-         html.append("</ul><p>Stored overrides; applying them awaits the core collaboration contracts.</p>");
+         html.append("</ul><p>Feature settings take effect after saving.</p>");
       }
       long people = count(CollaborationTables.USER, new QQueryFilter());
       long recent = count(CollaborationTables.USER, new QQueryFilter()

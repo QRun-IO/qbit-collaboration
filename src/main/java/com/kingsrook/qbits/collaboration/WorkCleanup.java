@@ -95,7 +95,7 @@ public class WorkCleanup implements RecordChangeListenerInterface
       {
          while(true)
          {
-            List<QRecord> rows = CollaborationRecords.query(child, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
+            List<QRecord> rows = CollaborationRecords.cleanupQuery(child, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
                .withCriteria("recordId", QCriteriaOperator.IN, ids.stream().map(Object::toString).toList()).withLimit(200));
             if(rows.isEmpty())
             {
@@ -103,7 +103,7 @@ public class WorkCleanup implements RecordChangeListenerInterface
             }
             for(QRecord row : rows)
             {
-               CollaborationRecords.delete(child, row.getValue("id"));
+               CollaborationRecords.cleanupDelete(child, row.getValue("id"));
             }
          }
       }

@@ -22,7 +22,7 @@
 package com.kingsrook.qbits.collaboration.notify;
 
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader;
 import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -30,7 +30,7 @@ import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.utils.lambdas.UnsafeVoidVoidMethod;
 
 /*******************************************************************************
- ** Notification delivery uses RC.5 after-commit callbacks and fresh recipient access.
+ ** Notification delivery uses core after-commit callbacks and fresh recipient access.
  ** replace with a QAlerts.notify adapter when QRun-IO/qqq#1125 is released
  *******************************************************************************/
 public final class Notifications
@@ -97,10 +97,23 @@ public final class Notifications
     *******************************************************************************/
    private static void deliver(CollaborationNotification notification, UnsafeVoidVoidMethod<QException> receipt, boolean checkParent) throws QException
    {
-      if(!checkParent || new OtherUserAccess().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
+      if(!checkParent || new CollaborationRecordAccessChecker().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
       {
          CollaborationNotifier notifier = QCodeLoader.getAdHoc(CollaborationNotifier.class, CollaborationRecords.config().getNotifier());
          notifier.notify(notification);
+         if(!(notifier instanceof NoOpNotifier))
+         {
+            try
+            {
+               com.kingsrook.qqq.backend.core.realtime.RealtimeBus.get(QContext.getQInstance()).publish(
+                  new com.kingsrook.qqq.backend.core.realtime.RealtimeMessage().withChannel("user:" + notification.recipientUserId())
+                     .withEvent("notification.created").withData(java.util.Map.of("userId", notification.recipientUserId())));
+            }
+            catch(Exception e)
+            {
+               com.kingsrook.qqq.backend.core.logging.QLogger.getLogger(Notifications.class).warn("Could not publish notification hint", e);
+            }
+         }
          if(receipt != null && !(notifier instanceof NoOpNotifier))
          {
             receipt.run();

@@ -34,8 +34,8 @@ import com.kingsrook.qbits.collaboration.PersonalRecords;
 import com.kingsrook.qbits.collaboration.activity.ActivityWriter;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
-import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
@@ -43,8 +43,6 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperat
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.model.session.QSystemUserSession;
-import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 
 /*******************************************************************************
  ** Tag vocabulary and assignments. Parent authorization precedes trusted storage.
@@ -63,7 +61,7 @@ public class TagsService
       String name = label == null ? "" : label.strip().toLowerCase(Locale.ROOT).replaceAll("(?U)\\s+", " ").strip();
       if(name.isEmpty() || name.length() > 60)
       {
-         throw (new QException("Tag names must contain 1 to 60 characters."));
+         throw (new QBadRequestException("Tag names must contain 1 to 60 characters."));
       }
       return (name);
    }
@@ -99,65 +97,18 @@ public class TagsService
    }
 
    /*******************************************************************************
-    ** Resolve persisted policy as system, preserving the caller and transaction.
-    ** The preferred app path supplies the APP scope when a table has several apps.
+    ** Read core's committed policy with instance/app/table resolution and hard limits.
     *******************************************************************************/
    public String mode(String table) throws QException
    {
-      List<String> resolved = new ArrayList<>();
-      QContext.withTemporaryContext(new CapturedContext(QContext.getQInstance(), new QSystemUserSession(), QContext.getQBackendTransaction(), null), () ->
+      Object setting = com.kingsrook.qqq.backend.core.actions.collaboration.RecordFeaturesResolver.resolve(QContext.getQInstance(), QContext.getQInstance().getTable(table))
+         .getFeatures().get(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature.TAGS).getSettings().get("mode");
+      String mode = setting == null ? CollaborationRecords.config().getDefaultTagMode() : setting.toString();
+      if(!List.of("FREE", "APPROVED_ONLY").contains(mode))
       {
-         String path = QContext.getQInstance().getTablePath(table);
-         String[] parts = path == null ? new String[0] : path.split("/");
-         String app = parts.length > 2 ? parts[parts.length - 2] : null;
-         for(String scope : List.of("TABLE", "APP", "INSTANCE"))
-         {
-            if(scope.equals("APP") && app == null)
-            {
-               continue;
-            }
-            QQueryFilter filter = new QQueryFilter().withCriteria("feature", QCriteriaOperator.EQUALS, "TAGS")
-               .withCriteria("scopeType", QCriteriaOperator.EQUALS, scope);
-            if(!scope.equals("INSTANCE"))
-            {
-               filter.withCriteria("scopeName", QCriteriaOperator.EQUALS, scope.equals("TABLE") ? table : app);
-            }
-            for(QRecord row : CollaborationRecords.query(CollaborationTables.FEATURE_SETTING, filter))
-            {
-               String json = row.getValueString("settings");
-               if(json != null && !json.isBlank())
-               {
-                  Object value = settingMode(json);
-                  if(value != null)
-                  {
-                     String mode = value.toString();
-                     if(!List.of("FREE", "APPROVED_ONLY").contains(mode))
-                     {
-                        throw (new QException("Invalid TAGS mode: " + mode));
-                     }
-                     resolved.add(mode);
-                     return;
-                  }
-               }
-            }
-         }
-      });
-      return (resolved.isEmpty() ? CollaborationRecords.config().getDefaultTagMode() : resolved.getFirst());
-   }
-
-   /*******************************************************************************
-    ** Invalid JSON fails closed instead of silently relaxing an approval policy.
-    *******************************************************************************/
-   private Object settingMode(String json) throws QException
-   {
-      try
-      {
-         return (JsonUtils.toObject(json, Map.class).get("mode"));
+         throw (new QException("Invalid TAGS mode: " + mode));
       }
-      catch(Exception e)
-      {
-         throw (new QException("Invalid TAGS settings JSON", e));
-      }
+      return (mode);
    }
 
    /*******************************************************************************
@@ -185,7 +136,7 @@ public class TagsService
             if(row.getValue("mergedIntoTagId") != null || (!Boolean.TRUE.equals(row.getValueBoolean("approved"))
                && !PersonalRecords.currentUserId().equals(row.getValueString("createdByUserId")) && !canManage()))
             {
-               throw (new QException("Tag name is already reserved."));
+               throw (new QBadRequestException("Tag name is already reserved."));
             }
             return (entry(row));
          }
@@ -235,7 +186,7 @@ public class TagsService
          {
             if(!createMissing || value instanceof Number || !mode(table).equals("FREE"))
             {
-               throw (new QException("Pick an approved tag (or suggest one)"));
+               throw (new QBadRequestException("Pick an approved tag (or suggest one)"));
             }
             row = requireTag(create(table, value.toString(), null).id());
          }
@@ -245,7 +196,7 @@ public class TagsService
          }
          if(!Boolean.TRUE.equals(row.getValueBoolean("approved")))
          {
-            throw (new QException("Pick an approved tag (or suggest one)"));
+            throw (new QBadRequestException("Pick an approved tag (or suggest one)"));
          }
          result.put(row.getValueInteger("id"), row);
       }
@@ -367,10 +318,10 @@ public class TagsService
    {
       synchronized(CollaborationRecords.config())
       {
-         for(QRecord link : CollaborationRecords.query(CollaborationTables.RECORD_TAG, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
+         for(QRecord link : CollaborationRecords.cleanupQuery(CollaborationTables.RECORD_TAG, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
             .withCriteria("recordId", QCriteriaOperator.IN, ids.stream().map(Object::toString).toList())))
          {
-            CollaborationRecords.delete(CollaborationTables.RECORD_TAG, link.getValue("id"));
+            CollaborationRecords.cleanupDelete(CollaborationTables.RECORD_TAG, link.getValue("id"));
             recompute(link.getValue("tagId"));
          }
       }

@@ -44,8 +44,8 @@ import com.kingsrook.qbits.collaboration.notify.NoOpNotifier;
 import com.kingsrook.qbits.collaboration.notify.RecordingNotifier;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
-import com.kingsrook.qbits.collaboration.security.UserSessionSupplier;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
+import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
 import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.processes.RunProcessAction;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
@@ -101,7 +101,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       sessions.put("bob", session("bob", "a"));
       sessions.put("eve", session("eve", "b"));
       sessions.put("alice", session("alice", "a"));
-      config.withNotifier(new QCodeReference(TestNotifier.class)).withUserSessionSupplier(new QCodeReference(TestSessions.class));
+      config.withNotifier(new QCodeReference(TestNotifier.class)).withUserSessionProvider(new QCodeReference(TestSessions.class));
       QContext.getQSession().getUser().setFullName("Alice Example");
       new QInstanceValidator().validate(instance);
    }
@@ -121,10 +121,10 @@ public class ConversationServicesTest extends PersonalServiceFixture
    /*******************************************************************************
     ** The provider returns explicit test identities with real record locks.
     *******************************************************************************/
-   public static class TestSessions implements UserSessionSupplier
+   public static class TestSessions implements UserSessionProviderInterface
    {
       @Override
-      public Optional<QSession> sessionFor(String userId)
+      public Optional<QSession> sessionForUser(String userId)
       {
          return (Optional.ofNullable(sessions.get(userId)));
       }
@@ -166,11 +166,11 @@ public class ConversationServicesTest extends PersonalServiceFixture
       });
       comments.edit(entry.id(), "Again @[Bob](user:bob)");
       assertThat(recorder.notifications()).hasSize(1);
-      config.withUserSessionSupplier(null);
+      config.withUserSessionProvider(null);
       CommentEntry unknown = comments.post("document", 2, "@[Bob](user:bob)", null, null);
       assertThat(unknown.mentions()).containsExactly(new MentionEntry("bob", false));
       assertThat(recorder.notifications()).hasSize(1);
-      assertThat(new OtherUserAccess().canRead("bob", "document", 1)).isEmpty();
+      assertThat(new CollaborationRecordAccessChecker().canRead("bob", "document", 1)).isEmpty();
    }
 
    /*******************************************************************************
@@ -197,7 +197,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       assertThat(recorder.notifications()).hasSize(1);
       QContext.clearTransaction();
       sessions.put("bob", session("wrong-user", "a"));
-      assertThat(new OtherUserAccess().canRead("bob", "document", 1)).isEmpty();
+      assertThat(new CollaborationRecordAccessChecker().canRead("bob", "document", 1)).isEmpty();
       new NoOpNotifier().notify(recorder.notifications().getFirst());
    }
 
@@ -296,7 +296,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       comments.post("document", 1, "new reply", first.id(), null);
       assertThat(comments.list("document", 1, null, 1).threads().getFirst().id()).isEqualTo(first.id());
       assertThatThrownBy(() -> comments.list("document", 1, "bad!", 20)).hasMessage("Invalid cursor");
-      assertThatThrownBy(() -> comments.list("document", 1, null, 51)).hasMessageContaining("Limit");
+      assertThatThrownBy(() -> comments.list("document", 1, null, 101)).hasMessageContaining("Limit");
       assertThatThrownBy(() -> comments.post("document", 1, " ", null, null)).hasMessageContaining("body");
       assertThatThrownBy(() -> comments.post("document", 1, "a".repeat(20001), null, null)).hasMessageContaining("body");
       assertThatThrownBy(() -> comments.post("document", 1, "ok", null, "missing")).hasMessage("Unknown field");
@@ -363,7 +363,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       assertThat(comments.mentionCandidates("document", 1, "eve").getFirst().canRead()).contains(false);
       CollaborationRecords.update(CollaborationTables.USER, new QRecord().withValue("id", eve.getValue("id")).withValue("active", false));
       assertThat(new PeopleService().search("eve", 50)).isEmpty();
-      assertThatThrownBy(() -> new PeopleService().search("", 51)).hasMessageContaining("Limit");
+      assertThatThrownBy(() -> new PeopleService().search("", 101)).hasMessageContaining("Limit");
    }
 
    /*******************************************************************************
@@ -493,7 +493,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       new CollaborationQBitProducer().withQBitConfig(configured).produce(installed);
       assertThat(installed.getProcess("collaborationFollow_document").getLabel()).isEqualTo("Follow");
       assertThat(installed.getProcess("collaborationUnfollow_document").getLabel()).isEqualTo("Unfollow");
-      assertThat(installed.getRecordChangeListeners()).hasSize(2);
+      assertThat(installed.getRecordChangeListeners()).hasSize(3);
       assertThat(installed.getProcess("collaborationAddTags_document").getLabel()).isEqualTo("Add tags");
       assertThat(installed.getProcess("collaborationRemoveTags_document").getLabel()).isEqualTo("Remove tags");
       assertThat(installed.getProcess(SendFollowDigestsProcess.NAME).getSchedule().getRepeatSeconds()).isEqualTo(60);

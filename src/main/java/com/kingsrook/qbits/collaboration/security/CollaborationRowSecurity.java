@@ -28,7 +28,6 @@ import com.kingsrook.qqq.backend.core.actions.permissions.CustomPermissionChecke
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
-import com.kingsrook.qqq.backend.core.model.actions.tables.QueryOrCountInputInterface;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
@@ -50,16 +49,21 @@ public class CollaborationRowSecurity implements CustomPermissionChecker
       {
          throw (new QPermissionDeniedException("Use the collaboration service actions."));
       }
-      new CollaborationPermissionChecker().checkPermissionsThrowing(input, metadata);
+      if(input instanceof com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput query && query.getFieldNamesToInclude() != null)
+      {
+         var fields = new java.util.HashSet<>(query.getFieldNamesToInclude());
+         fields.addAll(java.util.List.of("id", "tableName", "recordId", "parentDeleted"));
+         query.setFieldNamesToInclude(fields);
+      }
+      if(!(metadata instanceof QTableMetaData table && table.getName().equals(CollaborationTables.RECORD_TAG)))
+      {
+         new CollaborationPermissionChecker().checkPermissionsThrowing(input, metadata);
+      }
       if(metadata instanceof QTableMetaData table
          && (table.getName().equals(CollaborationTables.RECORD_ASSIGNMENT) || table.getName().equals(CollaborationTables.FOLLOW) || table.getName().equals(CollaborationTables.ACTIVITY) || table.getName().equals(CollaborationTables.FOLLOW_DIGEST))
          && !QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN))
       {
          throw (new QPermissionDeniedException("This needs collaboration.admin."));
-      }
-      if(input instanceof QueryOrCountInputInterface query)
-      {
-         ParentTableRestriction.restrict(query);
       }
    }
 }

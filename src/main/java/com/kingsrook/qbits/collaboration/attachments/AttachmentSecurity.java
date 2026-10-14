@@ -25,16 +25,13 @@ import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissionChec
 import com.kingsrook.qqq.backend.core.actions.permissions.CustomPermissionChecker;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
-import com.kingsrook.qqq.backend.core.model.actions.tables.QueryOrCountInputInterface;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.MetaDataWithPermissionRules;
 
 /*******************************************************************************
- ** RC.5 has no PRE_QUERY customizer. Its permission checker provides the
- ** pre-query restriction for query, count and aggregate; post-query checks
- ** handle parent record locks. Direct writes must use the attachment service.
+ ** Core reference metadata protects reads; direct writes use the attachment service.
  *******************************************************************************/
 public class AttachmentSecurity implements CustomPermissionChecker
 {
@@ -49,18 +46,5 @@ public class AttachmentSecurity implements CustomPermissionChecker
          throw (new QPermissionDeniedException("Use the attachment service or Delete attachments action."));
       }
       new CollaborationPermissionChecker().checkPermissionsThrowing(input, metadata);
-      if(input instanceof QueryOrCountInputInterface query)
-      {
-         restrict(query);
-      }
-   }
-
-   /*******************************************************************************
-    ** AND the restriction outside any user OR clauses; preserve paging and sort.
-    ** Counts and aggregates are approximate because parent locks are post-filtered.
-    *******************************************************************************/
-   public static void restrict(QueryOrCountInputInterface input)
-   {
-      com.kingsrook.qbits.collaboration.security.ParentTableRestriction.restrict(input);
    }
 }

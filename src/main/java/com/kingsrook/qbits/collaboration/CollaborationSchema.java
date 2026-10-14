@@ -60,6 +60,13 @@ public final class CollaborationSchema
             columns.add("   " + field.getBackendName() + " " + type + (field.getName().equals("parentDeleted") ? " DEFAULT FALSE" : "") + (Boolean.TRUE.equals(field.getIsRequired()) ? " NOT NULL" : ""));
          }
          statements.add("CREATE TABLE IF NOT EXISTS " + table.getName() + " (\n" + String.join(",\n", columns) + "\n)");
+         for(QFieldMetaData field : table.getFields().values())
+         {
+            if(field.getName().startsWith("lockKey_"))
+            {
+               statements.add("ALTER TABLE " + table.getName() + " ADD COLUMN IF NOT EXISTS " + field.getBackendName() + " " + sqlType(field));
+            }
+         }
          int index = 0;
          for(UniqueKey key : table.getUniqueKeys() == null ? List.<UniqueKey>of() : table.getUniqueKeys())
          {

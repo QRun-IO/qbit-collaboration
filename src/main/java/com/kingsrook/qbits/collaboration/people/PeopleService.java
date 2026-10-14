@@ -30,6 +30,7 @@ import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.PersonalRecords;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.CriteriaOption;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
@@ -112,9 +113,9 @@ public class PeopleService
    public List<PersonEntry> search(String q, Integer limit, Set<String> preferredUserIds) throws QException
    {
       PersonalRecords.currentUserId();
-      if(limit == null || limit < 1 || limit > 50)
+      if(limit == null || limit < 1 || limit > 100)
       {
-         throw (new QException("Limit must be between 1 and 50"));
+         throw (new QBadRequestException("Limit must be between 1 and 100"));
       }
       List<QRecord> rows = new ArrayList<>();
       if(!preferredUserIds.isEmpty())
@@ -158,5 +159,21 @@ public class PeopleService
    {
       List<QRecord> rows = CollaborationRecords.query(CollaborationTables.USER, new QQueryFilter().withCriteria("userId", QCriteriaOperator.EQUALS, userId));
       return (rows.isEmpty() || rows.getFirst().getValueString("displayName") == null ? userId : rows.getFirst().getValueString("displayName"));
+   }
+
+   /*******************************************************************************
+    ** Look up one active person with the same signed-in boundary as search.
+    *******************************************************************************/
+   public PersonEntry get(String userId) throws QException
+   {
+      touch();
+      List<QRecord> rows = CollaborationRecords.query(CollaborationTables.USER, new QQueryFilter()
+         .withCriteria("userId", QCriteriaOperator.EQUALS, userId).withCriteria("active", QCriteriaOperator.EQUALS, true).withLimit(1));
+      if(rows.isEmpty())
+      {
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QNotFoundException("Not found"));
+      }
+      QRecord row = rows.getFirst();
+      return (new PersonEntry(row.getValueString("userId"), row.getValueString("displayName"), row.getValueString("email"), row.getValueInstant("lastSeenAt")));
    }
 }

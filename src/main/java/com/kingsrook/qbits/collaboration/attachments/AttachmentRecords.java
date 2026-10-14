@@ -49,7 +49,7 @@ final class AttachmentRecords
     *******************************************************************************/
    static List<QRecord> query(QQueryFilter filter) throws QException
    {
-      QueryInput input = new QueryInput(CollaborationTables.ATTACHMENT).withFilter(filter).withShouldFetchHeavyFields(true);
+      QueryInput input = new QueryInput(CollaborationTables.ATTACHMENT).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(QContext.getQBackendTransaction());
       input.setTableMetaData(storageTable());
       input.withPermissionBypass("Attachment service checks parent access; cleanup is a trusted after-delete callback.");
       return (new QueryAction().execute(input).getRecords());

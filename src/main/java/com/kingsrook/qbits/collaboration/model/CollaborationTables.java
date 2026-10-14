@@ -58,7 +58,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
 
 
 /*******************************************************************************
- ** Visible Collaboration tables. Enum ids are phase-a stand-ins for the core
+ ** Visible Collaboration tables. Enum ids use the names of the core
  ** collaboration enums; replace them when those contracts are released.
  *******************************************************************************/
 public final class CollaborationTables
@@ -159,6 +159,9 @@ public final class CollaborationTables
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
          .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "scopeType", "scopeName", "feature")).withLabel("Identity"))
          .withSection(new QFieldSection("details", new QIcon("settings"), Tier.T2, List.of("enabled", "settings", "permissionMode")).withLabel("Details"));
+      settings.withCustomizer(TableCustomizers.POST_INSERT_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class))
+         .withCustomizer(TableCustomizers.POST_UPDATE_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class))
+         .withCustomizer(TableCustomizers.POST_DELETE_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class));
       QTableMetaData people = base(config, USER, "People", "people")
          .withRecordLabelFormatAndFields("%s", "displayName")
          .withField(string("userId", "User ID", 255).withIsRequired(true))
@@ -189,6 +192,7 @@ public final class CollaborationTables
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
+         com.kingsrook.qbits.collaboration.CoreCollaboration.reference(table, config);
          QInstanceEnricher.setInferredFieldBackendNames(table);
       }
       return (tables);
@@ -401,6 +405,8 @@ public final class CollaborationTables
          .withSection(new QFieldSection("details", new QIcon("label"), Tier.T1,
             List.of("id", "name", "label", "color", "tableName", "approved", "description", "createdByUserId", "usageCount", "mergedIntoTagId")).withLabel("Details"));
       QTableMetaData links = referenced(config, RECORD_TAG, "Record Tags", "label")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.security.CollaborationRowSecurity.class)))
          .withField(new QFieldMetaData("tagId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(TAG))
          .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
          .withUniqueKey(new UniqueKey("tableName", "recordId", "tagId"))

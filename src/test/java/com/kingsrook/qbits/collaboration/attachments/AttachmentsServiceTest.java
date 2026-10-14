@@ -202,6 +202,7 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
       QContext.getQSession().getPermissions().remove("document.write");
       assertThatThrownBy(() -> service.delete(List.of(bob.id()))).isInstanceOf(QPermissionDeniedException.class);
       admin();
+      QContext.getQSession().withPermissions("document.attach");
       QContext.getQSession().getPermissions().remove("document.write");
       assertThat(service.rename(alice.id(), "renamed.txt", "new description").fileName()).isEqualTo("renamed.txt");
       assertThat(service.describe(alice.id(), "").description()).isEmpty();

@@ -134,7 +134,7 @@ public class TimelineServiceTest extends PersonalServiceFixture
       assertThat(timeline.timeline("document", 1, null, 50, null).items()).hasSize(3).allSatisfy(item -> assertThat(item.kind()).isEqualTo("ACTIVITY"));
       assertThatThrownBy(() -> timeline.timeline("document", 3, null, 50, null)).hasMessage("Not found");
       assertThatThrownBy(() -> timeline.timeline("document", 1, "invalid", 50, null)).hasMessage("Invalid cursor");
-      assertThatThrownBy(() -> timeline.timeline("document", 1, null, 51, null)).hasMessageContaining("Limit");
+      assertThatThrownBy(() -> timeline.timeline("document", 1, null, 101, null)).hasMessageContaining("Limit");
       instance.getTables().remove("audit");
       assertThat(timeline.timeline("document", 1, null, 50, Set.of("AUDIT")).items()).isEmpty();
    }

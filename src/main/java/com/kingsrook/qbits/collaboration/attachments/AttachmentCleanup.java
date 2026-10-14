@@ -65,7 +65,7 @@ public class AttachmentCleanup
       new com.kingsrook.qbits.collaboration.tags.TagsService().onParentsDeleted(table, ids);
       while(true)
       {
-         List<QRecord> rows = AttachmentRecords.query(new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
+         List<QRecord> rows = com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupQuery(com.kingsrook.qbits.collaboration.model.CollaborationTables.ATTACHMENT, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
             .withCriteria("recordId", QCriteriaOperator.IN, ids.stream().map(Object::toString).toList()).withLimit(200));
          if(rows.isEmpty())
          {
@@ -73,7 +73,7 @@ public class AttachmentCleanup
          }
          for(QRecord row : rows)
          {
-            service.deleteStoredRow(row);
+            service.deleteStoredRow(row, true);
          }
       }
    }
