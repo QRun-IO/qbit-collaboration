@@ -41,7 +41,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
  ** Applies help/qbit-collaboration.yaml (the QQQ help-bundle format) to the
  ** Collaboration app and its collaboration_* tables: what each table is for and
  ** how its rows get created, shown on the table screen and when it is empty.
- ** STAND-IN(core=#1198): replace with HelpBundles.register once the pinned
+ ** STAND-IN(core=QRun-IO/qqq#1198, removeBy=4.1.0-RC.8): replace with HelpBundles.register once the pinned
  ** QQQ release includes it; the bundle file stays the same.
  *******************************************************************************/
 public final class CollaborationHelp

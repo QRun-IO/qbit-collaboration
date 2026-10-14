@@ -4,7 +4,7 @@ layer: QBIT
 # Help for the Collaboration app and every collaboration_* table, in the QQQ help-bundle
 # format (qqq#1198). Each table entry says what the table is for and how its rows get
 # created, so an empty table explains itself. CollaborationHelp applies it until the core
-# HelpBundles registry ships in a QQQ release (STAND-IN(core=#1198)).
+# HelpBundles registry ships in a QQQ release (STAND-IN(core=QRun-IO/qqq#1198, removeBy=4.1.0-RC.8)).
 # Summaries stay under 120 characters (CollaborationTablesGuardrailTest).
 entries:
   - key: app:collaboration;slot:help
