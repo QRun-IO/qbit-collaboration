@@ -39,6 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentStorage;
 import com.kingsrook.qbits.objectstorage.api.PresignGet;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
+import com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay;
 import com.kingsrook.qqq.backend.core.instances.AbstractQQQApplication;
 import com.kingsrook.qqq.backend.core.model.metadata.QAuthenticationType;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
@@ -272,6 +273,50 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertError(400, "POST", "/tags", "{\"table\":\"document\",\"label\":\"\"}", "alice");
       assertError(400, "PUT", "/records/document/1/tags", "{\"add\":[null]}", "alice");
       assertError(400, "PUT", "/records/document/1/tags", "{\"add\":[1.5]}", "alice");
+   }
+
+   /*******************************************************************************
+    ** The picker sends tag ids through the v1 table query as any JSON number or string.
+    *******************************************************************************/
+   @Test
+   void tagFilterByIdThroughTableQuery() throws Exception
+   {
+      RuntimeMetaDataOverlay.refresh(instance);
+      int a = ok("POST", "/tags", "{\"table\":\"document\",\"label\":\"Alpha\"}").get("id").asInt();
+      int b = ok("POST", "/tags", "{\"table\":\"document\",\"label\":\"Beta\"}").get("id").asInt();
+      ok("PUT", "/records/document/1/tags", "{\"add\":[" + a + "," + b + "]}");
+      ok("PUT", "/records/document/2/tags", "{\"add\":[" + a + "]}");
+      for(String ida : List.of(a + "", "\"" + a + "\"", a + ".0"))
+      {
+         assertThat(tagQuery("IN", "[" + ida + "]")).containsExactlyInAnyOrder(1, 2);
+         assertThat(tagQuery("EQUALS", "[" + ida + "]")).containsExactlyInAnyOrder(1, 2);
+         assertThat(tagQuery("NOT_IN", "[" + ida + "]")).isEmpty();
+      }
+      for(String idb : List.of(b + "", "\"" + b + "\"", b + ".0"))
+      {
+         assertThat(tagQuery("CONTAINS_ALL", "[" + a + "," + idb + "]")).containsExactly(1);
+         assertThat(tagQuery("NOT_IN", "[" + idb + "]")).containsExactly(2);
+      }
+      assertThat(tagQuery("IN", "[\"alpha\"]")).containsExactlyInAnyOrder(1, 2);
+   }
+
+   /*******************************************************************************
+    ** Run the v1 table query filtered on the virtual tags field; return matching ids.
+    *******************************************************************************/
+   private List<Integer> tagQuery(String operator, String values) throws Exception
+   {
+      String serverUrl = baseUrl.substring(0, baseUrl.indexOf("/qbit/"));
+      String body = "{\"filter\":{\"criteria\":[{\"fieldName\":\"collaborationTags\",\"operator\":\"" + operator + "\",\"values\":" + values + "}],\"orderBys\":[{\"fieldName\":\"id\"}]}}";
+      HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/query")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).header("Content-Type", "application/json")
+         .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode result = json(response, 200);
+      List<Integer> ids = new java.util.ArrayList<>();
+      for(JsonNode record : result.get("records"))
+      {
+         ids.add(record.at("/values/id").asInt());
+      }
+      return (ids);
    }
 
    /*******************************************************************************
