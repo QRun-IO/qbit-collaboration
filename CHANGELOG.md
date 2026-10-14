@@ -4,6 +4,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+- Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
+
 ### Added
 
 - Phase f custom-field designer: audited definitions, secured EAV children, runtime JSON-path fields, classification, validation, lifecycle actions, PostgreSQL probes/index jobs and migration DDL. Read-only EAV filters and scalar multi-select limitations are documented.
