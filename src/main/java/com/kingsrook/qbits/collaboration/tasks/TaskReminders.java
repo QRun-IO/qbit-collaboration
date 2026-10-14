@@ -83,7 +83,7 @@ public class TaskReminders
                String id = row.getValueString("recordId");
                Notifications.send(new CollaborationNotification(row.getValueString("assigneeUserId"),
                   (dueField.equals("remindAt") ? "Task reminder: " : "Task overdue: ") + row.getValueString("title"), row.getValueString("notes"),
-                  CollaborationNotification.Category.TASK, table, id, Notifications.link(table, id)),
+                  CollaborationNotification.Category.TASK, table, id, Notifications.link(table, id)).withEvent(row.getValue("id") + ":" + dueField, null),
                   () -> CollaborationRecords.update(CollaborationTables.TASK, new QRecord().withValue("id", row.getValue("id")).withValue(receipt, now)));
             }
          }

@@ -98,7 +98,7 @@ public class SharingService
          if(Boolean.TRUE.equals(recipient.canRead()))
          {
             Notifications.send(new CollaborationNotification(recipient.userId(), name + " shared " + link.label() + " with you", message,
-               CollaborationNotification.Category.SHARE, table, id, link.url()));
+               CollaborationNotification.Category.SHARE, table, id, link.url()).withEvent(row.getValue("id"), from));
             new FollowService().ensureFollower(recipient.userId(), table, id, "SHARED");
          }
          else
@@ -106,7 +106,7 @@ public class SharingService
             Notifications.sendAccessNotice(new CollaborationNotification(recipient.userId(), name + " wants to share a record in "
                + QContext.getQInstance().getTable(table).getLabel() + " with you", "Request access to open this record.",
                CollaborationNotification.Category.SHARE, null, null, "/app/collaboration_access_request/create?tableName="
-                  + TargetResolver.encode(table) + "&recordId=" + TargetResolver.encode(id) + "&shareId=" + row.getValueString("id")));
+                  + TargetResolver.encode(table) + "&recordId=" + TargetResolver.encode(id) + "&shareId=" + row.getValueString("id")).withEvent(row.getValue("id"), from));
          }
          ActivityWriter.write(table, id, "SHARED", "Record shared", CollaborationTables.SHARE, row.getValueString("id"));
          result.add(row);

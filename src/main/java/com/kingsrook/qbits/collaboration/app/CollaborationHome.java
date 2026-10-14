@@ -200,7 +200,7 @@ public final class CollaborationHome
          row.put("records", tag.getValueInteger("usageCount") == null ? 0 : tag.getValueInteger("usageCount"));
          rows.add(row);
       }
-      return (table("Tags", NO_TAGS, rows, column("Label", "label", "3fr", "left"), column("Table", "table", "2fr", "left"), column("Records", "records", "1fr", "right")));
+      return (table("Tags", NO_TAGS, rows, column("Label", "label", "left"), column("Table", "table", "left"), column("Records", "records", "right")));
    }
 
 
@@ -224,8 +224,8 @@ public final class CollaborationHome
          row.put("indexState", friendly(definition.getValueString("indexState")));
          rows.add(row);
       }
-      return (table("Custom fields", NO_FIELDS, rows, column("Name", "name", "3fr", "left"), column("Table", "table", "2fr", "left"),
-         column("Status", "status", "1fr", "left"), column("Index state", "indexState", "1fr", "left")));
+      return (table("Custom fields", NO_FIELDS, rows, column("Name", "name", "left"), column("Table", "table", "left"),
+         column("Status", "status", "left"), column("Index state", "indexState", "left")));
    }
 
 
@@ -249,7 +249,7 @@ public final class CollaborationHome
             rows.add(row);
          });
       }
-      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "3fr", "left"), column("People", "viewers", "1fr", "right")));
+      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "left"), column("People", "viewers", "right")));
    }
 
 
@@ -267,9 +267,12 @@ public final class CollaborationHome
    /*******************************************************************************
     ** A plain column; the frontend styles it.
     *******************************************************************************/
-   private static TableData.Column column(String header, String accessor, String width, String align)
+   private static TableData.Column column(String header, String accessor, String align)
    {
-      return (new TableData.Column("default", header, accessor, width, align));
+      //////////////////////////////////////////////////////////////////
+      // no width: frontends size the columns to fit narrow (390 px) cards //
+      //////////////////////////////////////////////////////////////////
+      return (new TableData.Column("default", header, accessor, null, align));
    }
 
 

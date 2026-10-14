@@ -92,7 +92,7 @@ public final class DeleteAttachmentsProcess
     *******************************************************************************/
    public static class Review extends AbstractTransformStep implements ProcessSummaryProviderInterface
    {
-      private final AttachmentsService service;
+      private AttachmentsService service;
       private final ProcessSummaryLine selected = line(Status.OK, "will be deleted", "deleted");
       private final ProcessSummaryLine skipped = line(Status.WARNING, "cannot be deleted (skipped)", "skipped");
 
@@ -101,7 +101,11 @@ public final class DeleteAttachmentsProcess
        *******************************************************************************/
       public Review()
       {
-         this(new AttachmentsService());
+         //////////////////////////////////////////////////////////////////////////
+         // no QContext here: QQQ constructs steps during context-free instance //
+         // validation, so the service is created on first use (in a run)       //
+         //////////////////////////////////////////////////////////////////////////
+         this(null);
       }
 
       /*******************************************************************************
@@ -110,6 +114,20 @@ public final class DeleteAttachmentsProcess
       public Review(AttachmentsService service)
       {
          this.service = service;
+      }
+
+
+
+      /*******************************************************************************
+       ** The attachments service, created on first use inside a run (QContext exists).
+       *******************************************************************************/
+      private AttachmentsService service()
+      {
+         if(service == null)
+         {
+            service = new AttachmentsService();
+         }
+         return (service);
       }
 
       /*******************************************************************************
@@ -122,7 +140,7 @@ public final class DeleteAttachmentsProcess
          {
             try
             {
-               QRecord checked = service.requireMutable(row.getValue("id"));
+               QRecord checked = service().requireMutable(row.getValue("id"));
                output.getRecords().add(checked);
                selected.incrementCountAndAddPrimaryKey(checked.getValue("id"));
             }
@@ -151,7 +169,7 @@ public final class DeleteAttachmentsProcess
     *******************************************************************************/
    public static class Delete extends AbstractLoadStep implements ProcessSummaryProviderInterface
    {
-      private final AttachmentsService service;
+      private AttachmentsService service;
       private final ProcessSummaryLine deleted = line(Status.OK, "will be deleted", "deleted");
       private final ProcessSummaryLine failed = line(Status.ERROR, "could not be deleted", "could not be deleted (retry required)");
 
@@ -160,7 +178,11 @@ public final class DeleteAttachmentsProcess
        *******************************************************************************/
       public Delete()
       {
-         this(new AttachmentsService());
+         //////////////////////////////////////////////////////////////////////////
+         // no QContext here: QQQ constructs steps during context-free instance //
+         // validation, so the service is created on first use (in a run)       //
+         //////////////////////////////////////////////////////////////////////////
+         this(null);
       }
 
       /*******************************************************************************
@@ -169,6 +191,20 @@ public final class DeleteAttachmentsProcess
       public Delete(AttachmentsService service)
       {
          this.service = service;
+      }
+
+
+
+      /*******************************************************************************
+       ** The attachments service, created on first use inside a run (QContext exists).
+       *******************************************************************************/
+      private AttachmentsService service()
+      {
+         if(service == null)
+         {
+            service = new AttachmentsService();
+         }
+         return (service);
       }
 
       /*******************************************************************************
@@ -181,7 +217,7 @@ public final class DeleteAttachmentsProcess
          {
             try
             {
-               service.delete(List.of(row.getValue("id")));
+               service().delete(List.of(row.getValue("id")));
                deleted.incrementCountAndAddPrimaryKey(row.getValue("id"));
             }
             catch(QException | RuntimeException expected)

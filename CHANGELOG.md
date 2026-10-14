@@ -4,6 +4,12 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Changed
+
+- Switch the optional qbit-email integration to 0.1.0-RC.2 and its published `com.kingsrook.qbits.email.api` package, preserving templates, categories, idempotency keys, linked records and enqueue-status handling. Narrow the email package allowance to the public API.
+
+- Email through qbit-email 0.1.0-RC.1: new optional dependency and `EmailCollaborationNotifier` (templates `collaboration_mention`, `collaboration_share`, `collaboration_task_reminder`), the default notifier when qbit-email is produced in the instance and no `notifier` is configured; `NoOpNotifier` otherwise. One NOTIFICATION message per recipient, no comment bodies, record labels only when field access allows. New `recipientEmailResolver` config hook; `CollaborationNotification` gains optional `sourceId` and `actorUserId`.
+
 ### Fixed
 
 - Timeline audit summaries read "Edited by Alice Morgan: Title, Total" or "Created by Alice Morgan" instead of "Record was Edited"; detail rows are unchanged.

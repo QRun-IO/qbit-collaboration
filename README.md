@@ -269,13 +269,26 @@ UI API endpoints are described below. Runtime feature enablement, mirrored WRITE
 | `defaultMaxBytes` | `104857600` (100 MiB) | Positive byte limit, capped by the bucket's `maxUploadBytes`. |
 | `blockedExtensions` | Empty | Case-insensitive extension denylist, with or without leading dots. |
 | `recentsPerUser` | `200` | Positive retention count per user. Enforced by the trim process. |
-| `notifier` | `QCodeReference(NoOpNotifier.class)` | Implements `CollaborationNotifier`; replace with a QAlerts.notify adapter when QRun-IO/qqq#1125 is released. |
+| `notifier` | None | Implements `CollaborationNotifier`; replace with a QAlerts.notify adapter when QRun-IO/qqq#1125 is released. When unset: `EmailCollaborationNotifier` if qbit-email is on the classpath and produced in the instance, otherwise `NoOpNotifier`. |
+| `recipientEmailResolver` | People directory | `Function<String, String>` from user id to email address for the email notifier. Unset reads the `email` of the matching `collaboration_user` row; no address means no email. |
 | `userSessionProvider` | None | `QCodeReference` implementing `UserSessionProviderInterface`; missing user sessions mean unknown access. |
 | `followActionTables` | Empty | Existing host tables to receive standard Follow and Unfollow Review/Result processes. |
 | `followChangeTables` | Empty | Existing host tables whose UPDATE events should produce five-minute follow digests. |
 | `appName` | `collaboration` | Metadata name of the app. |
 | `parentAppName` | None | Optional existing parent, such as `admin`. |
 | `adminApp` | `true` | Set false to omit the app/home. Record child-list widgets remain available. |
+
+## Email through qbit-email
+
+qbit-email 0.1.0-RC.2 is an optional dependency (`<optional>true</optional>`). The integration uses its published `com.kingsrook.qbits.email.api` package for installation detection, template registration and sending. When it is on the classpath, produced in the same instance, and `notifier` is not configured, mentions, shares and task notifications are emailed by `EmailCollaborationNotifier`. Without qbit-email nothing changes: `NoOpNotifier` sends nothing. A configured `notifier` always wins.
+
+The guardrail allowlist properties retain the object-storage API and `*-api` artifact allowances and add only the qbit-email artifact and `com.kingsrook.qbits.email.api` package. The current parent 2.0.0 does not execute guardrails; these properties are ready for a parent that does. Tests retain `EmailQBitProducer`/`EmailQBitConfig` only to assemble the host instance; G1 checks production classes and sources.
+
+- Templates (NOTIFICATION, Markdown, owner `qbit-collaboration`), registered on first send and never overwritten: `collaboration_mention`, `collaboration_share`, `collaboration_task_reminder` (task assignment, reminder and overdue). Follow digests are not emailed.
+- One message per recipient, idempotency key `collaboration:<mention|share|task>:<event id>:<recipient user id>`, linked to the parent record, sender `qbit-collaboration`. A repeat is a duplicate. The event id is the mention, share, task or assignment row id (task reminders add the due field); `CollaborationNotification` carries it as `sourceId`, with the acting user as `actorUserId`.
+- No comment bodies, task titles, notes or share messages are emailed, since they may hold PHI. The email says who did what on which record, with a link. The record label is read as the recipient (needs `userSessionProvider`) and used only when `FieldAccessHelper.isRecordLabelFullAccess` allows it (reflective guard); otherwise the text says "a record in <table label>". Variables are classified CONFIDENTIAL so the templates need no PHI approval.
+- The link is sent only when absolute: set `frontendBaseUrl`.
+- Recipient addresses come from `withRecipientEmailResolver(Function<userId, String>)`, else the people directory email. Refused or suppressed sends are logged by user id and status only; delivery problems never fail the collaboration action.
 
 ## Adopting in another app
 
