@@ -40,7 +40,7 @@ import com.kingsrook.qbits.collaboration.mywork.MyWorkService;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotifier;
 import com.kingsrook.qbits.collaboration.notify.RecordingNotifier;
-import com.kingsrook.qbits.collaboration.security.UserSessionSupplier;
+import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
 import com.kingsrook.qbits.collaboration.sharing.AccessRequestService;
 import com.kingsrook.qbits.collaboration.sharing.PermissionHolderDirectory;
 import com.kingsrook.qbits.collaboration.sharing.SharingService;
@@ -102,7 +102,7 @@ public class SharingWorkTest extends PersonalServiceFixture
       sessions.put("alice", session("alice", "a"));
       sessions.put("bob", session("bob", "a"));
       sessions.put("eve", session("eve", "b"));
-      config.withNotifier(new QCodeReference(TestNotifier.class)).withUserSessionSupplier(new QCodeReference(TestSessions.class));
+      config.withNotifier(new QCodeReference(TestNotifier.class)).withUserSessionProvider(new QCodeReference(TestSessions.class));
       QContext.getQSession().getUser().setFullName("Alice");
       CollaborationRecords.insert(CollaborationTables.USER, new QRecord().withValue("userId", "eve").withValue("displayName", "Sam"));
       WorkProcesses.assignments("document").forEach(instance::addProcess);
@@ -127,13 +127,13 @@ public class SharingWorkTest extends PersonalServiceFixture
    /*******************************************************************************
     ** Test Sessions.
     *******************************************************************************/
-   public static class TestSessions implements UserSessionSupplier
+   public static class TestSessions implements UserSessionProviderInterface
    {
       /*******************************************************************************
        ** Use the configured test boundary.
        *******************************************************************************/
       @Override
-      public Optional<QSession> sessionFor(String user)
+      public Optional<QSession> sessionForUser(String user)
       {
          return (Optional.ofNullable(sessions.get(user)));
       }
@@ -310,7 +310,7 @@ public class SharingWorkTest extends PersonalServiceFixture
       QRecord soon = tasks.create("document", 1, "Soon", null, null, NOW.plusSeconds(3600), null);
       assertThat(soon.getValueInstant("remindAt")).isEqualTo(soon.getValueInstant("dueAt"));
       assertThat(soon.getValueString("assigneeUserId")).isEqualTo("alice");
-      config.withUserSessionSupplier(null);
+      config.withUserSessionProvider(null);
       assertThat(tasks.create("document", 1, "Self", null, null, null, null).getValueInstant("remindAt")).isNull();
    }
 

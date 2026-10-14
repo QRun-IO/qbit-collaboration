@@ -25,7 +25,6 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
@@ -45,7 +44,6 @@ import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 
 /*******************************************************************************
  ** Requests never inspect the parent. Their public result reveals no existence data.
@@ -108,25 +106,14 @@ public class AccessRequestService
     *******************************************************************************/
    public String approverPermission(String table) throws QException
    {
-      for(QRecord setting : CollaborationRecords.query(CollaborationTables.FEATURE_SETTING, new QQueryFilter()
-         .withCriteria("scopeType", QCriteriaOperator.EQUALS, "TABLE").withCriteria("scopeName", QCriteriaOperator.EQUALS, table)
-         .withCriteria("feature", QCriteriaOperator.EQUALS, "SHARING")))
+      var metadata = QContext.getQInstance().getTable(table);
+      if(metadata != null)
       {
-         String json = setting.getValueString("settings");
-         if(json != null && !json.isBlank())
+         Object permission = com.kingsrook.qqq.backend.core.actions.collaboration.RecordFeaturesResolver.resolve(QContext.getQInstance(), metadata)
+            .getFeatures().get(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature.SHARING).getSettings().get("accessApproverPermission");
+         if(permission != null && !permission.toString().isBlank())
          {
-            try
-            {
-               Object permission = JsonUtils.toObject(json, Map.class).get("accessApproverPermission");
-               if(permission != null && !permission.toString().isBlank())
-               {
-                  return (permission.toString());
-               }
-            }
-            catch(Exception e)
-            {
-               throw (new QException("Invalid SHARING settings JSON", e));
-            }
+            return (permission.toString());
          }
       }
       return (CollaborationPermissions.ADMIN);
@@ -233,5 +220,15 @@ public class AccessRequestService
    {
       Notifications.sendAccessNotice(new CollaborationNotification(user, title, "Review the access request.",
          CollaborationNotification.Category.SHARE, null, null, "/app/collaboration_access_request/" + id));
+   }
+
+   /*******************************************************************************
+    ** List only the current requester's submissions without inspecting parents.
+    *******************************************************************************/
+   public List<QRecord> mine() throws QException
+   {
+      return (CollaborationRecords.query(CollaborationTables.ACCESS_REQUEST, new QQueryFilter()
+         .withCriteria("requesterUserId", QCriteriaOperator.EQUALS, PersonalRecords.currentUserId())
+         .withOrderBy(new com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy("id", false))));
    }
 }

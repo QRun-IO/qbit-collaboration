@@ -155,4 +155,37 @@ final class CollaborationViews
    {
       return (new CollaborationMentionCandidateV1(person(value.person()), value.canRead().map(Object::toString).orElse("unknown")));
    }
+
+   /*******************************************************************************
+    ** Project Share public fields.
+    *******************************************************************************/
+   static CollaborationWorkSchemas.CollaborationShareV1 share(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   {
+      return (new CollaborationWorkSchemas.CollaborationShareV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("fromUserId"), row.getValueString("toUserId"), row.getValueString("message"), row.getValueBoolean("recipientCouldRead"), row.getValueInstant("sentAt")));
+   }
+
+   /*******************************************************************************
+    ** Project AccessRequest public fields.
+    *******************************************************************************/
+   static CollaborationWorkSchemas.CollaborationAccessRequestV1 accessRequest(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   {
+      return (new CollaborationWorkSchemas.CollaborationAccessRequestV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("requesterUserId"), row.getValueString("message"), row.getValueString("status"), row.getValueInstant("handledAt"), row.getValueString("note")));
+   }
+
+   /*******************************************************************************
+    ** Project Task public fields.
+    *******************************************************************************/
+   static CollaborationWorkSchemas.CollaborationTaskV1 task(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   {
+      return (new CollaborationWorkSchemas.CollaborationTaskV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("title"), row.getValueString("notes"), row.getValueString("assigneeUserId"), row.getValueInstant("dueAt"), row.getValueInstant("remindAt"), row.getValueString("status"), row.getValueString("createdByUserId"), row.getValueInstant("completedAt"), row.getValueString("completedByUserId")));
+   }
+
+   /*******************************************************************************
+    ** Project Assignment public fields.
+    *******************************************************************************/
+   static CollaborationWorkSchemas.CollaborationAssignmentV1 assignment(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   {
+      return (new CollaborationWorkSchemas.CollaborationAssignmentV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("ownerUserId"), row.getValueString("assigneeUserId")));
+   }
+
 }

@@ -84,6 +84,17 @@ public final class CollaborationApi
          .withSpec(GetTimelineSpec.class)
          .withSpec(ListPeopleSpec.class)
          .withSpec(GetPersonSpec.class)
+         .withSpec(GetRecordLinkSpec.class)
+         .withSpec(PreviewSharesSpec.class)
+         .withSpec(CreateSharesSpec.class)
+         .withSpec(CreateAccessRequestSpec.class)
+         .withSpec(ListMyAccessRequestsSpec.class)
+         .withSpec(ListTasksSpec.class)
+         .withSpec(CreateTaskSpec.class)
+         .withSpec(PatchTaskSpec.class)
+         .withSpec(ListMyTasksSpec.class)
+         .withSpec(PutAssignmentSpec.class)
+         .withSpec(GetMyWorkSpec.class)
          .withSpec(UploadAttachmentSpec.class));
    }
 }

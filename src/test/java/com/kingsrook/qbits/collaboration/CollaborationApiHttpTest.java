@@ -112,6 +112,61 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** Sharing validates recipients and access requests never reveal parent existence.
+    *******************************************************************************/
+   @Test
+   void sharingAndAccessRequests() throws Exception
+   {
+      assertThat(ok("GET", "/records/document/001/link", null).get("label").asText()).isEqualTo("First document");
+      var preview = ok("POST", "/records/document/1/shares/preview", "{\"toUserIds\":[\"alice\",\"unknown\"]}");
+      assertThat(preview.at("/recipients/0/canRead").asBoolean()).isTrue();
+      assertThat(preview.at("/recipients/1/canRead").isNull()).isTrue();
+      assertThat(ok("POST", "/records/document/1/shares", "{\"toUserIds\":[\"alice\"],\"message\":\"Review\"}").get("items")).hasSize(1);
+      assertError(400, "POST", "/records/document/1/shares", "{\"toUserIds\":[]}", "alice");
+      assertError(403, "POST", "/records/document/1/shares/preview", "{\"toUserIds\":[\"alice\"]}", "reader");
+      assertError(404, "GET", "/records/document/3/link", null, "alice");
+      var request = ok("POST", "/access-requests", "{\"tableName\":\"document\",\"recordId\":\"999\",\"message\":\"Please\"}");
+      assertThat(request.get("status").asText()).isEqualTo("OPEN");
+      assertThat(ok("GET", "/access-requests/mine", null).get("items")).hasSize(1);
+      assertThat(json(request("GET", "/access-requests/mine", null, "reader"), 200).get("items")).isEmpty();
+      assertError(400, "POST", "/access-requests", "{\"tableName\":\"document\"}", "alice");
+   }
+
+   /*******************************************************************************
+    ** Tasks support partial edits, status transitions, caller lists and assignment.
+    *******************************************************************************/
+   @Test
+   void tasksAssignmentsAndMyWork() throws Exception
+   {
+      var task = ok("POST", "/records/document/1/tasks", "{\"title\":\"Review\",\"dueAt\":\"2026-12-01T00:00:00Z\"}");
+      String path = "/tasks/" + task.get("id").asInt();
+      assertThat(ok("GET", "/records/document/1/tasks", null).get("items")).hasSize(1);
+      assertThat(ok("GET", "/tasks/mine", null).get("items")).hasSize(1);
+      assertThat(ok("PATCH", path, "{\"notes\":\"Keep title\"}").get("title").asText()).isEqualTo("Review");
+      assertThat(ok("PATCH", path, "{\"status\":\"DONE\"}").get("status").asText()).isEqualTo("DONE");
+      assertThat(ok("GET", "/tasks/mine?status=DONE", null).get("items")).hasSize(1);
+      assertThat(ok("GET", "/records/document/1/tasks", null).get("items")).isEmpty();
+      assertThat(ok("GET", "/records/document/1/tasks?includeDone=true", null).get("items")).hasSize(1);
+      ok("PATCH", path, "{\"status\":\"OPEN\"}");
+      ok("PATCH", path, "{\"status\":\"CANCELLED\"}");
+      ok("PATCH", path, "{\"status\":\"OPEN\",\"dueAt\":null}");
+      assertThat(ok("PUT", "/records/document/1/assignment", "{\"ownerUserId\":\"alice\",\"assigneeUserId\":\"alice\"}").get("ownerUserId").asText()).isEqualTo("alice");
+      var work = ok("GET", "/my-work", null);
+      assertThat(work.get("openTaskCount").asInt()).isEqualTo(1);
+      assertThat(work.at("/assignedRecordsByTable/document").asInt()).isEqualTo(1);
+      assertThat(work.get("tasks")).hasSize(1);
+      assertError(400, "PATCH", path, "{\"status\":\"INVALID\",\"title\":\"Not saved\"}", "alice");
+      assertError(400, "PATCH", path, "{\"dueAt\":\"invalid\"}", "alice");
+      assertError(403, "PATCH", path, "{\"title\":\"Denied\"}", "reader");
+      assertError(404, "PATCH", path, "{}", "outsider");
+      assertError(404, "POST", "/records/document/3/tasks", "{}", "alice");
+      assertError(403, "PUT", "/records/document/1/assignment", "{}", "reader");
+      assertError(400, "GET", "/tasks/mine?status=UNKNOWN", null, "alice");
+      assertError(400, "GET", "/records/document/1/tasks?includeDone=wrong", null, "alice");
+      assertError(400, "POST", "/records/document/1/tasks", "{\"title\":5}", "alice");
+   }
+
+   /*******************************************************************************
     ** Every personal operation and offset cursor runs through the HTTP boundary.
     *******************************************************************************/
    @Test
@@ -328,7 +383,7 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertThat(schemas.has("CollaborationCommentPageV1")).isTrue();
       assertThat(schemas.at("/CollaborationFollowV1/properties/reason/enum")).hasSize(6);
       assertThat(description.get("paths").has("/qqq/v1/qbit/collaboration/records/{table}/{pk}/attachments")).isTrue();
-      assertThat(description.get("paths").has("/qqq/v1/qbit/collaboration/my-work")).isFalse();
+      assertThat(description.get("paths").has("/qqq/v1/qbit/collaboration/my-work")).isTrue();
       JsonNode version = json(client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/qqq/v1/version")).GET().build(),
          HttpResponse.BodyHandlers.ofString()), 200);
       assertThat(version.at("/extensions/0/name").asText()).isEqualTo("collaboration");

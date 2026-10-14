@@ -42,7 +42,7 @@ import com.kingsrook.qbits.collaboration.notify.Notifications;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
 import com.kingsrook.qbits.collaboration.people.PersonEntry;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
@@ -233,7 +233,7 @@ public class CommentsService
       List<MentionCandidate> result = new ArrayList<>();
       for(PersonEntry person : people)
       {
-         result.add(new MentionCandidate(person, new OtherUserAccess().canRead(person.userId(), table, id)));
+         result.add(new MentionCandidate(person, new CollaborationRecordAccessChecker().canRead(person.userId(), table, id)));
       }
       return (List.copyOf(result));
    }
@@ -280,7 +280,7 @@ public class CommentsService
          {
             continue;
          }
-         boolean visible = new OtherUserAccess().canRead(user, table, id).orElse(false);
+         boolean visible = new CollaborationRecordAccessChecker().canRead(user, table, id).orElse(false);
          QRecord mention = CollaborationRecords.insert(CollaborationTables.MENTION, reference(table, id).withValue("commentId", row.getValue("id"))
             .withValue("mentionedUserId", user).withValue("visible", visible));
          if(visible)
@@ -358,7 +358,7 @@ public class CommentsService
    }
 
    /*******************************************************************************
-    ** Shared feature permission stand-in.
+    ** Shared core record feature permission boundary.
     *******************************************************************************/
    private void requireCommentFeature(QRecord row) throws QException
    {

@@ -29,7 +29,7 @@ import com.kingsrook.qbits.collaboration.PersonalRecords;
 import com.kingsrook.qbits.collaboration.activity.ActivityWriter;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -107,7 +107,7 @@ public class FollowService
    {
       new PeopleService().touch();
       String id = canonicalId(table, recordId);
-      if(!userId.equals(PersonalRecords.currentUserId()) && !new OtherUserAccess().canRead(userId, table, id).orElse(false))
+      if(!userId.equals(PersonalRecords.currentUserId()) && !new CollaborationRecordAccessChecker().canRead(userId, table, id).orElse(false))
       {
          return;
       }

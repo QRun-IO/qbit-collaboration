@@ -1,5 +1,107 @@
 components:
   schemas:
+    CollaborationAccessRequestCreateRequestV1:
+      properties:
+        message:
+          description: "message."
+          nullable: true
+          type: "string"
+        recordId:
+          description: "recordId."
+          nullable: true
+          type: "string"
+        shareId:
+          description: "shareId."
+          nullable: true
+          type: "integer"
+        tableName:
+          description: "tableName."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationAccessRequestListV1:
+      properties:
+        items:
+          description: "items."
+          items:
+            $ref: "#/components/schemas/CollaborationAccessRequestV1"
+          nullable: true
+          type: "array"
+        nextCursor:
+          description: "nextCursor."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationAccessRequestV1:
+      properties:
+        handledAt:
+          description: "handledAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        id:
+          description: "id."
+          nullable: true
+          type: "integer"
+        message:
+          description: "message."
+          nullable: true
+          type: "string"
+        note:
+          description: "note."
+          nullable: true
+          type: "string"
+        recordId:
+          description: "recordId."
+          nullable: true
+          type: "string"
+        requesterUserId:
+          description: "requesterUserId."
+          nullable: true
+          type: "string"
+        status:
+          description: "status."
+          nullable: true
+          type: "string"
+        tableName:
+          description: "tableName."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationAssignmentRequestV1:
+      properties:
+        assigneeUserId:
+          description: "assigneeUserId."
+          nullable: true
+          type: "string"
+        ownerUserId:
+          description: "ownerUserId."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationAssignmentV1:
+      properties:
+        assigneeUserId:
+          description: "assigneeUserId."
+          nullable: true
+          type: "string"
+        id:
+          description: "id."
+          nullable: true
+          type: "integer"
+        ownerUserId:
+          description: "ownerUserId."
+          nullable: true
+          type: "string"
+        recordId:
+          description: "recordId."
+          nullable: true
+          type: "string"
+        tableName:
+          description: "tableName."
+          nullable: true
+          type: "string"
+      type: "object"
     CollaborationAttachmentListV1:
       description: "Attachments, newest first."
       properties:
@@ -412,6 +514,17 @@ components:
           nullable: true
           type: "string"
       type: "object"
+    CollaborationLinkV1:
+      properties:
+        label:
+          description: "label."
+          nullable: true
+          type: "string"
+        url:
+          description: "url."
+          nullable: true
+          type: "string"
+      type: "object"
     CollaborationMentionCandidateListV1:
       description: "Candidates ranked with record participants first."
       properties:
@@ -464,6 +577,29 @@ components:
           nullable: true
           type: "boolean"
       type: "object"
+    CollaborationMyWorkV1:
+      properties:
+        assignedRecordsByTable:
+          additionalProperties:
+            type: "integer"
+          description: "assignedRecordsByTable."
+          nullable: true
+          type: "object"
+        openTaskCount:
+          description: "openTaskCount."
+          nullable: true
+          type: "integer"
+        tasks:
+          description: "tasks."
+          items:
+            $ref: "#/components/schemas/CollaborationTaskV1"
+          nullable: true
+          type: "array"
+        unreadMentionCount:
+          description: "unreadMentionCount."
+          nullable: true
+          type: "integer"
+      type: "object"
     CollaborationPersonListV1:
       description: "Matching active directory entries."
       properties:
@@ -512,6 +648,88 @@ components:
         nextCursor:
           description: "Opaque continuation token; null when finished or the service\
             \ has no continuation support."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationShareListV1:
+      properties:
+        items:
+          description: "items."
+          items:
+            $ref: "#/components/schemas/CollaborationShareV1"
+          nullable: true
+          type: "array"
+      type: "object"
+    CollaborationSharePreviewV1:
+      properties:
+        recipients:
+          description: "recipients."
+          items:
+            $ref: "#/components/schemas/CollaborationShareRecipientV1"
+          nullable: true
+          type: "array"
+      type: "object"
+    CollaborationShareRecipientV1:
+      properties:
+        canRead:
+          description: "canRead."
+          nullable: true
+          type: "boolean"
+        displayName:
+          description: "displayName."
+          nullable: true
+          type: "string"
+        userId:
+          description: "userId."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationShareRequestV1:
+      properties:
+        message:
+          description: "message."
+          nullable: true
+          type: "string"
+        toUserIds:
+          description: "toUserIds."
+          items:
+            type: "string"
+          nullable: true
+          type: "array"
+      type: "object"
+    CollaborationShareV1:
+      properties:
+        fromUserId:
+          description: "fromUserId."
+          nullable: true
+          type: "string"
+        id:
+          description: "id."
+          nullable: true
+          type: "integer"
+        message:
+          description: "message."
+          nullable: true
+          type: "string"
+        recipientCouldRead:
+          description: "recipientCouldRead."
+          nullable: true
+          type: "boolean"
+        recordId:
+          description: "recordId."
+          nullable: true
+          type: "string"
+        sentAt:
+          description: "sentAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        tableName:
+          description: "tableName."
+          nullable: true
+          type: "string"
+        toUserId:
+          description: "toUserId."
           nullable: true
           type: "string"
       type: "object"
@@ -614,6 +832,127 @@ components:
           - "PROCESS"
           - "REPORT"
           - "SAVED_VIEW"
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationTaskCreateRequestV1:
+      properties:
+        assigneeUserId:
+          description: "assigneeUserId."
+          nullable: true
+          type: "string"
+        dueAt:
+          description: "dueAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        notes:
+          description: "notes."
+          nullable: true
+          type: "string"
+        remindAt:
+          description: "remindAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        title:
+          description: "title."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationTaskListV1:
+      properties:
+        items:
+          description: "items."
+          items:
+            $ref: "#/components/schemas/CollaborationTaskV1"
+          nullable: true
+          type: "array"
+        nextCursor:
+          description: "nextCursor."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationTaskPatchRequestV1:
+      properties:
+        assigneeUserId:
+          description: "assigneeUserId."
+          nullable: true
+          type: "string"
+        dueAt:
+          description: "dueAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        notes:
+          description: "notes."
+          nullable: true
+          type: "string"
+        remindAt:
+          description: "remindAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        status:
+          description: "status."
+          nullable: true
+          type: "string"
+        title:
+          description: "title."
+          nullable: true
+          type: "string"
+      type: "object"
+    CollaborationTaskV1:
+      properties:
+        assigneeUserId:
+          description: "assigneeUserId."
+          nullable: true
+          type: "string"
+        completedAt:
+          description: "completedAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        completedByUserId:
+          description: "completedByUserId."
+          nullable: true
+          type: "string"
+        createdByUserId:
+          description: "createdByUserId."
+          nullable: true
+          type: "string"
+        dueAt:
+          description: "dueAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        id:
+          description: "id."
+          nullable: true
+          type: "integer"
+        notes:
+          description: "notes."
+          nullable: true
+          type: "string"
+        recordId:
+          description: "recordId."
+          nullable: true
+          type: "string"
+        remindAt:
+          description: "remindAt."
+          format: "date-time"
+          nullable: true
+          type: "string"
+        status:
+          description: "status."
+          nullable: true
+          type: "string"
+        tableName:
+          description: "tableName."
+          nullable: true
+          type: "string"
+        title:
+          description: "title."
           nullable: true
           type: "string"
       type: "object"
@@ -2372,3 +2711,605 @@ paths:
       - sessionUuidCookie:
         - "N/A"
       summary: "Get an active directory person"
+  /qqq/v1/qbit/collaboration/records/{table}/{pk}/link:
+    get:
+      description: "Get a record link. Uses the signed-in caller's permissions and\
+        \ record visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationLinkV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Get a record link"
+  /qqq/v1/qbit/collaboration/records/{table}/{pk}/shares/preview:
+    post:
+      description: "Preview share recipients. Uses the signed-in caller's permissions\
+        \ and record visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationShareRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationSharePreviewV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Preview share recipients"
+  /qqq/v1/qbit/collaboration/records/{table}/{pk}/shares:
+    post:
+      description: "Share a record. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationShareRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationShareListV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Share a record"
+  /qqq/v1/qbit/collaboration/access-requests:
+    post:
+      description: "Request access to a record. Uses the signed-in caller's permissions\
+        \ and record visibility."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationAccessRequestCreateRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationAccessRequestV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Request access to a record"
+  /qqq/v1/qbit/collaboration/access-requests/mine:
+    get:
+      description: "List my access requests. Uses the signed-in caller's permissions\
+        \ and record visibility."
+      parameters:
+      - description: "Maximum items to return, from 1 to 100; default 20."
+        in: "query"
+        name: "limit"
+        required: false
+        schema:
+          type: "integer"
+      - description: "Opaque nextCursor returned by the previous page; omit for the\
+          \ first page."
+        in: "query"
+        name: "cursor"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationAccessRequestListV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "List my access requests"
+  /qqq/v1/qbit/collaboration/records/{table}/{pk}/tasks:
+    get:
+      description: "List record tasks. Uses the signed-in caller's permissions and\
+        \ record visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      - description: "Include completed and cancelled tasks; default false."
+        in: "query"
+        name: "includeDone"
+        required: false
+        schema:
+          type: "boolean"
+      - description: "Maximum items to return, from 1 to 100; default 20."
+        in: "query"
+        name: "limit"
+        required: false
+        schema:
+          type: "integer"
+      - description: "Opaque nextCursor returned by the previous page; omit for the\
+          \ first page."
+        in: "query"
+        name: "cursor"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationTaskListV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "List record tasks"
+    post:
+      description: "Create a task. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationTaskCreateRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationTaskV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Create a task"
+  /qqq/v1/qbit/collaboration/tasks/{id}:
+    patch:
+      description: "Update a task. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      parameters:
+      - description: "Collaboration object identifier."
+        in: "path"
+        name: "id"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationTaskPatchRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationTaskV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Update a task"
+  /qqq/v1/qbit/collaboration/tasks/mine:
+    get:
+      description: "List my tasks. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      parameters:
+      - description: "Task status: OPEN (default), DONE or CANCELLED."
+        in: "query"
+        name: "status"
+        required: false
+        schema:
+          type: "string"
+      - description: "Maximum items to return, from 1 to 100; default 20."
+        in: "query"
+        name: "limit"
+        required: false
+        schema:
+          type: "integer"
+      - description: "Opaque nextCursor returned by the previous page; omit for the\
+          \ first page."
+        in: "query"
+        name: "cursor"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationTaskListV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "List my tasks"
+  /qqq/v1/qbit/collaboration/records/{table}/{pk}/assignment:
+    put:
+      description: "Set record owner and assignee. Uses the signed-in caller's permissions\
+        \ and record visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "path"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "path"
+        name: "pk"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationAssignmentRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationAssignmentV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Set record owner and assignee"
+  /qqq/v1/qbit/collaboration/my-work:
+    get:
+      description: "Get my work summary. Uses the signed-in caller's permissions and\
+        \ record visibility."
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationMyWorkV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Get my work summary"

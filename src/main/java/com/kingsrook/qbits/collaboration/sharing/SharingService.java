@@ -36,7 +36,7 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.Notifications;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -72,7 +72,7 @@ public class SharingService
       List<Recipient> recipients = new ArrayList<>();
       for(String user : toUserIds.stream().distinct().toList())
       {
-         Optional<Boolean> access = user.equals(PersonalRecords.currentUserId()) ? Optional.of(true) : new OtherUserAccess().canRead(user, table, recordId);
+         Optional<Boolean> access = user.equals(PersonalRecords.currentUserId()) ? Optional.of(true) : new CollaborationRecordAccessChecker().canRead(user, table, recordId);
          recipients.add(new Recipient(user, new PeopleService().displayName(user), access.orElse(null)));
       }
       return (recipients);
@@ -127,7 +127,7 @@ public class SharingService
       }
       if(row.getValueInstant("openedAt") == null)
       {
-         CollaborationRecords.update(CollaborationTables.SHARE, new QRecord().withValue("id", shareId).withValue("openedAt", Instant.now()));
+         CollaborationRecords.acknowledgeShare(shareId, Instant.now());
       }
    }
 

@@ -711,6 +711,7 @@ public final class CollaborationSchemas
       schemas.put("CollaborationCommentPostRequestV1", new CollaborationCommentPostRequestV1(null, null, null).toSchema());
       schemas.put("CollaborationCommentEditRequestV1", new CollaborationCommentEditRequestV1(null).toSchema());
       schemas.put("CollaborationFollowRequestV1", new CollaborationFollowRequestV1(null, null).toSchema());
+      schemas.putAll(CollaborationWorkSchemas.components());
       return (schemas);
    }
 }

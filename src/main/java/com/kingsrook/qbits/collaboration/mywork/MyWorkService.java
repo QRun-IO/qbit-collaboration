@@ -96,7 +96,7 @@ public class MyWorkService
    }
 
    /*******************************************************************************
-    ** Stable service contract for the subsequent UI API PR.
+    ** Stable service contract projected by the My work UI API.
     *******************************************************************************/
    public record Summary(Long openTaskCount, List<QRecord> tasks, Map<String, Long> assignedRecordsByTable, Long unreadMentionCount)
    {

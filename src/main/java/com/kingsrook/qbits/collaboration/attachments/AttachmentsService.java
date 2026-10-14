@@ -140,7 +140,7 @@ public class AttachmentsService
                .withValue("contentType", type).withValue("sizeBytes", size).withValue("sha256", HexFormat.of().formatHex(digest.digest()))
                .withValue("bucketName", bucket).withValue("storageKey", key).withValue("description", description)
                .withValue("createdByUserId", user).withValue("parentDeleted", false);
-            InsertInput input = new InsertInput(CollaborationTables.ATTACHMENT).withRecords(List.of(row));
+            InsertInput input = new InsertInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withRecords(List.of(row));
             input.withPermissionBypass("AttachmentsService checked parent and attach permission before upload.");
             List<QRecord> records = new InsertAction().execute(input).getRecords();
             AttachmentRecords.checkErrors(records);
@@ -259,7 +259,7 @@ public class AttachmentsService
       {
          change.setValue("description", description);
       }
-      UpdateInput input = new UpdateInput(CollaborationTables.ATTACHMENT).withRecords(List.of(change));
+      UpdateInput input = new UpdateInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withRecords(List.of(change));
       input.setTableMetaData(AttachmentRecords.storageTable());
       input.withPermissionBypass("AttachmentsService checked the actual parent and author/admin before metadata update.");
       AttachmentRecords.checkErrors(new UpdateAction().execute(input).getRecords());
@@ -286,10 +286,7 @@ public class AttachmentsService
       {
          throw (new QPermissionDeniedException("Only the author or collaboration.admin can change this attachment."));
       }
-      if(!isAdmin())
-      {
-         ParentRecordAccess.requireFeature(row.getValueString("tableName"), row.getValueString("recordId"), "attach");
-      }
+      ParentRecordAccess.requireFeature(row.getValueString("tableName"), row.getValueString("recordId"), "attach");
       return (row);
    }
 
@@ -298,9 +295,17 @@ public class AttachmentsService
     *******************************************************************************/
    void deleteStoredRow(QRecord row) throws QException
    {
+      deleteStoredRow(row, false);
+   }
+
+   /*******************************************************************************
+    ** Core cleanup supplies an already deleted parent; user deletion retains checks.
+    *******************************************************************************/
+   void deleteStoredRow(QRecord row, boolean cleanup) throws QException
+   {
       storage.delete(row.getValueString("bucketName"), row.getValueString("storageKey"));
-      DeleteInput input = new DeleteInput(CollaborationTables.ATTACHMENT).withPrimaryKeys(List.of(row.getValue("id")));
-      input.setTableMetaData(AttachmentRecords.storageTable());
+      DeleteInput input = new DeleteInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withPrimaryKeys(List.of(row.getValue("id")));
+      input.setTableMetaData(cleanup ? com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupMetadata(CollaborationTables.ATTACHMENT) : AttachmentRecords.storageTable());
       input.withPermissionBypass("Attachment service authorized deletion, or trusted parent cleanup selected this row.");
       AttachmentRecords.checkErrors(new DeleteAction().execute(input).getRecordsWithErrors());
    }

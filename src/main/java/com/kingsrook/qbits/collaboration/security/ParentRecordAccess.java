@@ -23,23 +23,18 @@ package com.kingsrook.qbits.collaboration.security;
 
 import java.io.Serializable;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
-import com.kingsrook.qqq.backend.core.actions.permissions.PermissionEnforcement;
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper;
 import com.kingsrook.qqq.backend.core.actions.permissions.TablePermissionSubType;
-import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
-import com.kingsrook.qqq.backend.core.exceptions.QValueException;
 import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
-import com.kingsrook.qqq.backend.core.model.actions.tables.get.GetInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
-import com.kingsrook.qqq.backend.core.utils.ValueUtils;
 
 /*******************************************************************************
- ** Stand-in for QQQ core RecordReferenceSecurityHelper (QRun-IO/qqq collaboration phase a); replace when released
+ ** Thin service boundary over core parent visibility and record capabilities.
  *******************************************************************************/
 public final class ParentRecordAccess
 {
@@ -69,32 +64,34 @@ public final class ParentRecordAccess
       {
          throw (new QNotFoundException("Not found"));
       }
-      QTableMetaData table = QContext.getQInstance().getTable(tableName);
       try
       {
-         Serializable key = ValueUtils.getValueAsFieldType(table.getField(table.getPrimaryKeyField()).getType(), recordId);
-         GetInput input = new GetInput(tableName).withPrimaryKey(key);
-         input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
-         QRecord parent = new GetAction().execute(input).getRecord();
+         var table = QContext.getQInstance().getTable(tableName);
+         Serializable key = com.kingsrook.qqq.backend.core.utils.ValueUtils.getValueAsFieldType(table.getField(table.getPrimaryKeyField()).getType(), recordId);
+         QRecord parent = com.kingsrook.qqq.backend.core.actions.collaboration.RecordReferenceSecurityHelper.visibleParent(tableName, key, QContext.getQBackendTransaction());
          if(parent == null)
          {
             throw (new QNotFoundException("Not found"));
          }
          return (parent);
       }
-      catch(QPermissionDeniedException | QValueException expected)
+      catch(com.kingsrook.qqq.backend.core.exceptions.QValueException e)
       {
          throw (new QNotFoundException("Not found"));
       }
    }
 
    /*******************************************************************************
-    ** Temporary approximation: EDIT plus a visible parent, not WRITE lock checks.
+    ** Core record capability checks include parent WRITE locks for implied grants.
     *******************************************************************************/
    public static void requireFeature(String tableName, Serializable recordId, String feature) throws QException
    {
-      requireVisibleParent(tableName, recordId);
-      requireTableFeature(tableName, feature);
+      QRecord parent = requireVisibleParent(tableName, recordId);
+      if(!com.kingsrook.qqq.backend.core.actions.collaboration.RecordFeaturePermissions.checkRecordCapability(
+         QContext.getQInstance().getTable(tableName), feature(feature), parent, QContext.getQBackendTransaction()))
+      {
+         throw (new QPermissionDeniedException("Permission denied for " + feature + "."));
+      }
    }
 
    /*******************************************************************************
@@ -106,13 +103,15 @@ public final class ParentRecordAccess
       {
          throw (new QNotFoundException("Not found"));
       }
-      QTableMetaData table = QContext.getQInstance().getTable(tableName);
-      String base = table.getPermissionRules() == null ? null : table.getPermissionRules().getPermissionBaseName();
-      base = base == null || base.isBlank() ? tableName : base;
-      if(!QContext.getQSession().hasPermission(tableName + "." + feature) && !QContext.getQSession().hasPermission(base + "." + feature)
-         && !PermissionsHelper.hasTablePermission(new AbstractActionInput(), tableName, TablePermissionSubType.EDIT))
-      {
-         throw (new QPermissionDeniedException("This needs the " + base + "." + feature + " permission or table EDIT."));
-      }
+      com.kingsrook.qqq.backend.core.actions.collaboration.RecordFeaturePermissions.requireTableCapability(QContext.getQInstance().getTable(tableName), feature(feature));
+   }
+
+   /*******************************************************************************
+    ** Map service operation suffixes to the core enum.
+    *******************************************************************************/
+   private static com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature feature(String suffix)
+   {
+      return (java.util.Arrays.stream(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature.values())
+         .filter(value -> suffix.equals(value.getPermissionSuffix())).findFirst().orElseThrow());
    }
 }

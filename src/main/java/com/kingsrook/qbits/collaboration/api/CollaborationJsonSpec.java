@@ -159,12 +159,14 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
          case "limit" -> "Maximum items to return, from 1 to 100; default 20.";
          case "cursor" -> "Opaque nextCursor returned by the previous page; omit for the first page.";
          case "before" -> "Timeline continuation token; alias for cursor. Supply only one.";
+         case "includeDone" -> "Include completed and cancelled tasks; default false.";
+         case "status" -> "Task status: OPEN (default), DONE or CANCELLED.";
          case "types" -> "Comma-separated AUDIT, ACTIVITY or activity type names (for example COMMENTED).";
          case "q" -> "Text to search in display names or vocabulary.";
          default -> name;
       };
       return (new Parameter().withName(name).withIn(location).withRequired(required).withDescription(description)
-         .withSchema(new Schema().withType(name.equals("limit") ? Type.INTEGER : Type.STRING)));
+         .withSchema(new Schema().withType(name.equals("limit") ? Type.INTEGER : name.equals("includeDone") ? Type.BOOLEAN : Type.STRING)));
    }
 
    /*******************************************************************************
@@ -363,5 +365,32 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
    protected static CollaborationMutationResultV1 success()
    {
       return (new CollaborationMutationResultV1(true));
+   }
+
+   /*******************************************************************************
+    ** Parse a nullable ISO-8601 timestamp.
+    *******************************************************************************/
+   protected static java.time.Instant instant(String value) throws QBadRequestException
+   {
+      try
+      {
+         return (value == null ? null : java.time.Instant.parse(value));
+      }
+      catch(java.time.format.DateTimeParseException e)
+      {
+         throw (new QBadRequestException("Expected an ISO-8601 timestamp"));
+      }
+   }
+
+   /*******************************************************************************
+    ** Recipient lists are bounded and contain only nonblank identities.
+    *******************************************************************************/
+   protected static List<String> recipients(List<String> values) throws QBadRequestException
+   {
+      if(values == null || values.isEmpty() || values.size() > 25 || values.stream().anyMatch(value -> value == null || value.isBlank()))
+      {
+         throw (new QBadRequestException("Choose 1 to 25 recipients"));
+      }
+      return (values);
    }
 }

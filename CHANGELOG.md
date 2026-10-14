@@ -6,13 +6,18 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
-- Collaboration UI API extension `1.0.0`: 31 typed operations for favorites, recents, attachments, tags, comments, mentions, follow, timeline and people under `/qqq/v1/qbit/collaboration`, enabled by default and disabled with `withUiApi(false)`.
+- Collaboration UI API extension `1.0.0`: 42 typed operations for favorites, recents, attachments, tags, comments, mentions, follow, timeline, people, sharing, access requests, tasks, assignment and My work under `/qqq/v1/qbit/collaboration`, enabled by default and disabled with `withUiApi(false)`.
 - Real multipart uploads; download/preview return five-minute `{url}` responses (clients follow url) because the framework cannot describe a redirect Location header. Configurable attachment storage adapter supports in-memory HTTP tests.
 - Versioned `ToSchema` wire types, enum values, semantic parameter descriptions, generated OpenAPI fragment and drift check; real HTTP tests cover all operations, paging, parent visibility, permissions, validation and storage failures.
 - Shared HTTP page bounds of 1-100 (default 20); comments/timeline keyset cursors and offset cursors for complete-list services. People/vocabulary remain bounded searches, while recents/mention candidates retain their 50-item service windows.
 - Client validation now uses QQQ bad-request exceptions, preserving standard 400/403/404 mapping and identical missing/invisible-parent errors. Active-person lookup added to the directory service.
 
 ### Changed
+
+- Adopt core feature overrides, record capabilities and implied WRITE locks, reference metadata, mirrored locks, after-commit cleanup and summaries. Core registers feature permissions in the policy editor.
+- Replace `OtherUserAccess`/`UserSessionSupplier` with `CollaborationRecordAccessChecker` and core `UserSessionProviderInterface`; configure `withUserSessionProvider`.
+- Remove `ParentTableRestriction` and `TagFilterTranslator`; runtime `collaborationTags` filtering/search uses core subqueries. Retain the unpinned visibility fallback still missing from core.
+- Publish identifier-only realtime hints after commit. Selectable Tags output and the optional followers SPI await missing core hooks.
 
 - Build against locally installed QQQ `4.1.0-SNAPSHOT` until RC.6 is released; `qqq-middleware-javalin` is a compile dependency. Object storage remains pinned to `0.1.0-RC.2`.
 

@@ -134,7 +134,6 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       {
          WorkProcesses.assignments(table).forEach(output::add);
       }
-      instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(WorkCleanup.class));
       output.add(com.kingsrook.qbits.collaboration.follow.SendFollowDigestsProcess.metadata(qBitConfig));
       for(String table : qBitConfig.getFollowActionTables())
       {
@@ -165,6 +164,8 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          output.add(CollaborationHome.app(qBitConfig));
       }
       output.addSelfToInstance(instance);
+      CoreCollaboration.install(instance, qBitConfig);
+      instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(CollaborationRealtime.class));
       if(Boolean.TRUE.equals(qBitConfig.getUiApi()))
       {
          com.kingsrook.qbits.collaboration.api.CollaborationApi.register(instance);
