@@ -296,7 +296,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       }
       if(user.equals("admin"))
       {
-         session.withPermissions("admin.access", "collaboration.admin", "collaboration.view", "collaboration.tags.manage", "collaboration.fields.manage");
+         session.withPermissions("admin.hasAccess", "collaboration.admin", "collaboration.view", "collaboration.tags.manage", "collaboration.fields.manage");
       }
       return (session);
    }

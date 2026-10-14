@@ -169,6 +169,41 @@ class CollaborationTest
 
 
    /*******************************************************************************
+    ** Without a parent app, Collaboration is a top-level node of the frontend app tree.
+    *******************************************************************************/
+   @Test
+   void appTreeTopLevelWithoutParent() throws Exception
+   {
+      new QInstanceValidator().validate(instance);
+      var output = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction().execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput());
+      assertThat(output.getApps()).containsKey("collaboration");
+      assertThat(output.getAppTree()).extracting(node -> node.getName()).contains("collaboration");
+   }
+
+
+
+   /*******************************************************************************
+    ** With a parent app, Collaboration is nested under it and not duplicated at the top.
+    *******************************************************************************/
+   @Test
+   void appTreeNestedUnderParent() throws Exception
+   {
+      instance = new QInstance();
+      instance.withInstanceDefaultAuthentication(new QAuthenticationMetaData().withName("anonymous").withType(QAuthenticationType.FULLY_ANONYMOUS));
+      instance.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
+      instance.setEnforcePermissionsInCoreActions(true);
+      instance.addApp(new QAppMetaData().withName("admin").withLabel("Admin").withIcon(new QIcon("settings")));
+      new CollaborationQBitProducer().withQBitConfig(new CollaborationQBitConfig().withBackendName("memory").withParentAppName("admin")).produce(instance);
+      QContext.init(instance, new QSession().withUser(new com.kingsrook.qqq.backend.core.model.session.QUser().withIdReference("admin")).withPermissions(CollaborationPermissions.ADMIN));
+      new QInstanceValidator().validate(instance);
+      var output = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction().execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput());
+      assertThat(output.getAppTree()).extracting(node -> node.getName()).containsExactly("admin");
+      assertThat(output.getAppTree().getFirst().getChildren()).extracting(node -> node.getName()).contains("collaboration");
+   }
+
+
+
+   /*******************************************************************************
     ** Headless hosts keep the tables without app or widgets.
     *******************************************************************************/
    @Test

@@ -194,6 +194,40 @@ class CollaborationDevServerTest
 
 
    /*******************************************************************************
+    ** The demo places Collaboration inside Admin, and the admin demo user can navigate to it.
+    *******************************************************************************/
+   @Test
+   void collaborationIsInTheAppTreeUnderAdmin() throws Exception
+   {
+      MemoryRecordStore.getInstance().reset();
+      CollaborationDevServer.MemoryStorage.clear();
+      QInstance instance = CollaborationDevServer.buildInstance();
+      try
+      {
+         QContext.init(instance, CollaborationDevServer.session("admin"));
+         var tree = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction()
+            .execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput()).getAppTree();
+         var admin = tree.stream().filter(node -> node.getName().equals("admin")).findFirst();
+         assertThat(admin).as("admin sees the Admin app").isPresent();
+         assertThat(admin.get().getChildren()).extracting(node -> node.getName()).contains("collaboration");
+         assertThat(tree).extracting(node -> node.getName()).doesNotContain("collaboration");
+         QContext.init(instance, CollaborationDevServer.session("alice"));
+         var aliceTree = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction()
+            .execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput()).getAppTree();
+         assertThat(aliceTree).extracting(node -> node.getName()).contains("sales").doesNotContain("admin", "collaboration");
+      }
+      finally
+      {
+         PresenceRegistry.close(instance);
+         RealtimeBus.close(instance);
+         QContext.clear();
+         MemoryRecordStore.getInstance().reset();
+      }
+   }
+
+
+
+   /*******************************************************************************
     ** Read through normal permissions, including the seeded admin-only tables.
     *******************************************************************************/
    private static List<QRecord> rows(String table) throws Exception
