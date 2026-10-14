@@ -162,7 +162,7 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       }
       if(Boolean.TRUE.equals(qBitConfig.getAdminApp()))
       {
-         output.add(CollaborationHome.widget());
+         CollaborationHome.widgets().forEach(output::add);
          output.add(CollaborationHome.app(qBitConfig));
       }
       output.addSelfToInstance(instance);

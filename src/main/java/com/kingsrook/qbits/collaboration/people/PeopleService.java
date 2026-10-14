@@ -109,10 +109,11 @@ public class PeopleService
 
    /*******************************************************************************
     ** Rank participants before limiting, with bounded backend queries for both groups.
+    ** The caller never appears in the results: nobody shares with or mentions themself.
     *******************************************************************************/
    public List<PersonEntry> search(String q, Integer limit, Set<String> preferredUserIds) throws QException
    {
-      PersonalRecords.currentUserId();
+      String me = PersonalRecords.currentUserId();
       if(limit == null || limit < 1 || limit > 100)
       {
          throw (new QBadRequestException("Limit must be between 1 and 100"));
@@ -120,12 +121,12 @@ public class PeopleService
       List<QRecord> rows = new ArrayList<>();
       if(!preferredUserIds.isEmpty())
       {
-         rows.addAll(CollaborationRecords.query(CollaborationTables.USER, searchFilter(q, limit)
+         rows.addAll(CollaborationRecords.query(CollaborationTables.USER, searchFilter(q, limit, me)
             .withCriteria("userId", QCriteriaOperator.IN, new ArrayList<>(preferredUserIds))));
       }
       if(rows.size() < limit)
       {
-         QQueryFilter other = searchFilter(q, limit - rows.size());
+         QQueryFilter other = searchFilter(q, limit - rows.size(), me);
          if(!preferredUserIds.isEmpty())
          {
             other.withCriteria("userId", QCriteriaOperator.NOT_IN, new ArrayList<>(preferredUserIds));
@@ -139,9 +140,10 @@ public class PeopleService
    /*******************************************************************************
     ** Keep active and group restrictions outside the display-name/email OR.
     *******************************************************************************/
-   private QQueryFilter searchFilter(String q, Integer limit)
+   private QQueryFilter searchFilter(String q, Integer limit, String excludedUserId)
    {
       QQueryFilter filter = new QQueryFilter().withCriteria("active", QCriteriaOperator.EQUALS, true)
+         .withCriteria("userId", QCriteriaOperator.NOT_EQUALS, excludedUserId)
          .withOrderBy(new QFilterOrderBy("displayName")).withOrderBy(new QFilterOrderBy("userId")).withLimit(limit);
       if(q != null && !q.isBlank())
       {
@@ -159,6 +161,37 @@ public class PeopleService
    {
       List<QRecord> rows = CollaborationRecords.query(CollaborationTables.USER, new QQueryFilter().withCriteria("userId", QCriteriaOperator.EQUALS, userId));
       return (rows.isEmpty() || rows.getFirst().getValueString("displayName") == null ? userId : rows.getFirst().getValueString("displayName"));
+   }
+
+   /*******************************************************************************
+    ** Resolve many display names with one directory query. Unknown ids map to
+    ** themselves, so a caller always has something readable to show.
+    *******************************************************************************/
+   public java.util.Map<String, String> displayNames(java.util.Collection<String> userIds) throws QException
+   {
+      java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+      Set<String> ids = new java.util.LinkedHashSet<>();
+      for(String id : userIds)
+      {
+         if(id != null && !id.isBlank())
+         {
+            ids.add(id);
+         }
+      }
+      if(ids.isEmpty())
+      {
+         return (names);
+      }
+      for(QRecord row : CollaborationRecords.query(CollaborationTables.USER, new QQueryFilter().withCriteria("userId", QCriteriaOperator.IN, new ArrayList<>(ids))))
+      {
+         String name = row.getValueString("displayName");
+         if(name != null && !name.isBlank())
+         {
+            names.put(row.getValueString("userId"), name);
+         }
+      }
+      ids.forEach(id -> names.putIfAbsent(id, id));
+      return (names);
    }
 
    /*******************************************************************************

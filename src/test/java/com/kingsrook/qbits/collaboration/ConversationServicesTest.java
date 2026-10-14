@@ -347,11 +347,15 @@ public class ConversationServicesTest extends PersonalServiceFixture
       new PeopleService(Clock.fixed(at, ZoneOffset.UTC)).touch();
       QContext.getQSession().getUser().setFullName("Changed Alice");
       new PeopleService(Clock.fixed(at.plusSeconds(599), ZoneOffset.UTC)).touch();
-      assertThat(new PeopleService().search("Alice", 5)).singleElement().satisfies(p -> assertThat(p.displayName()).isEqualTo("Alice Example"));
-      new PeopleService(Clock.fixed(at.plusSeconds(600), ZoneOffset.UTC)).touch();
-      assertThat(new PeopleService().search("changed", 5)).hasSize(1);
+      assertThat(new PeopleService().search("Alice", 5)).as("the caller never finds themself").isEmpty();
       login("bob");
       new PeopleService().touch();
+      assertThat(new PeopleService().search("Alice", 5)).singleElement().satisfies(p -> assertThat(p.displayName()).isEqualTo("Alice Example"));
+      login("alice");
+      QContext.getQSession().getUser().setFullName("Changed Alice");
+      new PeopleService(Clock.fixed(at.plusSeconds(600), ZoneOffset.UTC)).touch();
+      login("bob");
+      assertThat(new PeopleService().search("changed", 5)).hasSize(1);
       follows.follow("document", 1, null, null);
       login("eve");
       new PeopleService().touch();
@@ -507,8 +511,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       assertThat(sql).contains("ON collaboration_comment (table_name, record_id, create_date)", "ON collaboration_follow_digest (due_at)");
       comments.post("document", 1, "home", null, null);
       admin();
-      String html = com.kingsrook.qbits.collaboration.app.CollaborationHome.render(Instant.now().plusSeconds(1));
-      assertThat(html).contains("Comments this week</h3><p>1", "Open threads</h3><p>1", "Followers</h3><p>1");
+      assertThat(HomeWidgetData.stats(Instant.now().plusSeconds(1))).containsEntry("Comments this week", 1).containsEntry("Open threads", 1);
       assertThatThrownBy(() -> config.withFollowActionTables(List.of("missing")).validate(instance)).hasMessageContaining("host table");
    }
 

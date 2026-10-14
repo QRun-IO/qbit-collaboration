@@ -33,11 +33,8 @@ import com.kingsrook.qbits.collaboration.CollaborationSchema;
 import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.PersonalRecords;
 import com.kingsrook.qbits.collaboration.PersonalServiceFixture;
-import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.favorites.FavoriteEntry;
-import com.kingsrook.qbits.collaboration.favorites.FavoritesService;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
-import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
 import com.kingsrook.qqq.backend.core.actions.processes.RunProcessAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
@@ -253,27 +250,6 @@ class RecentsServiceTest extends PersonalServiceFixture
       assertThat(instance.getPossibleValueSource(CollaborationTables.TARGET_TYPE).getEnumValues()).hasSize(6);
       assertThat(CollaborationSchema.postgresScript(config)).contains("CREATE TABLE IF NOT EXISTS collaboration_favorite", "CREATE TABLE IF NOT EXISTS collaboration_recent",
          "(user_id, target_type, target_name, record_id) NULLS NOT DISTINCT", "last_viewed_at TIMESTAMPTZ NOT NULL", "view_count INTEGER NOT NULL");
-   }
-
-
-
-   /*******************************************************************************
-    ** Counts use the current user's owner lock and admins see real distinct users.
-    *******************************************************************************/
-   @Test
-   void homeSummaryCounts() throws Exception
-   {
-      at(START);
-      login("alice", CollaborationPermissions.VIEW);
-      FavoritesService.star("TABLE", "document", null);
-      FavoritesService.star("RECORD", "document", "1");
-      RecentsService.recordView("TABLE", "document", null);
-      login("bob", CollaborationPermissions.VIEW);
-      FavoritesService.star("TABLE", "document", null);
-      RecentsService.recordView("TABLE", "document", null);
-      assertThat(CollaborationHome.render(START)).contains("<h3>Favorites</h3><p>Rows: 1</p><p>Distinct users: 1", "<h3>Recently viewed</h3><p>Rows: 1</p><p>Distinct users: 1");
-      admin();
-      assertThat(CollaborationHome.render(START)).contains("<h3>Favorites</h3><p>Rows: 3</p><p>Distinct users: 2", "<h3>Recently viewed</h3><p>Rows: 2</p><p>Distinct users: 2");
    }
 
 

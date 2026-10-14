@@ -134,13 +134,19 @@ class PresenceTest extends PersonalServiceFixture
       login("alice");
       assertThat(service.snapshot("document", "1")).isEmpty();
       service.heartbeat("table", "document", null, "VIEWING", null);
+      admin();
+      assertThat(CollaborationHome.presence().getRows()).extracting(row -> row.get("table")).containsExactly("Documents");
+      assertThat(CollaborationHome.presence().getRows().getFirst().get("viewers")).isEqualTo(1);
+      login("alice");
+      assertThat(CollaborationHome.presence().getRows()).isEmpty();
+      assertThat(CollaborationHome.presence().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.PRESENCE_ADMIN_ONLY);
       RecordFeaturesMetaData.ofOrWithNew(instance.getTable("document")).withEnabled(RecordFeature.PRESENCE, false);
       RuntimeMetaDataOverlay.refresh(instance);
       assertThatThrownBy(() -> service.snapshot("document", null)).isInstanceOf(QNotFoundException.class);
       assertThatThrownBy(() -> service.heartbeat("table", "document", null, "VIEWING", null)).isInstanceOf(QNotFoundException.class);
       admin();
       assertThat(CollaborationRecords.query(com.kingsrook.qbits.collaboration.model.CollaborationTables.USER, new com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter())).isEmpty();
-      assertThat(CollaborationHome.render(Instant.now())).contains("Who's here", "Custom fields", "Index NONE");
+      assertThat(CollaborationHome.fields().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_FIELDS);
    }
 
    /*******************************************************************************

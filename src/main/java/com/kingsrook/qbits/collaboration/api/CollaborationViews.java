@@ -22,6 +22,10 @@
 package com.kingsrook.qbits.collaboration.api;
 
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import com.kingsrook.qbits.collaboration.api.CollaborationSchemas.CollaborationAttachmentV1;
 import com.kingsrook.qbits.collaboration.api.CollaborationSchemas.CollaborationCommentRevisionV1;
 import com.kingsrook.qbits.collaboration.api.CollaborationSchemas.CollaborationCommentV1;
@@ -40,10 +44,13 @@ import com.kingsrook.qbits.collaboration.comments.MentionCandidate;
 import com.kingsrook.qbits.collaboration.comments.MentionEntry;
 import com.kingsrook.qbits.collaboration.favorites.FavoriteEntry;
 import com.kingsrook.qbits.collaboration.follow.FollowEntry;
+import com.kingsrook.qbits.collaboration.people.PeopleService;
 import com.kingsrook.qbits.collaboration.people.PersonEntry;
 import com.kingsrook.qbits.collaboration.tags.TagEntry;
 import com.kingsrook.qbits.collaboration.timeline.TimelineDetail;
 import com.kingsrook.qbits.collaboration.timeline.TimelineItem;
+import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.data.QRecord;
 
 
 /*******************************************************************************
@@ -68,12 +75,38 @@ final class CollaborationViews
    }
 
    /*******************************************************************************
+    ** One display name per distinct user id, from a single directory query.
+    *******************************************************************************/
+   static Map<String, String> names(String... userIds) throws QException
+   {
+      return (new PeopleService().displayNames(Arrays.asList(userIds)));
+   }
+
+   /*******************************************************************************
+    ** The display name for an id; null stays null, unknown ids show themselves.
+    *******************************************************************************/
+   private static String name(Map<String, String> names, String userId)
+   {
+      return (userId == null ? null : names.getOrDefault(userId, userId));
+   }
+
+   /*******************************************************************************
     ** Project attachment display data.
     *******************************************************************************/
-   static CollaborationAttachmentV1 attachment(AttachmentEntry value)
+   static CollaborationAttachmentV1 attachment(AttachmentEntry value) throws QException
    {
-      return (new CollaborationAttachmentV1(
-         value.id(), value.tableName(), value.recordId(), value.fileName(), value.contentType(), value.sizeBytes(), value.sha256(), value.description(), value.createdByUserId(), value.createDate(), value.canDelete()));
+      return (attachments(List.of(value)).getFirst());
+   }
+
+   /*******************************************************************************
+    ** Project attachments, resolving uploader names in one batch.
+    *******************************************************************************/
+   static List<CollaborationAttachmentV1> attachments(List<AttachmentEntry> values) throws QException
+   {
+      Map<String, String> names = names(values.stream().map(AttachmentEntry::createdByUserId).toArray(String[]::new));
+      return (values.stream().map(value -> new CollaborationAttachmentV1(
+         value.id(), value.tableName(), value.recordId(), value.fileName(), value.contentType(), value.sizeBytes(), value.sha256(), value.description(), value.createdByUserId(), value.createDate(), value.canDelete(),
+         name(names, value.createdByUserId()))).toList());
    }
 
    /*******************************************************************************
@@ -115,19 +148,29 @@ final class CollaborationViews
    /*******************************************************************************
     ** Project commentrevision display data.
     *******************************************************************************/
-   static CollaborationCommentRevisionV1 commentRevision(CommentRevision value)
+   static List<CollaborationCommentRevisionV1> commentRevisions(List<CommentRevision> values) throws QException
    {
-      return (new CollaborationCommentRevisionV1(
-         value.id(), value.body(), value.editedAt(), value.editedByUserId()));
+      Map<String, String> names = names(values.stream().map(CommentRevision::editedByUserId).toArray(String[]::new));
+      return (values.stream().map(value -> new CollaborationCommentRevisionV1(
+         value.id(), value.body(), value.editedAt(), value.editedByUserId(), name(names, value.editedByUserId()))).toList());
    }
 
    /*******************************************************************************
     ** Project follow display data.
     *******************************************************************************/
-   static CollaborationFollowV1 follow(FollowEntry value)
+   static CollaborationFollowV1 follow(FollowEntry value) throws QException
    {
-      return (new CollaborationFollowV1(
-         value.id(), value.userId(), value.reason(), value.notifyOnChange(), value.notifyOnComment(), value.mutedUntil()));
+      return (follows(List.of(value)).getFirst());
+   }
+
+   /*******************************************************************************
+    ** Project followers, resolving names in one batch.
+    *******************************************************************************/
+   static List<CollaborationFollowV1> follows(List<FollowEntry> values) throws QException
+   {
+      Map<String, String> names = names(values.stream().map(FollowEntry::userId).toArray(String[]::new));
+      return (values.stream().map(value -> new CollaborationFollowV1(
+         value.id(), value.userId(), value.reason(), value.notifyOnChange(), value.notifyOnComment(), value.mutedUntil(), name(names, value.userId()))).toList());
    }
 
    /*******************************************************************************
@@ -159,33 +202,70 @@ final class CollaborationViews
    /*******************************************************************************
     ** Project Share public fields.
     *******************************************************************************/
-   static CollaborationWorkSchemas.CollaborationShareV1 share(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   static CollaborationWorkSchemas.CollaborationShareV1 share(QRecord row) throws QException
    {
-      return (new CollaborationWorkSchemas.CollaborationShareV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("fromUserId"), row.getValueString("toUserId"), row.getValueString("message"), row.getValueBoolean("recipientCouldRead"), row.getValueInstant("sentAt")));
+      return (shares(List.of(row)).getFirst());
+   }
+
+   /*******************************************************************************
+    ** Project shares, resolving sender and recipient names in one batch.
+    *******************************************************************************/
+   static List<CollaborationWorkSchemas.CollaborationShareV1> shares(List<QRecord> rows) throws QException
+   {
+      Map<String, String> names = names(rows.stream().flatMap(row -> Stream.of(row.getValueString("fromUserId"), row.getValueString("toUserId"))).toArray(String[]::new));
+      return (rows.stream().map(row -> new CollaborationWorkSchemas.CollaborationShareV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"),
+         row.getValueString("fromUserId"), row.getValueString("toUserId"), row.getValueString("message"), row.getValueBoolean("recipientCouldRead"), row.getValueInstant("sentAt"),
+         name(names, row.getValueString("fromUserId")), name(names, row.getValueString("toUserId")))).toList());
    }
 
    /*******************************************************************************
     ** Project AccessRequest public fields.
     *******************************************************************************/
-   static CollaborationWorkSchemas.CollaborationAccessRequestV1 accessRequest(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   static CollaborationWorkSchemas.CollaborationAccessRequestV1 accessRequest(QRecord row) throws QException
    {
-      return (new CollaborationWorkSchemas.CollaborationAccessRequestV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("requesterUserId"), row.getValueString("message"), row.getValueString("status"), row.getValueInstant("handledAt"), row.getValueString("note")));
+      return (accessRequests(List.of(row)).getFirst());
+   }
+
+   /*******************************************************************************
+    ** Project access requests, resolving requester and handler names in one batch.
+    *******************************************************************************/
+   static List<CollaborationWorkSchemas.CollaborationAccessRequestV1> accessRequests(List<QRecord> rows) throws QException
+   {
+      Map<String, String> names = names(rows.stream().flatMap(row -> Stream.of(row.getValueString("requesterUserId"), row.getValueString("handledByUserId"))).toArray(String[]::new));
+      return (rows.stream().map(row -> new CollaborationWorkSchemas.CollaborationAccessRequestV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"),
+         row.getValueString("requesterUserId"), row.getValueString("message"), row.getValueString("status"), row.getValueInstant("handledAt"), row.getValueString("note"),
+         name(names, row.getValueString("requesterUserId")), name(names, row.getValueString("handledByUserId")))).toList());
    }
 
    /*******************************************************************************
     ** Project Task public fields.
     *******************************************************************************/
-   static CollaborationWorkSchemas.CollaborationTaskV1 task(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   static CollaborationWorkSchemas.CollaborationTaskV1 task(QRecord row) throws QException
    {
-      return (new CollaborationWorkSchemas.CollaborationTaskV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("title"), row.getValueString("notes"), row.getValueString("assigneeUserId"), row.getValueInstant("dueAt"), row.getValueInstant("remindAt"), row.getValueString("status"), row.getValueString("createdByUserId"), row.getValueInstant("completedAt"), row.getValueString("completedByUserId")));
+      return (tasks(List.of(row)).getFirst());
+   }
+
+   /*******************************************************************************
+    ** Project tasks, resolving assignee, creator and completer names in one batch.
+    *******************************************************************************/
+   static List<CollaborationWorkSchemas.CollaborationTaskV1> tasks(List<QRecord> rows) throws QException
+   {
+      Map<String, String> names = names(rows.stream().flatMap(row -> Stream.of(row.getValueString("assigneeUserId"), row.getValueString("createdByUserId"),
+         row.getValueString("completedByUserId"))).toArray(String[]::new));
+      return (rows.stream().map(row -> new CollaborationWorkSchemas.CollaborationTaskV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"),
+         row.getValueString("title"), row.getValueString("notes"), row.getValueString("assigneeUserId"), row.getValueInstant("dueAt"), row.getValueInstant("remindAt"), row.getValueString("status"),
+         row.getValueString("createdByUserId"), row.getValueInstant("completedAt"), row.getValueString("completedByUserId"),
+         name(names, row.getValueString("assigneeUserId")), name(names, row.getValueString("createdByUserId")), name(names, row.getValueString("completedByUserId")))).toList());
    }
 
    /*******************************************************************************
     ** Project Assignment public fields.
     *******************************************************************************/
-   static CollaborationWorkSchemas.CollaborationAssignmentV1 assignment(com.kingsrook.qqq.backend.core.model.data.QRecord row)
+   static CollaborationWorkSchemas.CollaborationAssignmentV1 assignment(QRecord row) throws QException
    {
-      return (new CollaborationWorkSchemas.CollaborationAssignmentV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"), row.getValueString("ownerUserId"), row.getValueString("assigneeUserId")));
+      Map<String, String> names = names(row.getValueString("ownerUserId"), row.getValueString("assigneeUserId"));
+      return (new CollaborationWorkSchemas.CollaborationAssignmentV1(row.getValueInteger("id"), row.getValueString("tableName"), row.getValueString("recordId"),
+         row.getValueString("ownerUserId"), row.getValueString("assigneeUserId"), name(names, row.getValueString("ownerUserId")), name(names, row.getValueString("assigneeUserId"))));
    }
 
 }

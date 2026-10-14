@@ -22,7 +22,6 @@
 package com.kingsrook.qbits.collaboration;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -311,9 +310,11 @@ public class TagsServiceTest extends PersonalServiceFixture
       QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("b"));
       assertThat(new QueryAction().execute(new QueryInput(CollaborationTables.RECORD_TAG)).getRecords()).isEmpty();
       login("manager", "collaboration.admin", TagsService.MANAGE);
-      String html = CollaborationHome.render(Instant.now());
-      assertThat(html).contains("Vocabulary size: 2", "Pending suggestions: 1", "&lt;Urgent&gt;: 1");
-      assertThat(html).doesNotContain("<Urgent>");
+      var home = CollaborationHome.tags();
+      assertThat(home.getRows()).hasSize(2);
+      assertThat(home.getRows().getFirst()).containsEntry("label", "<Urgent>").containsEntry("table", "Documents").containsEntry("records", 1);
+      assertThat(home.getRows().getLast()).containsEntry("records", 0);
+      assertThat(home.getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_TAGS);
    }
 
    /*******************************************************************************
@@ -445,6 +446,36 @@ public class TagsServiceTest extends PersonalServiceFixture
    {
       return ((List<ProcessSummaryLine>) output.getValues().get(result ? StreamedETLWithFrontendProcess.FIELD_PROCESS_SUMMARY : StreamedETLWithFrontendProcess.FIELD_VALIDATION_SUMMARY));
    }
+   /*******************************************************************************
+    ** JSON clients send ids as Integer, Long, BigDecimal or String; all select by id.
+    *******************************************************************************/
+   @Test
+   void translatorAcceptsEveryIdRepresentation() throws Exception
+   {
+      TagEntry a = tags.create("document", "A", null);
+      TagEntry b = tags.create("document", "B", null);
+      TagEntry numeric = tags.create("document", "77", null);
+      tags.apply("document", 1, List.of(a.id(), b.id()), List.of());
+      tags.apply("document", 2, List.of(a.id()), List.of());
+      for(java.io.Serializable idA : List.<java.io.Serializable>of(a.id(), Long.valueOf(a.id()), new java.math.BigDecimal(a.id()), String.valueOf(a.id())))
+      {
+         assertThat(recordIds("document", "IN", List.of(idA))).containsExactly("1", "2");
+         assertThat(recordIds("document", "EQUALS", List.of(idA))).containsExactly("1", "2");
+         assertThat(recordIds("document", "NOT_IN", List.of(idA))).isEmpty();
+      }
+      for(java.io.Serializable idB : List.<java.io.Serializable>of(b.id(), Long.valueOf(b.id()), new java.math.BigDecimal(b.id()), String.valueOf(b.id())))
+      {
+         assertThat(recordIds("document", "IN", List.of(idB))).containsExactly("1");
+         assertThat(recordIds("document", "NOT_IN", List.of(idB))).containsExactly("2");
+         assertThat(recordIds("document", "CONTAINS_ALL", List.of(String.valueOf(a.id()), idB))).containsExactly("1");
+      }
+      assertThat(recordIds("document", "CONTAINS_ALL", List.of(new java.math.BigDecimal(a.id()), Long.valueOf(b.id())))).containsExactly("1");
+      assertThat(recordIds("document", "IN", List.of("9999"))).isEmpty();
+      tags.apply("document", 2, List.of(numeric.id()), List.of());
+      assertThat(recordIds("document", "IN", List.of(String.valueOf(numeric.id())))).containsExactly("2");
+      assertThat(recordIds("document", "IN", List.of("77"))).containsExactly("2");
+   }
+
    /*******************************************************************************
     ** Execute expanded criteria through the real parent query action.
     *******************************************************************************/

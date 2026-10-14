@@ -65,7 +65,7 @@ public class GetMyWorkSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var summary = new com.kingsrook.qbits.collaboration.mywork.MyWorkService().summary();
-      return (new CollaborationWorkSchemas.CollaborationMyWorkV1(summary.openTaskCount(), summary.tasks().stream().map(CollaborationViews::task).toList(),
+      return (new CollaborationWorkSchemas.CollaborationMyWorkV1(summary.openTaskCount(), CollaborationViews.tasks(summary.tasks()),
          summary.assignedRecordsByTable(), summary.unreadMentionCount()));
    }
 

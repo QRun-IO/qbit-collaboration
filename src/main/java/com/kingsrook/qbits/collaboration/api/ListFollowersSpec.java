@@ -69,6 +69,6 @@ public class ListFollowersSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var page = page(input, new FollowService().followers(table(input), pk(input)));
-      return (new CollaborationFollowerListV1(page.items().stream().map(CollaborationViews::follow).toList(), page.nextCursor()));
+      return (new CollaborationFollowerListV1(CollaborationViews.follows(page.items()), page.nextCursor()));
    }
 }

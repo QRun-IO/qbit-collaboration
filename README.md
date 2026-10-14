@@ -51,9 +51,14 @@ of `;` between classpath entries.
 Open [the demo](http://localhost:8098/?createMockSession=true), then **Sales → People**
 or **Sales orders**. [Person 1](http://localhost:8098/app/person/1) and
 [order 1](http://localhost:8098/app/sales_order/1) have the richest collaboration panels.
-Select a user with `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list)
-and restart the server to switch. The MOCK session customizer supplies stable identities
-and real permissions, also used by recipient access checks:
+Pick the user per browser: add `user=` to the page load, for example
+`http://localhost:8098/?createMockSession=true&user=bob`. The server remembers the choice in a
+`collab_dev_user` cookie, so **open a second browser with `?user=bob` to see presence** (your
+first browser keeps its own user; browsers on the same profile share the cookie). Without a
+choice, `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list) is the default.
+The MOCK session customizer supplies stable identities, display names (the sidebar shows
+Alice Morgan, not Anonymous) and real permissions, also used by recipient access checks.
+Shared record links are absolute (`frontendBaseUrl` is `http://localhost:<port>`):
 
 | User | Permissions |
 | --- | --- |
@@ -134,7 +139,7 @@ Omit `withParentAppName` for a top-level app. Run normal QQQ instance validation
 
 All tables include `id`, `createDate` and `modifyDate`, identity/details/dates sections, and table possible-value sources. SQL table names match metadata table names; SQL columns use snake_case. Use a stable nonempty scope name (convention: `instance` for INSTANCE; the metadata app/table name otherwise). JSON validation and override resolution arrive with the provider, not in this scaffold.
 
-The home reports persisted enabled settings by scope type, people known and people seen within the inclusive last seven days, plus Favorites and Recently viewed row counts and distinct user counts, attachment count and total bytes, comments in the last seven days, open root threads, and follower subscriptions (admins). Attachment aggregates are explicitly approximate until core can mirror parent locks. Recent activity is based on `lastSeenAt`, independently of the directory's `active` account flag. Empty states explain missing data. These counts do not represent resolved feature enablement on host tables.
+The home is four full-width standard widgets (no custom HTML, no hard-coded colors, so dark mode works): an Overview of KPIs (comments this week, open threads, open and overdue tasks, open access requests, attachments with a human-readable total size such as 4.7 KB, active custom fields), a Tags table (label, table or All tables, records), a Custom fields table (name, table, status, index state) and an admin-only Who's here table of live viewer counts per table. Every block has a real empty-state message. Counts use the caller's session and permissions; attachment aggregates remain approximate until core can mirror parent locks.
 
 ## Permissions
 

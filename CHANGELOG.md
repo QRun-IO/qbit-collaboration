@@ -4,6 +4,15 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Fixed
+
+- Timeline audit summaries read "Edited by Alice Morgan: Title, Total" or "Created by Alice Morgan" instead of "Record was Edited"; detail rows are unchanged.
+- The demo server chooses its user per browser session (`?user=bob`, remembered in a cookie) instead of once per JVM, and sends the person's name to the frontend so it no longer shows Anonymous.
+- The share recipient search and mention candidates no longer offer the caller to themself.
+- The demo server configures `frontendBaseUrl`, so record links are absolute URLs (the API already returned absolute links once it is set).
+- Tag filters accept tag ids as any JSON number or numeric string; other strings remain names.
+- Collaboration home rebuilt from standard KPI and table widgets with empty states; the demo Admin parent app is reachable so Collaboration appears in the app tree.
+
 - Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
 
 ### Added

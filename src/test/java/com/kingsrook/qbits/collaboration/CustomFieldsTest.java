@@ -48,6 +48,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.JsonPathStorage;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
+import com.kingsrook.qbits.collaboration.app.CollaborationHome;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -77,6 +79,26 @@ public class CustomFieldsTest extends PersonalServiceFixture
       String source = instance.getTable("document").getField("cf_contact").getPossibleValueSourceName();
       assertThat(instance.getPossibleValueSource(source).getEnumValues()).hasSize(2);
       assertThat(instance.getTable("document").getFields()).containsKeys("cf_contact", "cf_reference");
+   }
+
+
+
+   /*******************************************************************************
+    ** The home lists definitions with table label, status and index state, and counts active ones.
+    *******************************************************************************/
+   @Test
+   void homeListsDefinitionsAndCountsActiveOnes() throws Exception
+   {
+      admin();
+      QRecord definition = draft("region", "STRING");
+      var drafts = CollaborationHome.fields();
+      assertThat(drafts.getColumns()).extracting(TableData.Column::getHeader).containsExactly("Name", "Table", "Status", "Index state");
+      assertThat(drafts.getRows()).singleElement().satisfies(row -> assertThat(row).containsEntry("name", "region").containsEntry("table", "Documents")
+         .containsEntry("status", "Draft").containsEntry("indexState", "None"));
+      assertThat(HomeWidgetData.stats(java.time.Instant.now())).containsEntry("Active custom fields", 0);
+      FieldDefinitions.apply(definition.getValue("id"), "Publish");
+      assertThat(CollaborationHome.fields().getRows().getFirst()).containsEntry("status", "Active");
+      assertThat(HomeWidgetData.stats(java.time.Instant.now())).containsEntry("Active custom fields", 1);
    }
 
 

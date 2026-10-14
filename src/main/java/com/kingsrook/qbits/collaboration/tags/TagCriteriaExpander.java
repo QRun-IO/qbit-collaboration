@@ -23,6 +23,7 @@ package com.kingsrook.qbits.collaboration.tags;
 
 import java.io.Serializable;
 import java.util.List;
+import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qqq.backend.core.actions.tables.query.CriteriaExpansionContext;
 import com.kingsrook.qqq.backend.core.actions.tables.query.SearchTermKind;
@@ -71,7 +72,7 @@ public class TagCriteriaExpander implements VirtualFieldCriteriaExpanderInterfac
    }
 
    /*******************************************************************************
-    ** Numeric values are picker IDs; strings are exact normalized vocabulary names.
+    ** Numeric values (or numeric strings naming an existing tag) are picker IDs; other strings are exact normalized names.
     *******************************************************************************/
    private QQueryFilter membership(QTableMetaData table, List<Serializable> values, boolean negate, boolean any) throws QException
    {
@@ -90,14 +91,38 @@ public class TagCriteriaExpander implements VirtualFieldCriteriaExpanderInterfac
             {
                throw (new QUserFacingException("Tags cannot contain null values"));
             }
-            choices.withCriteria(value instanceof Number ? "id" : "name", QCriteriaOperator.EQUALS,
-               value instanceof Number ? value : TagsService.normalize(value.toString()));
+            Integer id = tagId(table, value);
+            choices.withCriteria(id != null ? "id" : "name", QCriteriaOperator.EQUALS, id != null ? id : TagsService.normalize(value.toString()));
          }
          tags.withSubFilter(choices);
          links.withCriteria("tagId", QCriteriaOperator.IN, new QSubQuery(CollaborationTables.TAG, "id", tags));
       }
       return (new QQueryFilter().withCriteria(table.getPrimaryKeyField(), negate ? QCriteriaOperator.NOT_IN : QCriteriaOperator.IN,
          new QSubQuery(CollaborationTables.RECORD_TAG, "recordId", links)));
+   }
+
+   /*******************************************************************************
+    ** A value is a picker id when it is a Number (any JSON numeric type) or a String
+    ** holding an integer that matches an existing tag; otherwise it is a name (null).
+    *******************************************************************************/
+   private Integer tagId(QTableMetaData table, Serializable value) throws QException
+   {
+      if(value instanceof Number number)
+      {
+         return (number.intValue());
+      }
+      String text = value.toString().strip();
+      try
+      {
+         int id = Integer.parseInt(text);
+         boolean exists = !CollaborationRecords.query(CollaborationTables.TAG, TagsService.vocabularyFilter(table.getName())
+            .withCriteria("id", QCriteriaOperator.EQUALS, id)).isEmpty();
+         return (exists ? id : null);
+      }
+      catch(NumberFormatException e)
+      {
+         return (null);
+      }
    }
 
    /*******************************************************************************

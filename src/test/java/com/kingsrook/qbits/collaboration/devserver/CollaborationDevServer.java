@@ -36,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -123,6 +124,8 @@ public class CollaborationDevServer extends AbstractQQQApplication
 {
    private final QInstance instance;
    static final List<String> USERS = List.of("alice", "bob", "admin");
+   static final String USER_COOKIE = "collab_dev_user";
+   private static final ThreadLocal<String> REQUEST_USER = new ThreadLocal<>();
 
 
 
@@ -155,7 +158,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       String user = System.getProperty("collab.dev.user", "alice");
       session(user);
       int port = Integer.parseInt(System.getProperty("collab.dev.port", "8098"));
-      QInstance instance = buildInstance();
+      QInstance instance = buildInstance(port);
       seed(instance);
       QApplicationJavalinServer server = server(instance, port, true);
       server.start();
@@ -184,8 +187,45 @@ public class CollaborationDevServer extends AbstractQQQApplication
          .withJavalinConfigCustomizer(config ->
          {
             config.jetty.host = "127.0.0.1";
+            userSelection(config);
             MemoryStorage.routes(config);
          }));
+   }
+
+
+
+   /*******************************************************************************
+    ** Pick the demo user per browser, not per JVM. A request carrying ?user=bob (for
+    ** example the page load of /?createMockSession=true&user=bob) is remembered in a
+    ** cookie, and every request exposes its choice to the session customizer, which
+    ** QQQ calls without the request. Without either, the collab.dev.user default holds.
+    *******************************************************************************/
+   static void userSelection(JavalinConfig config)
+   {
+      config.routes.before(context ->
+      {
+         String requested = context.queryParam("user");
+         if(requested != null && USERS.contains(requested))
+         {
+            context.cookie(USER_COOKIE, requested);
+            REQUEST_USER.set(requested);
+            return;
+         }
+         String remembered = context.cookie(USER_COOKIE);
+         REQUEST_USER.set(remembered != null && USERS.contains(remembered) ? remembered : null);
+      });
+      config.routes.after(context -> REQUEST_USER.remove());
+   }
+
+
+
+   /*******************************************************************************
+    ** The user for the request being handled on this thread, else the JVM default.
+    *******************************************************************************/
+   static String selectedUser()
+   {
+      String requested = REQUEST_USER.get();
+      return (requested != null ? requested : System.getProperty("collab.dev.user", "alice"));
    }
 
 
@@ -194,6 +234,16 @@ public class CollaborationDevServer extends AbstractQQQApplication
     ** Normal host metadata, plus the same collaboration installation as a real app.
     *******************************************************************************/
    static QInstance buildInstance() throws Exception
+   {
+      return (buildInstance(Integer.parseInt(System.getProperty("collab.dev.port", "8098"))));
+   }
+
+
+
+   /*******************************************************************************
+    ** The port is part of the configuration: shared links are absolute URLs to this server.
+    *******************************************************************************/
+   static QInstance buildInstance(int port) throws Exception
    {
       QInstance instance = new QInstance().withInstanceDefaultAuthentication(new QAuthenticationMetaData()
          .withName("mock").withType(QAuthenticationType.MOCK).withCustomizer(new QCodeReference(DemoSessions.class)));
@@ -232,7 +282,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       new AuditsMetaDataProvider().withRecordIdType(QFieldType.STRING).withDefineRecordScreens(true)
          .defineAll(instance, "memory", table -> table.withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.READ_WRITE_PERMISSIONS)));
       new CollaborationQBitProducer().withQBitConfig(new CollaborationQBitConfig().withBackendName("memory")
-         .withAdminApp(true).withParentAppName("admin").withUiApi(true)
+         .withAdminApp(true).withParentAppName("admin").withUiApi(true).withFrontendBaseUrl("http://localhost:" + port)
          .withTableFeatures("person", RecordFeature.values()).withTableFeatures("sales_order", RecordFeature.values())
          .withAttachmentStorage(new QCodeReference(MemoryStorage.class))
          .withUserSessionProvider(new QCodeReference(DemoSessions.class))
@@ -282,7 +332,8 @@ public class CollaborationDevServer extends AbstractQQQApplication
          default -> "Demo Administrator";
       };
       QSession session = new QSession().withUser(new QUser().withIdReference(user).withFullName(name))
-         .withPermissions("person.read", "person.comment");
+         .withPermissions("person.read", "person.comment")
+         .withValueForFrontend("user", new HashMap<>(Map.of("name", name, "email", user + "@example.com")));
       if(!user.equals("bob"))
       {
          session.withPermissions("audit.read", "auditDetail.read", "auditTable.read", "auditUser.read");
@@ -296,7 +347,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       }
       if(user.equals("admin"))
       {
-         session.withPermissions("admin.access", "collaboration.admin", "collaboration.view", "collaboration.tags.manage", "collaboration.fields.manage");
+         session.withPermissions("admin.hasAccess", "collaboration.admin", "collaboration.view", "collaboration.tags.manage", "collaboration.fields.manage");
       }
       return (session);
    }
@@ -314,9 +365,10 @@ public class CollaborationDevServer extends AbstractQQQApplication
       @Override
       public void customizeSession(QInstance instance, QSession target, Map<String, Object> context)
       {
-         QSession selected = session(System.getProperty("collab.dev.user", "alice"));
+         QSession selected = session(selectedUser());
          target.setUser(selected.getUser());
          target.setPermissions(selected.getPermissions());
+         target.setValuesForFrontend(selected.getValuesForFrontend());
       }
 
 

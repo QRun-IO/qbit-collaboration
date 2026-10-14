@@ -75,8 +75,8 @@ public class CreateSharesSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var body = body(input, CollaborationWorkSchemas.CollaborationShareRequestV1.class);
-      return (new CollaborationWorkSchemas.CollaborationShareListV1(new com.kingsrook.qbits.collaboration.sharing.SharingService()
-         .share(table(input), pk(input), recipients(body.toUserIds()), body.message()).stream().map(CollaborationViews::share).toList()));
+      return (new CollaborationWorkSchemas.CollaborationShareListV1(CollaborationViews.shares(new com.kingsrook.qbits.collaboration.sharing.SharingService()
+         .share(table(input), pk(input), recipients(body.toUserIds()), body.message()))));
    }
 
 }

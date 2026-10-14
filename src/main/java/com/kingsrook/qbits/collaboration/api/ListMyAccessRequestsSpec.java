@@ -66,7 +66,7 @@ public class ListMyAccessRequestsSpec extends CollaborationJsonSpec
    {
       var values = new com.kingsrook.qbits.collaboration.sharing.AccessRequestService().mine();
       var page = page(input, values);
-      return (new CollaborationWorkSchemas.CollaborationAccessRequestListV1(page.items().stream().map(CollaborationViews::accessRequest).toList(), page.nextCursor()));
+      return (new CollaborationWorkSchemas.CollaborationAccessRequestListV1(CollaborationViews.accessRequests(page.items()), page.nextCursor()));
    }
 
 }

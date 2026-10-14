@@ -70,7 +70,7 @@ public final class CollaborationSchemas
    /*******************************************************************************
     ** An attachment visible through its parent record; no storage coordinates are exposed.
     *******************************************************************************/
-   public record CollaborationAttachmentV1(Integer id, String tableName, String recordId, String fileName, String contentType, Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete) implements ToSchema
+   public record CollaborationAttachmentV1(Integer id, String tableName, String recordId, String fileName, String contentType, Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete, String createdByDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Describe this versioned body for generated clients.
@@ -89,7 +89,8 @@ public final class CollaborationSchemas
             Map.entry("description", new Schema().withType(Type.STRING).withDescription("Optional description.").withNullable(true)),
             Map.entry("createdByUserId", new Schema().withType(Type.STRING).withDescription("Uploader identity.").withNullable(true)),
             Map.entry("createDate", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("Upload time.").withNullable(true)),
-            Map.entry("canDelete", new Schema().withType(Type.BOOLEAN).withDescription("Whether the caller may change or delete this attachment.").withNullable(true))))));
+            Map.entry("canDelete", new Schema().withType(Type.BOOLEAN).withDescription("Whether the caller may change or delete this attachment.").withNullable(true)),
+            Map.entry("createdByDisplayName", new Schema().withType(Type.STRING).withDescription("Uploader display name.").withNullable(true))))));
       }
    }
 
@@ -201,7 +202,7 @@ public final class CollaborationSchemas
    /*******************************************************************************
     ** A previous comment body.
     *******************************************************************************/
-   public record CollaborationCommentRevisionV1(Integer id, String body, Instant editedAt, String editedByUserId) implements ToSchema
+   public record CollaborationCommentRevisionV1(Integer id, String body, Instant editedAt, String editedByUserId, String editedByDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Describe this versioned body for generated clients.
@@ -213,14 +214,15 @@ public final class CollaborationSchemas
             Map.entry("id", new Schema().withType(Type.INTEGER).withDescription("Revision identifier.").withNullable(true)),
             Map.entry("body", new Schema().withType(Type.STRING).withDescription("Previous body text.").withNullable(true)),
             Map.entry("editedAt", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("Time the body was replaced.").withNullable(true)),
-            Map.entry("editedByUserId", new Schema().withType(Type.STRING).withDescription("Editor identity.").withNullable(true))))));
+            Map.entry("editedByUserId", new Schema().withType(Type.STRING).withDescription("Editor identity.").withNullable(true)),
+            Map.entry("editedByDisplayName", new Schema().withType(Type.STRING).withDescription("Editor display name.").withNullable(true))))));
       }
    }
 
    /*******************************************************************************
     ** A subscription to record changes and comments.
     *******************************************************************************/
-   public record CollaborationFollowV1(Integer id, String userId, String reason, Boolean notifyOnChange, Boolean notifyOnComment, Instant mutedUntil) implements ToSchema
+   public record CollaborationFollowV1(Integer id, String userId, String reason, Boolean notifyOnChange, Boolean notifyOnComment, Instant mutedUntil, String userDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Describe this versioned body for generated clients.
@@ -234,7 +236,8 @@ public final class CollaborationSchemas
             Map.entry("reason", new Schema().withType(Type.STRING).withEnumValues(List.of("MANUAL", "AUTHOR", "COMMENTED", "MENTIONED", "ASSIGNED", "SHARED")).withDescription("How following began.").withNullable(true)),
             Map.entry("notifyOnChange", new Schema().withType(Type.BOOLEAN).withDescription("Receive record change digests.").withNullable(true)),
             Map.entry("notifyOnComment", new Schema().withType(Type.BOOLEAN).withDescription("Receive new comment notifications.").withNullable(true)),
-            Map.entry("mutedUntil", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("Notifications muted until this time, if set.").withNullable(true))))));
+            Map.entry("mutedUntil", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("Notifications muted until this time, if set.").withNullable(true)),
+            Map.entry("userDisplayName", new Schema().withType(Type.STRING).withDescription("Follower display name.").withNullable(true))))));
       }
    }
 
@@ -678,14 +681,14 @@ public final class CollaborationSchemas
    {
       Map<String, Schema> schemas = new TreeMap<>();
       schemas.put("CollaborationFavoriteV1", new CollaborationFavoriteV1(null, null, null, null, null, null, null, null, null).toSchema());
-      schemas.put("CollaborationAttachmentV1", new CollaborationAttachmentV1(null, null, null, null, null, null, null, null, null, null, null).toSchema());
+      schemas.put("CollaborationAttachmentV1", new CollaborationAttachmentV1(null, null, null, null, null, null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationTagV1", new CollaborationTagV1(null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationPersonV1", new CollaborationPersonV1(null, null, null, null).toSchema());
       schemas.put("CollaborationMentionV1", new CollaborationMentionV1(null, null).toSchema());
       schemas.put("CollaborationMentionCandidateV1", new CollaborationMentionCandidateV1(null, null).toSchema());
       schemas.put("CollaborationCommentV1", new CollaborationCommentV1(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null).toSchema());
-      schemas.put("CollaborationCommentRevisionV1", new CollaborationCommentRevisionV1(null, null, null, null).toSchema());
-      schemas.put("CollaborationFollowV1", new CollaborationFollowV1(null, null, null, null, null, null).toSchema());
+      schemas.put("CollaborationCommentRevisionV1", new CollaborationCommentRevisionV1(null, null, null, null, null).toSchema());
+      schemas.put("CollaborationFollowV1", new CollaborationFollowV1(null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationFollowStateV1", new CollaborationFollowStateV1(null, null).toSchema());
       schemas.put("CollaborationTimelineDetailV1", new CollaborationTimelineDetailV1(null, null, null, null).toSchema());
       schemas.put("CollaborationTimelineItemV1", new CollaborationTimelineItemV1(null, null, null, null, null, null, null, null, null).toSchema());

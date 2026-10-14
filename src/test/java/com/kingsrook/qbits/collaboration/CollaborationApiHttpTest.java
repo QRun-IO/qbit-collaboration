@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +40,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentStorage;
 import com.kingsrook.qbits.objectstorage.api.PresignGet;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
+import com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay;
+import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
 import com.kingsrook.qqq.backend.core.instances.AbstractQQQApplication;
 import com.kingsrook.qqq.backend.core.model.metadata.QAuthenticationType;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
@@ -74,7 +77,7 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       MemoryStorage.objects.clear();
       MemoryStorage.lastGet = null;
       MemoryStorage.fail = false;
-      config.withAttachmentStorage(new QCodeReference(MemoryStorage.class));
+      config.withAttachmentStorage(new QCodeReference(MemoryStorage.class)).withUserSessionProvider(new QCodeReference(CarolSessions.class));
       instance.withInstanceDefaultAuthentication(new QAuthenticationMetaData().withName("mock").withType(QAuthenticationType.MOCK)
          .withCustomizer(new QCodeReference(TestSessions.class)));
       int port;
@@ -164,6 +167,49 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertError(400, "GET", "/tasks/mine?status=UNKNOWN", null, "alice");
       assertError(400, "GET", "/records/document/1/tasks?includeDone=wrong", null, "alice");
       assertError(400, "POST", "/records/document/1/tasks", "{\"title\":5}", "alice");
+   }
+
+   /*******************************************************************************
+    ** Every payload that carries a user id also carries a display name, resolved in
+    ** one batch per response; ids with no directory entry fall back to themselves.
+    *******************************************************************************/
+   @Test
+   void payloadsCarryDisplayNames() throws Exception
+   {
+      assertThat(json(request("GET", "/people/carol", null, "carol"), 200).get("displayName").asText()).isEqualTo("Carol Diaz");
+
+      var task = ok("POST", "/records/document/1/tasks", "{\"title\":\"Review\",\"assigneeUserId\":\"carol\"}");
+      assertThat(task.get("assigneeDisplayName").asText()).isEqualTo("Carol Diaz");
+      assertThat(task.get("createdByDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(task.get("completedByDisplayName").isNull()).isTrue();
+      assertThat(ok("GET", "/records/document/1/tasks", null).at("/items/0/assigneeDisplayName").asText()).isEqualTo("Carol Diaz");
+      assertThat(ok("GET", "/my-work", null).at("/tasks").size()).isZero();
+      var done = ok("PATCH", "/tasks/" + task.get("id").asInt(), "{\"status\":\"DONE\"}");
+      assertThat(done.get("completedByDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(json(request("GET", "/tasks/mine?status=DONE", null, "carol"), 200).at("/items/0/createdByDisplayName").asText()).isEqualTo("Alice Morgan");
+
+      JsonNode upload = json(upload("alice", "report.txt", "hello", "/records/document/1/attachments"), 200);
+      assertThat(upload.get("createdByDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(ok("GET", "/records/document/1/attachments", null).at("/items/0/createdByDisplayName").asText()).isEqualTo("Alice Morgan");
+
+      JsonNode comment = ok("POST", "/records/document/1/comments", "{\"body\":\"First\"}");
+      assertThat(comment.get("authorDisplayName").asText()).isEqualTo("Alice Morgan");
+      ok("PATCH", "/comments/" + comment.get("id").asInt(), "{\"body\":\"Edited\"}");
+      assertThat(ok("GET", "/comments/" + comment.get("id").asInt() + "/history", null).at("/items/0/editedByDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(ok("GET", "/records/document/1/followers", null).findValuesAsText("userDisplayName")).contains("Alice Morgan");
+
+      JsonNode shared = ok("POST", "/records/document/1/shares", "{\"toUserIds\":[\"carol\"],\"message\":\"Look\"}");
+      assertThat(shared.at("/items/0/fromDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(shared.at("/items/0/toDisplayName").asText()).isEqualTo("Carol Diaz");
+
+      JsonNode request = ok("POST", "/access-requests", "{\"tableName\":\"document\",\"recordId\":\"999\",\"message\":\"Please\"}");
+      assertThat(request.get("requesterDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(request.get("handledByDisplayName").isNull()).isTrue();
+      assertThat(ok("GET", "/access-requests/mine", null).at("/items/0/requesterDisplayName").asText()).isEqualTo("Alice Morgan");
+
+      JsonNode assignment = ok("PUT", "/records/document/1/assignment", "{\"ownerUserId\":\"alice\",\"assigneeUserId\":\"carol\"}");
+      assertThat(assignment.get("ownerDisplayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(assignment.get("assigneeDisplayName").asText()).isEqualTo("Carol Diaz");
    }
 
    /*******************************************************************************
@@ -275,6 +321,50 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** The picker sends tag ids through the v1 table query as any JSON number or string.
+    *******************************************************************************/
+   @Test
+   void tagFilterByIdThroughTableQuery() throws Exception
+   {
+      RuntimeMetaDataOverlay.refresh(instance);
+      int a = ok("POST", "/tags", "{\"table\":\"document\",\"label\":\"Alpha\"}").get("id").asInt();
+      int b = ok("POST", "/tags", "{\"table\":\"document\",\"label\":\"Beta\"}").get("id").asInt();
+      ok("PUT", "/records/document/1/tags", "{\"add\":[" + a + "," + b + "]}");
+      ok("PUT", "/records/document/2/tags", "{\"add\":[" + a + "]}");
+      for(String ida : List.of(a + "", "\"" + a + "\"", a + ".0"))
+      {
+         assertThat(tagQuery("IN", "[" + ida + "]")).containsExactlyInAnyOrder(1, 2);
+         assertThat(tagQuery("EQUALS", "[" + ida + "]")).containsExactlyInAnyOrder(1, 2);
+         assertThat(tagQuery("NOT_IN", "[" + ida + "]")).isEmpty();
+      }
+      for(String idb : List.of(b + "", "\"" + b + "\"", b + ".0"))
+      {
+         assertThat(tagQuery("CONTAINS_ALL", "[" + a + "," + idb + "]")).containsExactly(1);
+         assertThat(tagQuery("NOT_IN", "[" + idb + "]")).containsExactly(2);
+      }
+      assertThat(tagQuery("IN", "[\"alpha\"]")).containsExactlyInAnyOrder(1, 2);
+   }
+
+   /*******************************************************************************
+    ** Run the v1 table query filtered on the virtual tags field; return matching ids.
+    *******************************************************************************/
+   private List<Integer> tagQuery(String operator, String values) throws Exception
+   {
+      String serverUrl = baseUrl.substring(0, baseUrl.indexOf("/qbit/"));
+      String body = "{\"filter\":{\"criteria\":[{\"fieldName\":\"collaborationTags\",\"operator\":\"" + operator + "\",\"values\":" + values + "}],\"orderBys\":[{\"fieldName\":\"id\"}]}}";
+      HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/query")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).header("Content-Type", "application/json")
+         .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode result = json(response, 200);
+      List<Integer> ids = new java.util.ArrayList<>();
+      for(JsonNode record : result.get("records"))
+      {
+         ids.add(record.at("/values/id").asInt());
+      }
+      return (ids);
+   }
+
+   /*******************************************************************************
     ** Comments, revisions, mentions, follow settings and the merged timeline.
     *******************************************************************************/
    @Test
@@ -300,12 +390,17 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertThat(ok("GET", "/records/document/1/comments", null).at("/threads/0/resolved").asBoolean()).isTrue();
       ok("POST", "/comments/" + id + "/reopen", null);
       assertThat(ok("GET", "/records/document/1/comments", null).at("/threads/0/resolved").asBoolean()).isFalse();
-      JsonNode people = ok("GET", "/people?q=alice", null);
-      assertThat(people.at("/items/0/userId").asText()).isEqualTo("alice");
-      assertThat(ok("GET", "/people/alice", null).get("displayName").asText()).isEqualTo("alice");
-      JsonNode candidate = ok("GET", "/mentions/candidates?table=document&pk=1&q=alice", null).at("/items/0");
-      assertThat(candidate.at("/person/userId").asText()).isEqualTo("alice");
-      assertThat(candidate.get("canRead").asText()).isEqualTo("unknown");
+      assertThat(json(request("GET", "/people/carol", null, "carol"), 200).get("displayName").asText()).isEqualTo("Carol Diaz");
+      JsonNode people = ok("GET", "/people?q=carol", null);
+      assertThat(people.at("/items/0/userId").asText()).isEqualTo("carol");
+      assertThat(ok("GET", "/people?q=alice", null).get("items")).as("the caller is not offered to themself").isEmpty();
+      assertThat(ok("GET", "/people", null).findValuesAsText("userId")).doesNotContain("alice").contains("carol");
+      assertThat(ok("GET", "/people/alice", null).get("displayName").asText()).isEqualTo("Alice Morgan");
+      assertThat(ok("GET", "/mentions/candidates?table=document&pk=1&q=alice", null).get("items")).isEmpty();
+      assertThat(ok("GET", "/mentions/candidates?table=document&pk=1", null).findValuesAsText("userId")).doesNotContain("alice");
+      JsonNode candidate = ok("GET", "/mentions/candidates?table=document&pk=1&q=carol", null).at("/items/0");
+      assertThat(candidate.at("/person/userId").asText()).isEqualTo("carol");
+      assertThat(candidate.get("canRead").asText()).isEqualTo("true");
       assertThat(ok("GET", "/records/document/1/follow", null).at("/follow/reason").asText()).isEqualTo("COMMENTED");
       JsonNode state = ok("PUT", "/records/document/1/follow", "{\"notifyOnChange\":false,\"notifyOnComment\":true}");
       assertThat(state.at("/follow/notifyOnChange").asBoolean()).isFalse();
@@ -439,12 +534,30 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       public void customizeSession(QInstance qInstance, QSession session, Map<String, Object> context)
       {
          String caller = session.getUuid().split("-")[0];
-         session.withUser(new QUser().withIdReference(caller).withFullName(caller));
+         session.withUser(new QUser().withIdReference(caller).withFullName(switch(caller)
+         {
+            case "alice" -> "Alice Morgan";
+            case "carol" -> "Carol Diaz";
+            default -> caller;
+         }));
          session.withPermissions("document.read").withSecurityKeyValue("tenant", caller.equals("outsider") ? "b" : "a");
-         if(caller.equals("alice"))
+         if(caller.equals("alice") || caller.equals("carol"))
          {
             session.withPermissions("document.write");
          }
+      }
+   }
+
+   /*******************************************************************************
+    ** Carol is the one other person who can open the shared documents.
+    *******************************************************************************/
+   public static class CarolSessions implements UserSessionProviderInterface
+   {
+      @Override
+      public Optional<QSession> sessionForUser(String userId)
+      {
+         return (Optional.ofNullable("carol".equals(userId) ? new QSession().withUser(new QUser().withIdReference("carol")).withPermissions("document.read", "document.write")
+            .withSecurityKeyValue("tenant", "a") : null));
       }
    }
 

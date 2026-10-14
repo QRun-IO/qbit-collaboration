@@ -39,6 +39,10 @@ components:
           format: "date-time"
           nullable: true
           type: "string"
+        handledByDisplayName:
+          description: "Display name of the person who handled the request."
+          nullable: true
+          type: "string"
         id:
           description: "id."
           nullable: true
@@ -53,6 +57,10 @@ components:
           type: "string"
         recordId:
           description: "recordId."
+          nullable: true
+          type: "string"
+        requesterDisplayName:
+          description: "Requester display name."
           nullable: true
           type: "string"
         requesterUserId:
@@ -81,6 +89,10 @@ components:
       type: "object"
     CollaborationAssignmentV1:
       properties:
+        assigneeDisplayName:
+          description: "Assignee display name."
+          nullable: true
+          type: "string"
         assigneeUserId:
           description: "assigneeUserId."
           nullable: true
@@ -89,6 +101,10 @@ components:
           description: "id."
           nullable: true
           type: "integer"
+        ownerDisplayName:
+          description: "Owner display name."
+          nullable: true
+          type: "string"
         ownerUserId:
           description: "ownerUserId."
           nullable: true
@@ -157,6 +173,10 @@ components:
         createDate:
           description: "Upload time."
           format: "date-time"
+          nullable: true
+          type: "string"
+        createdByDisplayName:
+          description: "Uploader display name."
           nullable: true
           type: "string"
         createdByUserId:
@@ -256,6 +276,10 @@ components:
         editedAt:
           description: "Time the body was replaced."
           format: "date-time"
+          nullable: true
+          type: "string"
+        editedByDisplayName:
+          description: "Editor display name."
           nullable: true
           type: "string"
         editedByUserId:
@@ -494,6 +518,10 @@ components:
           - "SHARED"
           nullable: true
           type: "string"
+        userDisplayName:
+          description: "Follower display name."
+          nullable: true
+          type: "string"
         userId:
           description: "Follower identity."
           nullable: true
@@ -699,6 +727,10 @@ components:
       type: "object"
     CollaborationShareV1:
       properties:
+        fromDisplayName:
+          description: "Sender display name."
+          nullable: true
+          type: "string"
         fromUserId:
           description: "fromUserId."
           nullable: true
@@ -726,6 +758,10 @@ components:
           type: "string"
         tableName:
           description: "tableName."
+          nullable: true
+          type: "string"
+        toDisplayName:
+          description: "Recipient display name."
           nullable: true
           type: "string"
         toUserId:
@@ -904,6 +940,10 @@ components:
       type: "object"
     CollaborationTaskV1:
       properties:
+        assigneeDisplayName:
+          description: "Assignee display name."
+          nullable: true
+          type: "string"
         assigneeUserId:
           description: "assigneeUserId."
           nullable: true
@@ -913,8 +953,16 @@ components:
           format: "date-time"
           nullable: true
           type: "string"
+        completedByDisplayName:
+          description: "Display name of the person who completed the task."
+          nullable: true
+          type: "string"
         completedByUserId:
           description: "completedByUserId."
+          nullable: true
+          type: "string"
+        createdByDisplayName:
+          description: "Creator display name."
           nullable: true
           type: "string"
         createdByUserId:
