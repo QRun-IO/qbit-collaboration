@@ -29,8 +29,13 @@ import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentPreviewCustomizer;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentSecurity;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
+import com.kingsrook.qbits.collaboration.values.FeatureScopeNamePossibleValueProvider;
+import com.kingsrook.qbits.collaboration.values.RecordFieldNamePossibleValueProvider;
 import com.kingsrook.qqq.backend.core.actions.customizers.TableCustomizers;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter.BooleanOperator;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.AuditLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.QAuditRules;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
@@ -58,6 +63,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String SCOPE_NAME = "collaboration_scope_name";
+   public static final String RECORD_FIELD_NAME = "collaboration_record_field_name";
    public static final String SHARE = "collaboration_share";
    public static final String ACCESS_REQUEST = "collaboration_access_request";
    public static final String TASK = "collaboration_task";
@@ -97,6 +104,10 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         new QPossibleValueSource().withName(SCOPE_NAME).withType(QPossibleValueSourceType.CUSTOM)
+            .withCustomCodeReference(new QCodeReference(FeatureScopeNamePossibleValueProvider.class)),
+         new QPossibleValueSource().withName(RECORD_FIELD_NAME).withType(QPossibleValueSourceType.CUSTOM)
+            .withCustomCodeReference(new QCodeReference(RecordFieldNamePossibleValueProvider.class)),
          QPossibleValueSource.newForTable(SHARE), QPossibleValueSource.newForTable(ACCESS_REQUEST),
          QPossibleValueSource.newForTable(TASK), QPossibleValueSource.newForTable(RECORD_ASSIGNMENT),
          enumSource("collaboration_access_request_status", "OPEN", "GRANTED", "DECLINED", "WITHDRAWN"),
@@ -138,7 +149,8 @@ public final class CollaborationTables
       QTableMetaData settings = base(config, FEATURE_SETTING, "Feature Settings", "settings")
          .withRecordLabelFormatAndFields("%s %s: %s", "scopeType", "scopeName", "feature")
          .withField(string("scopeType", "Scope Type", 20).withIsRequired(true).withPossibleValueSourceName(SCOPE_TYPE))
-         .withField(string("scopeName", "Scope Name", 128).withIsRequired(true))
+         // TODO: add .withDependsOn("scopeType") when QQQ core ships contingent dependsOn (docs/CONTINGENT-POSSIBLE-VALUES.md)
+         .withField(string("scopeName", "Scope Name", 128).withIsRequired(true).withPossibleValueSourceName(SCOPE_NAME))
          .withField(string("feature", "Feature", 32).withIsRequired(true).withPossibleValueSourceName(FEATURE))
          .withField(new QFieldMetaData("enabled", QFieldType.BOOLEAN).withLabel("Enabled").withIsRequired(true).withDefaultValue(false))
          .withField(new QFieldMetaData("settings", QFieldType.TEXT).withLabel("Settings (JSON)"))
@@ -283,9 +295,16 @@ public final class CollaborationTables
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
          .withSearchFields(List.of("body"))
          .withField(new QFieldMetaData("threadId", QFieldType.INTEGER).withPossibleValueSourceName(COMMENT))
-         .withField(new QFieldMetaData("parentCommentId", QFieldType.INTEGER).withPossibleValueSourceName(COMMENT))
+         // Roots have null threadId; include the root by id as well as its replies by threadId.
+         // Keep OR nested: core appends its search criteria to the outer AND filter.
+         // TODO: add .withDependsOn("threadId") when QQQ core ships contingent dependsOn (docs/CONTINGENT-POSSIBLE-VALUES.md)
+         .withField(new QFieldMetaData("parentCommentId", QFieldType.INTEGER).withPossibleValueSourceName(COMMENT)
+            .withPossibleValueSourceFilter(new QQueryFilter().withSubFilter(new QQueryFilter().withBooleanOperator(BooleanOperator.OR)
+               .withCriteria("threadId", QCriteriaOperator.EQUALS, "${input.threadId}")
+               .withCriteria("id", QCriteriaOperator.EQUALS, "${input.threadId}"))))
          .withField(new QFieldMetaData("body", QFieldType.TEXT).withMaxLength(20000))
-         .withField(string("fieldName", "Field", 128))
+         // TODO: add .withDependsOn("tableName") when QQQ core ships contingent dependsOn (docs/CONTINGENT-POSSIBLE-VALUES.md)
+         .withField(string("fieldName", "Field", 128).withPossibleValueSourceName(RECORD_FIELD_NAME))
          .withField(string("authorUserId", "Author", 255).withIsRequired(true))
          .withField(new QFieldMetaData("lastActivityAt", QFieldType.DATE_TIME).withIsRequired(true))
          .withField(new QFieldMetaData("editedAt", QFieldType.DATE_TIME))
