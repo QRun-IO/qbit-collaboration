@@ -43,6 +43,8 @@ import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderI
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.model.metadata.security.FieldSecurityLock;
+import com.kingsrook.qqq.backend.core.model.metadata.security.QSecurityKeyType;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
@@ -159,7 +161,7 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
          assertThat(message.getValueString("linkedTableName")).isEqualTo("document");
          assertThat(message.getValueString("linkedRecordId")).isEqualTo("1");
          assertThat(message.getValueString("senderQbit")).isEqualTo("qbit-collaboration");
-         assertThat(message.getValueString("subject")).contains("alice mentioned you on a record in Documents");
+         assertThat(message.getValueString("subject")).contains("alice mentioned you on First document");
          assertThat(message.getValueString("subject") + message.getValueString("textBody") + message.getValueString("htmlBody")).doesNotContain("secret comment body");
          assertThat(message.getValueString("htmlBody")).contains("https://app.example.org/app/document/1");
       });
@@ -170,6 +172,27 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
          assertThat(message.templateName()).isEqualTo("collaboration_mention");
          assertThat(message.linkedTableName()).isEqualTo("document");
          assertThat(message.linkedRecordId()).isEqualTo("1");
+      });
+   }
+
+
+
+   /*******************************************************************************
+    ** Restricted record labels never enter email subjects or rendered bodies.
+    *******************************************************************************/
+   @Test
+   void maskedLabelUsesGenericEmailText() throws Exception
+   {
+      withEmail();
+      instance.addSecurityKeyType(new QSecurityKeyType().withName("sensitive"));
+      instance.getTable("document").getField("title").withFieldSecurityLock(new FieldSecurityLock()
+         .withSecurityKeyType("sensitive").withDefaultBehavior(FieldSecurityLock.Behavior.MASK));
+      Notifications.send(notification("bob", CollaborationNotification.Category.MENTION, "7"));
+      assertThat(messages()).singleElement().satisfies(message ->
+      {
+         assertThat(message.getValueString("subject")).contains("alice mentioned you on a record in Documents");
+         assertThat(message.getValueString("subject") + message.getValueString("textBody") + message.getValueString("htmlBody"))
+            .doesNotContain("First document", "secret comment body");
       });
    }
 

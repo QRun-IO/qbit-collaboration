@@ -179,8 +179,9 @@ public class CustomFieldsTest extends PersonalServiceFixture
       assertThatThrownBy(() -> new DeleteAction().execute(new DeleteInput(CollaborationTables.FIELD_DEFINITION).withPrimaryKeys(List.of(row.getValue("id"))))).hasMessageContaining("archive");
       assertThatThrownBy(() -> FieldDefinitions.validate(new QRecord(row).withValue("name", "renamed"), row)).hasMessageContaining("cannot change");
       assertThatThrownBy(() -> FieldDefinitions.options(new QRecord().withValue("options", "{}"))).hasMessageContaining("options");
-      assertThatThrownBy(() -> FieldDefinitions.validate(new QRecord(row).withValue("classification", "BAD"), row)).hasMessageContaining("classification");
-      assertThatThrownBy(() -> FieldDefinitions.validate(new QRecord(row).withValue("minValue", 5).withValue("maxValue", 1), row)).hasMessageContaining("Minimum");
+      QRecord published = FieldDefinitions.get(row.getValue("id"));
+      assertThatThrownBy(() -> FieldDefinitions.validate(new QRecord(published).withValue("classification", "BAD"), published)).hasMessageContaining("classification");
+      assertThatThrownBy(() -> FieldDefinitions.validate(new QRecord(published).withValue("minValue", 5).withValue("maxValue", 1), published)).hasMessageContaining("Minimum");
    }
 
    /*******************************************************************************

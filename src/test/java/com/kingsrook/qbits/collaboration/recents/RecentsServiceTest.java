@@ -52,6 +52,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.AuditLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
+import com.kingsrook.qqq.backend.core.model.metadata.security.FieldSecurityLock;
+import com.kingsrook.qqq.backend.core.model.metadata.security.QSecurityKeyType;
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.scheduleing.simple.SimpleSchedulerMetaData;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
@@ -110,6 +112,26 @@ class RecentsServiceTest extends PersonalServiceFixture
       admin();
       assertThat(new QueryAction().execute(new QueryInput(CollaborationTables.RECENT)).getRecords()).hasSize(3);
       assertThat(RecentsService.list(50)).isEmpty();
+   }
+
+
+
+   /*******************************************************************************
+    ** A refreshed recent discards its old cached label after access is restricted.
+    *******************************************************************************/
+   @Test
+   void refreshClearsLabelWhenFieldAccessIsRestricted() throws Exception
+   {
+      at(START);
+      RecentsService.recordView("RECORD", "document", 1);
+      assertThat(rows().getFirst().getValueString("label")).isEqualTo("First document");
+      instance.addSecurityKeyType(new QSecurityKeyType().withName("sensitive"));
+      instance.getTable("document").getField("title").withFieldSecurityLock(new FieldSecurityLock()
+         .withSecurityKeyType("sensitive").withDefaultBehavior(FieldSecurityLock.Behavior.MASK));
+      at(START.plusSeconds(60));
+      RecentsService.recordView("RECORD", "document", 1);
+      assertThat(rows().getFirst().getValueString("label")).isNull();
+      assertThat(rows().getFirst().getValueInteger("viewCount")).isEqualTo(2);
    }
 
 

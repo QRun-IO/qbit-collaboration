@@ -35,6 +35,7 @@ import com.kingsrook.qbits.collaboration.favorites.FavoriteEntry;
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionEnforcement;
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper;
 import com.kingsrook.qqq.backend.core.actions.permissions.TablePermissionSubType;
+import com.kingsrook.qqq.backend.core.actions.permissions.fieldaccess.FieldAccessHelper;
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -55,7 +56,7 @@ import com.kingsrook.qqq.backend.core.utils.ValueUtils;
 
 
 /*******************************************************************************
- ** Resolves targets only with released RC.5 APIs. Each list batches record label
+ ** Resolves targets through core permission and field-access APIs. Each list batches record label
  ** refreshes by table, preserving table permissions and record security locks.
  ** Next accepts the flat /app/name/ routes, including dotted process names.
  *******************************************************************************/
@@ -127,6 +128,17 @@ public final class TargetResolver
          throw (new QNotFoundException("Not found"));
       }
       return (entry);
+   }
+
+
+
+   /*******************************************************************************
+    ** Persist record labels only when all label fields are FULL for this session.
+    *******************************************************************************/
+   public static String cacheableLabel(FavoriteEntry target)
+   {
+      return ("RECORD".equals(target.targetType())
+         && !FieldAccessHelper.isRecordLabelFullAccess(QContext.getQInstance().getTable(target.targetName())) ? null : target.label());
    }
 
 

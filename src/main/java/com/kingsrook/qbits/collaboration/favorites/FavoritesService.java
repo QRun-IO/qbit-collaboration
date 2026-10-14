@@ -70,7 +70,7 @@ public final class FavoritesService
          .withOrderBy(new QFilterOrderBy("sortOrder", false)).withLimit(1));
       Integer order = last.isEmpty() ? 0 : Math.addExact(last.getFirst().getValueInteger("sortOrder"), 1);
       QRecord row = new QRecord().withValue("userId", userId).withValue("targetType", targetType).withValue("targetName", targetName)
-         .withValue("recordId", target.recordId()).withValue("label", target.label()).withValue("sortOrder", order);
+         .withValue("recordId", target.recordId()).withValue("label", TargetResolver.cacheableLabel(target)).withValue("sortOrder", order);
       try
       {
          PersonalRecords.insert(CollaborationTables.FAVORITE, row);
