@@ -57,6 +57,7 @@ public class CollaborationQBitConfig implements QBitConfig
    private List<String> assignActionTables = List.of();
    private String backendName;
    private String schedulerName;
+   private Boolean managedIndexes = true;
    private String appName = "collaboration";
    private String parentAppName;
    private Boolean adminApp = true;
@@ -628,5 +629,30 @@ public class CollaborationQBitConfig implements QBitConfig
    {
       mirroredSecurityKeyTypes = List.copyOf(types);
       return (this);
+   }
+
+   /*******************************************************************************
+    ** Whether the index job executes DDL or only records migration statements.
+    *******************************************************************************/
+   public Boolean getManagedIndexes()
+   {
+      return (managedIndexes);
+   }
+
+   /*******************************************************************************
+    ** Configure host-managed migrations instead of runtime index creation.
+    *******************************************************************************/
+   public CollaborationQBitConfig withManagedIndexes(Boolean managedIndexes)
+   {
+      this.managedIndexes = managedIndexes;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Bean configuration support.
+    *******************************************************************************/
+   public void setManagedIndexes(Boolean managedIndexes)
+   {
+      this.managedIndexes = managedIndexes;
    }
 }

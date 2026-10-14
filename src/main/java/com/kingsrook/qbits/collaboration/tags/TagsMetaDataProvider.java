@@ -21,7 +21,6 @@
 
 package com.kingsrook.qbits.collaboration.tags;
 
-import java.util.ArrayList;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.FeatureSettingsProvider;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
@@ -30,14 +29,11 @@ import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
-import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeatureOverride;
-import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RuntimeMetaDataContribution;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RuntimeTableMetaDataContribution;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QVirtualFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.Capability;
-import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 /*******************************************************************************
  ** Contribute the Tags filter and quick-search field without changing host hooks.
@@ -56,7 +52,7 @@ public class TagsMetaDataProvider implements RuntimeMetaDataProviderInterface
       {
          if(!table.getName().startsWith("collaboration_") && table.getPrimaryKeyField() != null
             && (table.isCapabilityEnabled(instance.getBackend(table.getBackendName()), Capability.TABLE_GET) || table.isCapabilityEnabled(instance.getBackend(table.getBackendName()), Capability.TABLE_QUERY))
-            && enabled(instance, table, overrides))
+            && FeatureSettingsProvider.enabled(instance, table, RecordFeature.TAGS, overrides))
          {
             contribution.getTables().put(table.getName(), new RuntimeTableMetaDataContribution()
                .withVirtualFields(List.of(new QVirtualFieldMetaData("collaborationTags", QFieldType.STRING).withLabel("Tags")
@@ -68,54 +64,4 @@ public class TagsMetaDataProvider implements RuntimeMetaDataProviderInterface
       return (contribution);
    }
 
-   /*******************************************************************************
-    ** Resolve TAGS against the incoming policy in core's instance/app/table order.
-    *******************************************************************************/
-   private boolean enabled(QInstance instance, QTableMetaData table, List<RecordFeatureOverride> overrides)
-   {
-      List<RecordFeaturesMetaData> levels = new ArrayList<>();
-      List<String> apps = new ArrayList<>();
-      levels.add(RecordFeaturesMetaData.of(instance));
-      if(instance.getApps() != null)
-      {
-         for(var app : instance.getApps().values())
-         {
-            if(app.getSections() != null && app.getSections().stream().anyMatch(section -> section.getTables() != null && section.getTables().contains(table.getName())))
-            {
-               levels.add(RecordFeaturesMetaData.of(app));
-               apps.add(app.getName());
-            }
-         }
-      }
-      levels.add(RecordFeaturesMetaData.of(table));
-      boolean enabled = false;
-      for(var level : levels)
-      {
-         if(level != null)
-         {
-            if(Boolean.FALSE.equals(level.getFeatureLocks().get(RecordFeature.TAGS)))
-            {
-               return (false);
-            }
-            enabled = level.getEnabled().getOrDefault(RecordFeature.TAGS, enabled);
-         }
-      }
-      for(var scope : RecordFeatureOverride.ScopeType.values())
-      {
-         List<String> scopes = scope == RecordFeatureOverride.ScopeType.APP ? apps : java.util.Collections.singletonList(scope == RecordFeatureOverride.ScopeType.TABLE ? table.getName() : null);
-         for(String scopeName : scopes)
-         {
-            for(var override : overrides)
-            {
-               if(override.getFeature() == RecordFeature.TAGS && override.getScopeType() == scope && override.getEnabled() != null
-                  && (scope == RecordFeatureOverride.ScopeType.INSTANCE || (scope == RecordFeatureOverride.ScopeType.APP && scopeName.equals(override.getScopeName()))
-                  || (scope == RecordFeatureOverride.ScopeType.TABLE && table.getName().equals(override.getScopeName()))))
-               {
-                  enabled = override.getEnabled();
-               }
-            }
-         }
-      }
-      return (enabled);
-   }
 }

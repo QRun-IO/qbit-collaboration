@@ -119,4 +119,16 @@ public final class CollaborationSchema
          default -> throw new IllegalArgumentException("Unsupported schema type: " + field.getType());
       });
    }
+
+   /*******************************************************************************
+    ** Host-owned one-time PostgreSQL migration; this helper never executes SQL.
+    *******************************************************************************/
+   public static String customFieldsDdl(String tableName)
+   {
+      String table = java.util.Arrays.stream(tableName.split("\\.")).map(com.kingsrook.qbits.collaboration.customfields.CustomFieldStorage::identifier)
+         .collect(java.util.stream.Collectors.joining("."));
+      String index = "cf_gin_" + Integer.toUnsignedString(tableName.hashCode(), 16);
+      return ("ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS qqq_custom_fields JSONB NOT NULL DEFAULT '{}';\n"
+         + "CREATE INDEX IF NOT EXISTS " + index + " ON " + table + " USING gin (qqq_custom_fields jsonb_path_ops);\n");
+   }
 }

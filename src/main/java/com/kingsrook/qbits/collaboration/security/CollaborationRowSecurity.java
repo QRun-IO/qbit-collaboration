@@ -55,7 +55,7 @@ public class CollaborationRowSecurity implements CustomPermissionChecker
          fields.addAll(java.util.List.of("id", "tableName", "recordId", "parentDeleted"));
          query.setFieldNamesToInclude(fields);
       }
-      if(!(metadata instanceof QTableMetaData table && table.getName().equals(CollaborationTables.RECORD_TAG)))
+      if(!(metadata instanceof QTableMetaData table && (table.getName().equals(CollaborationTables.RECORD_TAG) || table.getName().equals(CollaborationTables.FIELD_VALUE))))
       {
          new CollaborationPermissionChecker().checkPermissionsThrowing(input, metadata);
       }

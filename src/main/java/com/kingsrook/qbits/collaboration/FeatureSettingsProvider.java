@@ -35,6 +35,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.FeaturePermissionMode;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeatureOverride;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 /*******************************************************************************
  ** Read persisted feature policy during core overlay refresh.
@@ -71,5 +73,56 @@ public class FeatureSettingsProvider implements RecordFeatureOverrideProviderInt
          }
       }
       return (result);
+   }
+
+   /*******************************************************************************
+    ** Resolve a feature against the incoming policy in core's instance/app/table order.
+    *******************************************************************************/
+   public static boolean enabled(QInstance instance, QTableMetaData table, RecordFeature feature, List<RecordFeatureOverride> overrides)
+   {
+      List<RecordFeaturesMetaData> levels = new ArrayList<>();
+      List<String> apps = new ArrayList<>();
+      levels.add(RecordFeaturesMetaData.of(instance));
+      if(instance.getApps() != null)
+      {
+         for(var app : instance.getApps().values())
+         {
+            if(app.getSections() != null && app.getSections().stream().anyMatch(section -> section.getTables() != null && section.getTables().contains(table.getName())))
+            {
+               levels.add(RecordFeaturesMetaData.of(app));
+               apps.add(app.getName());
+            }
+         }
+      }
+      levels.add(RecordFeaturesMetaData.of(table));
+      boolean enabled = false;
+      for(var level : levels)
+      {
+         if(level != null)
+         {
+            if(Boolean.FALSE.equals(level.getFeatureLocks().get(feature)))
+            {
+               return (false);
+            }
+            enabled = level.getEnabled().getOrDefault(feature, enabled);
+         }
+      }
+      for(var scope : RecordFeatureOverride.ScopeType.values())
+      {
+         List<String> scopes = scope == RecordFeatureOverride.ScopeType.APP ? apps : java.util.Collections.singletonList(scope == RecordFeatureOverride.ScopeType.TABLE ? table.getName() : null);
+         for(String scopeName : scopes)
+         {
+            for(var override : overrides)
+            {
+               if(override.getFeature() == feature && override.getScopeType() == scope && override.getEnabled() != null
+                  && (scope == RecordFeatureOverride.ScopeType.INSTANCE || (scope == RecordFeatureOverride.ScopeType.APP && scopeName.equals(override.getScopeName()))
+                  || (scope == RecordFeatureOverride.ScopeType.TABLE && table.getName().equals(override.getScopeName()))))
+               {
+                  enabled = override.getEnabled();
+               }
+            }
+         }
+      }
+      return (enabled);
    }
 }

@@ -42,7 +42,7 @@ public class CollaborationCleanup implements RecordReferenceCleanupInterface
    public void onParentsDeleted(String tableName, List<Serializable> primaryKeys) throws QException
    {
       new AttachmentCleanup().onParentsDeleted(tableName, primaryKeys);
-      for(String table : List.of(CollaborationTables.COMMENT_REVISION, CollaborationTables.MENTION, CollaborationTables.COMMENT,
+      for(String table : List.of(CollaborationTables.FIELD_VALUE, CollaborationTables.COMMENT_REVISION, CollaborationTables.MENTION, CollaborationTables.COMMENT,
          CollaborationTables.FOLLOW_DIGEST, CollaborationTables.FOLLOW, CollaborationTables.ACTIVITY))
       {
          while(true)

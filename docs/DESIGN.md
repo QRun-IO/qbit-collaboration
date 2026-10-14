@@ -126,3 +126,39 @@ Feature writes refresh the overlay after commit. Initial loading follows core's 
 `CollaborationWorkSchemas` and endpoint specs expose sharing, access requests, tasks, assignment and My work; the README and generated OpenAPI contain the route list. Task PATCH validates before writing and preserves omitted fields. Access requests never inspect parent existence. Contract version remains unreleased 1.0.0.
 
 `CollaborationRealtime` merges stored references for partial updates, captures immutable identifier payloads and publishes after commit. Notification hints follow actual delivery. Rollback discards callbacks. Bus failure is best-effort and does not fail a committed write.
+
+
+## Custom fields and presence
+
+`CustomFieldsProvider` contributes ACTIVE definitions through core's runtime overlay. Tags and
+custom fields share incoming feature-policy resolution, so a persisted setting takes effect in
+the same refresh. FIELD-audited definitions enforce management permissions and lifecycle rules
+on both direct writes and streamed actions. Numeric range behavior is added only when a bound
+exists. Classification stays in core AiFieldMetaData. Select option ids are stable across label
+changes, with parameterized PostgreSQL containment checks before removing active options.
+
+Storage availability is cached per instance/table. Memory needs no schema; PostgreSQL uses a
+zero-row probe through the backend connection provider. Failure installs a visible read-only
+EAV filter instead of a broken JSON field. Typed subqueries retain parent permissions/locks;
+EAV values are neither projected nor written by this PR. The child table declares core reference
+security and participates in parent cleanup. MULTI_SELECT is a JSON-array scalar string until
+core adds native array storage/filter contracts.
+
+Index building is separate from overlay construction. Concurrent DDL runs through independent
+autocommit connections and records its statement/state/error on the definition. A no-DDL option
+records migration statements only. No column/table DDL runs during refresh. JDBC-boundary tests
+cover probe caching, option containment, autocommit and failure reporting. Live PostgreSQL
+acceptance remains necessary for host index expressions, especially temporal casts.
+
+Presence is the only non-table state. Pods subscribe at initial overlay refresh and keep bounded
+user/connection/target leases. `instance:presence` is denied by core's client channel authorizer.
+State mutation and bus publication occur outside each other's monitor, preventing deadlock on
+synchronous bus fan-out. Wire data uses transport-safe maps. Record focus stays on record
+channels; table events omit pk and fieldName. Each HTTP request rechecks parent visibility and
+PRESENCE; session identity is authoritative and the directory is never touched. Hosts close the
+registry before the core bus.
+
+Limits: EAV writes/projection, native multi-select operations, automatic cross-pod metadata
+refresh, replacing existing index definitions, and live PostgreSQL acceptance are not provided.
+The no-DDL option does not infer whether an external migration has run. Presence relies on a
+trusted instance bus and best-effort delivery; renewed heartbeats restore state after outages.

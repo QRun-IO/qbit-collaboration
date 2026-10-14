@@ -41,6 +41,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 public final class CoreCollaboration
 {
    private static final Map<String, RecordFeature> REFERENCES = Map.ofEntries(
+      Map.entry(CollaborationTables.FIELD_VALUE, RecordFeature.CUSTOM_FIELDS),
       Map.entry(CollaborationTables.ATTACHMENT, RecordFeature.ATTACHMENTS),
       Map.entry(CollaborationTables.RECORD_TAG, RecordFeature.TAGS),
       Map.entry(CollaborationTables.COMMENT, RecordFeature.COMMENTS),
@@ -69,6 +70,7 @@ public final class CoreCollaboration
       var features = RecordFeaturesMetaData.ofOrWithNew(instance);
       features.withOverrideProvider(new QCodeReference(FeatureSettingsProvider.class));
       features.getRuntimeProviders().add(new QCodeReference(com.kingsrook.qbits.collaboration.tags.TagsMetaDataProvider.class));
+      features.getRuntimeProviders().add(new QCodeReference(com.kingsrook.qbits.collaboration.customfields.CustomFieldsProvider.class));
       features.getSummaryProviders().add(new QCodeReference(CollaborationSummaryProvider.class));
       var security = RecordReferenceSecurityConfig.ofOrWithNew(instance).withMirroredSecurityKeyTypes(config.getMirroredSecurityKeyTypes());
       security.getCleanupProviders().add(new QCodeReference(CollaborationCleanup.class));
