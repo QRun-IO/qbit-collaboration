@@ -507,8 +507,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       assertThat(sql).contains("ON collaboration_comment (table_name, record_id, create_date)", "ON collaboration_follow_digest (due_at)");
       comments.post("document", 1, "home", null, null);
       admin();
-      String html = com.kingsrook.qbits.collaboration.app.CollaborationHome.render(Instant.now().plusSeconds(1));
-      assertThat(html).contains("Comments this week</h3><p>1", "Open threads</h3><p>1", "Followers</h3><p>1");
+      assertThat(HomeWidgetData.stats(Instant.now().plusSeconds(1))).containsEntry("Comments this week", 1).containsEntry("Open threads", 1);
       assertThatThrownBy(() -> config.withFollowActionTables(List.of("missing")).validate(instance)).hasMessageContaining("host table");
    }
 

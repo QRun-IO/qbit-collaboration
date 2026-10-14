@@ -22,7 +22,6 @@
 package com.kingsrook.qbits.collaboration;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -311,9 +310,11 @@ public class TagsServiceTest extends PersonalServiceFixture
       QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("b"));
       assertThat(new QueryAction().execute(new QueryInput(CollaborationTables.RECORD_TAG)).getRecords()).isEmpty();
       login("manager", "collaboration.admin", TagsService.MANAGE);
-      String html = CollaborationHome.render(Instant.now());
-      assertThat(html).contains("Vocabulary size: 2", "Pending suggestions: 1", "&lt;Urgent&gt;: 1");
-      assertThat(html).doesNotContain("<Urgent>");
+      var home = CollaborationHome.tags();
+      assertThat(home.getRows()).hasSize(2);
+      assertThat(home.getRows().getFirst()).containsEntry("label", "<Urgent>").containsEntry("table", "Documents").containsEntry("records", 1);
+      assertThat(home.getRows().getLast()).containsEntry("records", 0);
+      assertThat(home.getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_TAGS);
    }
 
    /*******************************************************************************

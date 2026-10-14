@@ -4,6 +4,11 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Fixed
+
+- Tag filters accept tag ids as any JSON number or numeric string; other strings remain names.
+- Collaboration home rebuilt from standard KPI and table widgets with empty states; the demo Admin parent app is reachable so Collaboration appears in the app tree.
+
 - Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
 
 ### Added

@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.assignment.AssignmentService;
 import com.kingsrook.qbits.collaboration.comments.CommentsService;
 import com.kingsrook.qbits.collaboration.follow.FollowService;
@@ -510,8 +509,7 @@ public class SharingWorkTest extends PersonalServiceFixture
       sharing.share("document", 1, List.of("bob"), null);
       access.request("document", 999, null, null);
       admin();
-      String html = CollaborationHome.render(Instant.now().plusSeconds(5));
-      assertThat(html).contains("Open access requests</h3><p>1", "Open tasks</h3><p>1", "Overdue tasks</h3><p>1", "Shares this week</h3><p>1");
+      assertThat(HomeWidgetData.stats(Instant.now().plusSeconds(5))).containsEntry("Open access requests", 1).containsEntry("Open tasks", 1).containsEntry("Overdue tasks", 1);
       assertThat(SendTaskRemindersProcess.metadata(config).getIsHidden()).isTrue();
       assertThat(SendTaskRemindersProcess.metadata(config).getSchedule()).isNull();
       assertThat(SendTaskRemindersProcess.metadata(config.withSchedulerName("clock")).getSchedule().getRepeatSeconds()).isEqualTo(60);
