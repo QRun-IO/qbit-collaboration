@@ -58,11 +58,13 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
 
 
 /*******************************************************************************
- ** Visible Collaboration tables. Enum ids are phase-a stand-ins for the core
+ ** Visible Collaboration tables. Enum ids use the names of the core
  ** collaboration enums; replace them when those contracts are released.
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String FIELD_DEFINITION = "collaboration_field_definition";
+   public static final String FIELD_VALUE = "collaboration_field_value";
    public static final String SCOPE_NAME = "collaboration_scope_name";
    public static final String RECORD_FIELD_NAME = "collaboration_record_field_name";
    public static final String SHARE = "collaboration_share";
@@ -104,6 +106,16 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         QPossibleValueSource.newForTable(FIELD_DEFINITION), QPossibleValueSource.newForTable(FIELD_VALUE),
+         enumSource("collaboration_field_type", "STRING", "TEXT", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "DATE_TIME", "SELECT", "MULTI_SELECT", "USER", "RECORD_LINK"),
+         enumSource("collaboration_field_status", "DRAFT", "ACTIVE", "ARCHIVED"),
+         enumSource("collaboration_field_index_state", "NONE", "BUILDING", "READY", "FAILED"),
+         enumSource("collaboration_field_classification", "PUBLIC", "CONFIDENTIAL", "PII", "PHI"),
+         new QPossibleValueSource().withName("collaboration_custom_field_tables").withType(QPossibleValueSourceType.CUSTOM).withIdType(QFieldType.STRING)
+            .withCustomCodeReference(new QCodeReference(com.kingsrook.qbits.collaboration.customfields.CustomFieldTablesProvider.class)),
+
+
+
          new QPossibleValueSource().withName(SCOPE_NAME).withType(QPossibleValueSourceType.CUSTOM)
             .withCustomCodeReference(new QCodeReference(FeatureScopeNamePossibleValueProvider.class)),
          new QPossibleValueSource().withName(RECORD_FIELD_NAME).withType(QPossibleValueSourceType.CUSTOM)
@@ -120,7 +132,7 @@ public final class CollaborationTables
          enumSource(FEATURE, "ATTACHMENTS", "TAGS", "CUSTOM_FIELDS", "COMMENTS", "PRESENCE", "SHARING",
             "FAVORITES", "FOLLOW", "TIMELINE", "RECENTS", "TASKS", "ASSIGNMENT"),
          enumSource(PERMISSION_MODE, "EDIT_OR_GRANTED", "GRANTED_ONLY"),
-         QPossibleValueSource.newForTable(FEATURE_SETTING), QPossibleValueSource.newForTable(USER)));
+         QPossibleValueSource.newForTable(FEATURE_SETTING), QPossibleValueSource.newForTable(USER).withOverrideIdField("userId")));
    }
 
 
@@ -159,6 +171,9 @@ public final class CollaborationTables
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
          .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "scopeType", "scopeName", "feature")).withLabel("Identity"))
          .withSection(new QFieldSection("details", new QIcon("settings"), Tier.T2, List.of("enabled", "settings", "permissionMode")).withLabel("Details"));
+      settings.withCustomizer(TableCustomizers.POST_INSERT_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class))
+         .withCustomizer(TableCustomizers.POST_UPDATE_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class))
+         .withCustomizer(TableCustomizers.POST_DELETE_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.FeatureSettingsCustomizer.class));
       QTableMetaData people = base(config, USER, "People", "people")
          .withRecordLabelFormatAndFields("%s", "displayName")
          .withField(string("userId", "User ID", 255).withIsRequired(true))
@@ -186,9 +201,11 @@ public final class CollaborationTables
       tables.addAll(conversationTables(config));
       tables.addAll(tagTables(config));
       tables.addAll(workTables(config));
+      tables.addAll(customFieldTables(config));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
+         com.kingsrook.qbits.collaboration.CoreCollaboration.reference(table, config);
          QInstanceEnricher.setInferredFieldBackendNames(table);
       }
       return (tables);
@@ -222,7 +239,7 @@ public final class CollaborationTables
          .withRecordSecurityLock(CollaborationSecurity.ownerLock("userId"))
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.NONE))
          .withRecordLabelFormatAndFields("%s", "label")
-         .withField(string("userId", "User ID", 255).withIsRequired(true))
+         .withField(user("userId", "User ID").withIsRequired(true))
          .withField(string("targetType", "Target Type", 20).withIsRequired(true).withPossibleValueSourceName(TARGET_TYPE))
          .withField(string("targetName", "Target Name", 255).withIsRequired(true))
          .withField(string("recordId", "Record ID", 255))
@@ -232,6 +249,15 @@ public final class CollaborationTables
             List.of("id", "userId", "targetType", "targetName", "recordId")).withLabel("Identity")));
    }
 
+
+
+   /*******************************************************************************
+    ** A user-id string shown by display name wherever the table is browsed.
+    *******************************************************************************/
+   private static QFieldMetaData user(String name, String label)
+   {
+      return (string(name, label, 255).withPossibleValueSourceName(USER));
+   }
 
 
    /*******************************************************************************
@@ -263,7 +289,7 @@ public final class CollaborationTables
          .withField(string("storageKey", "Storage Key", 1024).withIsRequired(true))
          .withField(string("thumbnailKey", "Thumbnail Key", 1024))
          .withField(new QFieldMetaData("description", QFieldType.TEXT).withLabel("Description"))
-         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withField(user("createdByUserId", "Created By").withIsRequired(true))
          .withField(new QFieldMetaData("parentDeleted", QFieldType.BOOLEAN).withLabel("Parent Deleted").withIsRequired(true).withDefaultValue(false))
          .withVirtualField(new QVirtualFieldMetaData("previewUrl", QFieldType.STRING).withLabel("Preview").withIsEditable(false).withIsQuerySelectable(true)
             .withFieldAdornment(AdornmentType.FilePreviewValues.newFieldAdornment()
@@ -305,28 +331,28 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("body", QFieldType.TEXT).withMaxLength(20000))
          // TODO: add .withDependsOn("tableName") when QQQ core ships contingent dependsOn (docs/CONTINGENT-POSSIBLE-VALUES.md)
          .withField(string("fieldName", "Field", 128).withPossibleValueSourceName(RECORD_FIELD_NAME))
-         .withField(string("authorUserId", "Author", 255).withIsRequired(true))
+         .withField(user("authorUserId", "Author").withIsRequired(true))
          .withField(new QFieldMetaData("lastActivityAt", QFieldType.DATE_TIME).withIsRequired(true))
          .withField(new QFieldMetaData("editedAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("resolvedAt", QFieldType.DATE_TIME))
-         .withField(string("resolvedByUserId", "Resolved By", 255))
+         .withField(user("resolvedByUserId", "Resolved By"))
          .withField(new QFieldMetaData("deletedAt", QFieldType.DATE_TIME))
-         .withField(string("deletedByUserId", "Deleted By", 255))
+         .withField(user("deletedByUserId", "Deleted By"))
          .withRecordLabelFormatAndFields("Comment %s", "id");
       QTableMetaData revisions = referenced(config, COMMENT_REVISION, "Comment History", "history")
          .withField(new QFieldMetaData("commentId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(COMMENT))
          .withField(new QFieldMetaData("body", QFieldType.TEXT))
          .withField(new QFieldMetaData("editedAt", QFieldType.DATE_TIME).withIsRequired(true))
-         .withField(string("editedByUserId", "Edited By", 255));
+         .withField(user("editedByUserId", "Edited By"));
       QTableMetaData mentions = referenced(config, MENTION, "Mentions", "alternate_email")
          .withField(new QFieldMetaData("commentId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(COMMENT))
-         .withField(string("mentionedUserId", "Mentioned User", 255).withIsRequired(true))
+         .withField(user("mentionedUserId", "Mentioned User").withIsRequired(true))
          .withField(new QFieldMetaData("visible", QFieldType.BOOLEAN).withIsRequired(true))
          .withField(new QFieldMetaData("readAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("notifiedAt", QFieldType.DATE_TIME))
          .withUniqueKey(new UniqueKey("commentId", "mentionedUserId"));
       QTableMetaData follows = referenced(config, FOLLOW, "Followers", "notifications")
-         .withField(string("userId", "User", 255).withIsRequired(true))
+         .withField(user("userId", "User").withIsRequired(true))
          .withField(string("reason", "Reason", 32).withIsRequired(true))
          .withField(new QFieldMetaData("notifyOnChange", QFieldType.BOOLEAN).withIsRequired(true))
          .withField(new QFieldMetaData("notifyOnComment", QFieldType.BOOLEAN).withIsRequired(true))
@@ -336,13 +362,13 @@ public final class CollaborationTables
          .withoutCapabilities(com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_INSERT,
             com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_UPDATE, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_DELETE)
          .withField(new QFieldMetaData("at", QFieldType.DATE_TIME).withIsRequired(true))
-         .withField(string("actorUserId", "Actor", 255))
+         .withField(user("actorUserId", "Actor"))
          .withField(string("type", "Type", 64).withIsRequired(true))
          .withField(new QFieldMetaData("summary", QFieldType.TEXT))
          .withField(string("refTableName", "Reference Table", 128))
          .withField(string("refId", "Reference ID", 64));
       QTableMetaData digests = referenced(config, FOLLOW_DIGEST, "Follow Digests", "notifications")
-         .withField(string("userId", "Recipient", 255).withIsRequired(true))
+         .withField(user("userId", "Recipient").withIsRequired(true))
          .withField(new QFieldMetaData("dueAt", QFieldType.DATE_TIME).withIsRequired(true))
          .withField(new QFieldMetaData("changes", QFieldType.TEXT))
          .withUniqueKey(new UniqueKey("tableName", "recordId", "userId"));
@@ -394,15 +420,17 @@ public final class CollaborationTables
          .withField(string("tableName", "Table", 128))
          .withField(new QFieldMetaData("approved", QFieldType.BOOLEAN).withIsRequired(true))
          .withField(new QFieldMetaData("description", QFieldType.TEXT))
-         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withField(user("createdByUserId", "Created By").withIsRequired(true))
          .withField(new QFieldMetaData("usageCount", QFieldType.INTEGER).withIsRequired(true).withDefaultValue(0))
          .withField(new QFieldMetaData("mergedIntoTagId", QFieldType.INTEGER).withPossibleValueSourceName(TAG))
          .withUniqueKey(new UniqueKey("tableName", "name"))
          .withSection(new QFieldSection("details", new QIcon("label"), Tier.T1,
             List.of("id", "name", "label", "color", "tableName", "approved", "description", "createdByUserId", "usageCount", "mergedIntoTagId")).withLabel("Details"));
       QTableMetaData links = referenced(config, RECORD_TAG, "Record Tags", "label")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.security.CollaborationRowSecurity.class)))
          .withField(new QFieldMetaData("tagId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(TAG))
-         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true))
+         .withField(user("createdByUserId", "Created By").withIsRequired(true))
          .withUniqueKey(new UniqueKey("tableName", "recordId", "tagId"))
          .withSection(new QFieldSection("details", new QIcon("label"), Tier.T1, List.of("id", "tagId", "createdByUserId")).withLabel("Details"));
       for(QTableMetaData table : List.of(tags, links))
@@ -418,8 +446,8 @@ public final class CollaborationTables
    private static List<QTableMetaData> workTables(CollaborationQBitConfig config)
    {
       QTableMetaData shares = referenced(config, SHARE, "Shares", "share")
-         .withField(string("fromUserId", "From", 255).withIsRequired(true))
-         .withField(string("toUserId", "To", 255).withIsRequired(true))
+         .withField(user("fromUserId", "From").withIsRequired(true))
+         .withField(user("toUserId", "To").withIsRequired(true))
          .withField(new QFieldMetaData("message", QFieldType.TEXT).withMaxLength(2000))
          .withField(new QFieldMetaData("recipientCouldRead", QFieldType.BOOLEAN))
          .withField(new QFieldMetaData("sentAt", QFieldType.DATE_TIME).withIsRequired(true))
@@ -432,29 +460,29 @@ public final class CollaborationTables
          .withRecordLabelFormatAndFields("Access request %s", "id")
          .withField(string("tableName", "Table", 128).withIsRequired(true))
          .withField(string("recordId", "Record ID", 64).withIsRequired(true))
-         .withField(string("requesterUserId", "Requester", 255).withIsRequired(true))
+         .withField(user("requesterUserId", "Requester").withIsRequired(true))
          .withField(new QFieldMetaData("shareId", QFieldType.INTEGER))
          .withField(new QFieldMetaData("message", QFieldType.TEXT).withMaxLength(2000))
          .withField(string("status", "Status", 20).withIsRequired(true).withPossibleValueSourceName("collaboration_access_request_status"))
-         .withField(string("handledByUserId", "Handled By", 255))
+         .withField(user("handledByUserId", "Handled By"))
          .withField(new QFieldMetaData("handledAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("note", QFieldType.TEXT).withMaxLength(2000));
       QTableMetaData tasks = referenced(config, TASK, "Tasks", "task_alt")
          .withRecordLabelFormatAndFields("%s", "title").withSearchFields(List.of("title"))
          .withField(string("title", "Title", 200).withIsRequired(true))
          .withField(new QFieldMetaData("notes", QFieldType.TEXT))
-         .withField(string("assigneeUserId", "Assignee", 255))
+         .withField(user("assigneeUserId", "Assignee"))
          .withField(new QFieldMetaData("dueAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("remindAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("remindedAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("overdueNotifiedAt", QFieldType.DATE_TIME))
          .withField(string("status", "Status", 20).withIsRequired(true).withPossibleValueSourceName("collaboration_task_status"))
          .withField(new QFieldMetaData("completedAt", QFieldType.DATE_TIME))
-         .withField(string("completedByUserId", "Completed By", 255))
-         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true));
+         .withField(user("completedByUserId", "Completed By"))
+         .withField(user("createdByUserId", "Created By").withIsRequired(true));
       QTableMetaData assignments = referenced(config, RECORD_ASSIGNMENT, "Record Owners", "assignment_ind")
-         .withField(string("ownerUserId", "Owner", 255))
-         .withField(string("assigneeUserId", "Assignee", 255))
+         .withField(user("ownerUserId", "Owner"))
+         .withField(user("assigneeUserId", "Assignee"))
          .withUniqueKey(new UniqueKey("tableName", "recordId"));
       List<QTableMetaData> tables = List.of(shares, requests, tasks, assignments);
       for(QTableMetaData table : tables)
@@ -466,5 +494,64 @@ public final class CollaborationTables
          table.getFields().values().forEach(field -> field.setIsEditable(false));
       }
       return (tables);
+   }
+
+   /*******************************************************************************
+    ** The designer is an ordinary audited table; fallback values are children.
+    *******************************************************************************/
+   private static List<QTableMetaData> customFieldTables(CollaborationQBitConfig config)
+   {
+      QTableMetaData definitions = base(config, FIELD_DEFINITION, "Custom Fields", "input")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.customfields.FieldSecurity.class)))
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+         .withRecordLabelFormatAndFields("%s: %s", "tableName", "label")
+         .withField(string("tableName", "Table", 128).withIsRequired(true).withPossibleValueSourceName("collaboration_custom_field_tables"))
+         .withField(string("name", "Name", 41).withIsRequired(true))
+         .withField(string("label", "Label", 255).withIsRequired(true))
+         .withField(string("type", "Type", 32).withIsRequired(true).withPossibleValueSourceName("collaboration_field_type"))
+         .withField(new QFieldMetaData("options", QFieldType.TEXT).withLabel("Options (JSON)"))
+         .withField(string("linkTableName", "Link table", 128))
+         .withField(new QFieldMetaData("required", QFieldType.BOOLEAN).withDefaultValue(false))
+         .withField(new QFieldMetaData("defaultValue", QFieldType.TEXT))
+         .withField(new QFieldMetaData("minValue", QFieldType.DECIMAL))
+         .withField(new QFieldMetaData("maxValue", QFieldType.DECIMAL))
+         .withField(new QFieldMetaData("maxLength", QFieldType.INTEGER))
+         .withField(new QFieldMetaData("helpText", QFieldType.TEXT))
+         .withField(string("sectionName", "Section", 128))
+         .withField(new QFieldMetaData("sortOrder", QFieldType.INTEGER).withDefaultValue(0))
+         .withField(new QFieldMetaData("filterable", QFieldType.BOOLEAN).withDefaultValue(false))
+         .withField(new QFieldMetaData("searchable", QFieldType.BOOLEAN).withDefaultValue(false))
+         .withField(string("classification", "Classification", 32).withPossibleValueSourceName("collaboration_field_classification"))
+         .withField(string("status", "Status", 16).withDefaultValue("DRAFT").withIsRequired(true).withIsEditable(false).withPossibleValueSourceName("collaboration_field_status"))
+         .withField(string("indexState", "Index state", 16).withDefaultValue("NONE").withIsEditable(false).withPossibleValueSourceName("collaboration_field_index_state"))
+         .withField(string("storage", "Storage", 16).withIsEditable(false))
+         .withField(new QFieldMetaData("statusMessage", QFieldType.TEXT).withIsEditable(false))
+         .withField(new QFieldMetaData("indexDdl", QFieldType.TEXT).withLabel("Index DDL").withIsEditable(false))
+         .withField(user("createdByUserId", "Created by").withIsEditable(false))
+         .withUniqueKey(new UniqueKey("tableName", "name"));
+      QCodeReference customizer = new QCodeReference(com.kingsrook.qbits.collaboration.customfields.FieldDefinitionCustomizer.class);
+      definitions.withCustomizer(TableCustomizers.PRE_INSERT_RECORD, customizer).withCustomizer(TableCustomizers.PRE_UPDATE_RECORD, customizer)
+         .withCustomizer(TableCustomizers.PRE_DELETE_RECORD, customizer)
+         .withCustomizer(TableCustomizers.POST_INSERT_RECORD, customizer).withCustomizer(TableCustomizers.POST_UPDATE_RECORD, customizer)
+         .withCustomizer(TableCustomizers.POST_DELETE_RECORD, customizer)
+         .withSection(new QFieldSection("definition", new QIcon("input"), Tier.T1,
+            List.of("id", "tableName", "name", "label", "type", "status", "classification")).withLabel("Definition"))
+         .withSection(new QFieldSection("settings", new QIcon("settings"), Tier.T2,
+            List.of("options", "linkTableName", "required", "defaultValue", "minValue", "maxValue", "maxLength", "helpText", "sectionName", "sortOrder", "filterable", "searchable")).withLabel("Settings"))
+         .withSection(new QFieldSection("storage", new QIcon("storage"), Tier.T2,
+            List.of("storage", "indexState", "statusMessage", "indexDdl", "createdByUserId")).withLabel("Storage and indexes"));
+      QTableMetaData values = referenced(config, FIELD_VALUE, "Custom Field Values", "input")
+         .withField(string("fieldName", "Field name", 41).withIsRequired(true))
+         .withField(new QFieldMetaData("valueText", QFieldType.TEXT))
+         .withField(new QFieldMetaData("valueNumber", QFieldType.DECIMAL))
+         .withField(new QFieldMetaData("valueDate", QFieldType.DATE))
+         .withField(new QFieldMetaData("valueDateTime", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("valueBoolean", QFieldType.BOOLEAN))
+         .withUniqueKey(new UniqueKey("tableName", "recordId", "fieldName"))
+         .withSection(new QFieldSection("value", new QIcon("input"), Tier.T1,
+            List.of("id", "fieldName", "valueText", "valueNumber", "valueDate", "valueDateTime", "valueBoolean")).withLabel("Value"));
+      values.getFields().values().forEach(field -> field.setIsEditable(false));
+      return (List.of(definitions, values));
    }
 }

@@ -22,7 +22,6 @@
 package com.kingsrook.qbits.collaboration;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +29,7 @@ import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentCleanup;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.tags.TagEntry;
-import com.kingsrook.qbits.collaboration.tags.TagFilterTranslator;
+
 import com.kingsrook.qbits.collaboration.tags.TagProcesses;
 import com.kingsrook.qbits.collaboration.tags.TagsService;
 import com.kingsrook.qqq.backend.core.actions.processes.RunProcessAction;
@@ -72,7 +71,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class TagsServiceTest extends PersonalServiceFixture
 {
    private final TagsService tags = new TagsService();
-   private final TagFilterTranslator filters = new TagFilterTranslator();
+
 
    /*******************************************************************************
     ** Natural keys are locale-independent and validate after collapsing whitespace.
@@ -257,23 +256,23 @@ public class TagsServiceTest extends PersonalServiceFixture
       TagEntry b = tags.create("document", "B", null);
       tags.apply("document", 1, List.of(a.id(), b.id()), List.of());
       tags.apply("document", 2, List.of(a.id()), List.of());
-      assertThat(filters.recordIds("document", "IN", List.of("A"))).containsExactly("1", "2");
-      assertThat(filters.recordIds("document", "IN", List.of(b.id()))).containsExactly("1");
-      assertThat(filters.recordIds("document", "CONTAINS_ALL", List.of(a.id(), b.id(), a.id()))).containsExactly("1");
-      assertThat(filters.recordIds("document", "CONTAINS_ALL", List.of(a.id(), "unknown"))).isEmpty();
-      assertThat(filters.recordIds("document", "NOT_IN", List.of(b.id()))).containsExactly("2");
-      assertThat(filters.recordIds("document", "IS_NOT_BLANK", null)).containsExactly("1", "2");
-      assertThat(filters.recordIds("document", "IS_BLANK", null)).isEmpty();
+      assertThat(recordIds("document", "IN", List.of("A"))).containsExactly("1", "2");
+      assertThat(recordIds("document", "IN", List.of(b.id()))).containsExactly("1");
+      assertThat(recordIds("document", "CONTAINS_ALL", List.of(a.id(), b.id(), a.id()))).containsExactly("1");
+      assertThat(recordIds("document", "CONTAINS_ALL", List.of(a.id(), "unknown"))).isEmpty();
+      assertThat(recordIds("document", "NOT_IN", List.of(b.id()))).containsExactly("2");
+      assertThat(recordIds("document", "IS_NOT_BLANK", null)).containsExactly("1", "2");
+      assertThat(recordIds("document", "IS_BLANK", null)).isEmpty();
       tags.apply("document", 2, List.of(), List.of(a.id()));
-      assertThat(filters.recordIds("document", "IS_BLANK", List.of())).containsExactly("2");
-      assertThat(filters.recordIds("document", "IN", List.of())).isEmpty();
-      assertThat(filters.recordIds("document", "NOT_IN", List.of("unknown"))).containsExactly("1", "2");
-      assertThat(filters.recordIds("document", "CONTAINS_ALL", List.of())).containsExactly("1", "2");
-      assertThatThrownBy(() -> filters.recordIds("document", "LIKE", List.of())).hasMessageContaining("Unsupported");
+      assertThat(recordIds("document", "IS_BLANK", List.of())).containsExactly("2");
+      assertThat(recordIds("document", "IN", List.of())).isEmpty();
+      assertThat(recordIds("document", "NOT_IN", List.of("unknown"))).containsExactly("1", "2");
+      assertThat(recordIds("document", "CONTAINS_ALL", List.of())).containsExactly("1", "2");
+      assertThatThrownBy(() -> recordIds("document", "LIKE", List.of())).hasMessageContaining("Unsupported");
    }
 
    /*******************************************************************************
-    ** Exactly 10,000 is allowed; the next matching id fails instead of truncating.
+    ** The core bound applies to subquery rows, not the number of matching parents.
     *******************************************************************************/
    @Test
    void translatorCap() throws Exception
@@ -284,9 +283,9 @@ public class TagsServiceTest extends PersonalServiceFixture
          parents.add(new QRecord().withValue("id", id).withValue("tenant", "a"));
       }
       new InsertAction().execute(new InsertInput("document").withRecords(parents));
-      assertThat(filters.recordIds("document", "IS_BLANK", null)).hasSize(10000);
+      assertThat(recordIds("document", "IS_BLANK", null)).hasSize(10000);
       new InsertAction().execute(new InsertInput("document").withRecords(List.of(new QRecord().withValue("id", 10002).withValue("tenant", "a"))));
-      assertThatThrownBy(() -> filters.recordIds("document", "IS_BLANK", null)).hasMessageContaining("10,000");
+      assertThat(recordIds("document", "IS_BLANK", null)).hasSize(10001);
    }
 
    /*******************************************************************************
@@ -311,9 +310,11 @@ public class TagsServiceTest extends PersonalServiceFixture
       QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("b"));
       assertThat(new QueryAction().execute(new QueryInput(CollaborationTables.RECORD_TAG)).getRecords()).isEmpty();
       login("manager", "collaboration.admin", TagsService.MANAGE);
-      String html = CollaborationHome.render(Instant.now());
-      assertThat(html).contains("Vocabulary size: 2", "Pending suggestions: 1", "&lt;Urgent&gt;: 1");
-      assertThat(html).doesNotContain("<Urgent>");
+      var home = CollaborationHome.tags();
+      assertThat(home.getRows()).hasSize(2);
+      assertThat(home.getRows().getFirst()).containsEntry("label", "<Urgent>").containsEntry("table", "Documents").containsEntry("records", 1);
+      assertThat(home.getRows().getLast()).containsEntry("records", 0);
+      assertThat(home.getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_TAGS);
    }
 
    /*******************************************************************************
@@ -444,5 +445,55 @@ public class TagsServiceTest extends PersonalServiceFixture
    private List<ProcessSummaryLine> lines(RunProcessOutput output, boolean result)
    {
       return ((List<ProcessSummaryLine>) output.getValues().get(result ? StreamedETLWithFrontendProcess.FIELD_PROCESS_SUMMARY : StreamedETLWithFrontendProcess.FIELD_VALIDATION_SUMMARY));
+   }
+   /*******************************************************************************
+    ** JSON clients send ids as Integer, Long, BigDecimal or String; all select by id.
+    *******************************************************************************/
+   @Test
+   void translatorAcceptsEveryIdRepresentation() throws Exception
+   {
+      TagEntry a = tags.create("document", "A", null);
+      TagEntry b = tags.create("document", "B", null);
+      TagEntry numeric = tags.create("document", "77", null);
+      tags.apply("document", 1, List.of(a.id(), b.id()), List.of());
+      tags.apply("document", 2, List.of(a.id()), List.of());
+      for(java.io.Serializable idA : List.<java.io.Serializable>of(a.id(), Long.valueOf(a.id()), new java.math.BigDecimal(a.id()), String.valueOf(a.id())))
+      {
+         assertThat(recordIds("document", "IN", List.of(idA))).containsExactly("1", "2");
+         assertThat(recordIds("document", "EQUALS", List.of(idA))).containsExactly("1", "2");
+         assertThat(recordIds("document", "NOT_IN", List.of(idA))).isEmpty();
+      }
+      for(java.io.Serializable idB : List.<java.io.Serializable>of(b.id(), Long.valueOf(b.id()), new java.math.BigDecimal(b.id()), String.valueOf(b.id())))
+      {
+         assertThat(recordIds("document", "IN", List.of(idB))).containsExactly("1");
+         assertThat(recordIds("document", "NOT_IN", List.of(idB))).containsExactly("2");
+         assertThat(recordIds("document", "CONTAINS_ALL", List.of(String.valueOf(a.id()), idB))).containsExactly("1");
+      }
+      assertThat(recordIds("document", "CONTAINS_ALL", List.of(new java.math.BigDecimal(a.id()), Long.valueOf(b.id())))).containsExactly("1");
+      assertThat(recordIds("document", "IN", List.of("9999"))).isEmpty();
+      tags.apply("document", 2, List.of(numeric.id()), List.of());
+      assertThat(recordIds("document", "IN", List.of(String.valueOf(numeric.id())))).containsExactly("2");
+      assertThat(recordIds("document", "IN", List.of("77"))).containsExactly("2");
+   }
+
+   /*******************************************************************************
+    ** Execute expanded criteria through the real parent query action.
+    *******************************************************************************/
+   private List<String> recordIds(String table, String operator, java.util.Collection<? extends java.io.Serializable> values) throws Exception
+   {
+      var metadata = instance.getTable(table);
+      com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator op;
+      try
+      {
+         op = com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator.valueOf(operator);
+      }
+      catch(IllegalArgumentException e)
+      {
+         throw new IllegalArgumentException("Unsupported operator");
+      }
+      var filter = new com.kingsrook.qbits.collaboration.tags.TagCriteriaExpander().expand(metadata,
+         new com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria("collaborationTags", op,
+            new java.util.ArrayList<java.io.Serializable>(values == null ? List.of() : values)), null);
+      return (new QueryAction().execute(new QueryInput(table).withFilter(filter)).getRecords().stream().map(row -> row.getValueString("id")).toList());
    }
 }

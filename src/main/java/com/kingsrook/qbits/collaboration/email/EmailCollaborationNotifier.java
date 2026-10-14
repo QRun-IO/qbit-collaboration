@@ -29,7 +29,7 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotifier;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qbits.email.EmailRuntime;
 import com.kingsrook.qbits.email.outbox.EmailCategory;
 import com.kingsrook.qbits.email.outbox.EmailRequest;
@@ -169,7 +169,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
       {
          return ("a record");
       }
-      return (new OtherUserAccess().recordLabel(n.recipientUserId(), n.sourceTableName(), n.sourceRecordId())
+      return (new CollaborationRecordAccessChecker().recordLabel(n.recipientUserId(), n.sourceTableName(), n.sourceRecordId())
          .orElse("a record in " + QContext.getQInstance().getTable(n.sourceTableName()).getLabel()));
    }
 

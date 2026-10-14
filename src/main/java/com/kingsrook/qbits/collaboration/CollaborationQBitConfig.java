@@ -22,10 +22,14 @@
 package com.kingsrook.qbits.collaboration;
 
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitConfig;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 
@@ -38,9 +42,13 @@ public class CollaborationQBitConfig implements QBitConfig
    public static final String TABLE_NAME_PREFIX = "collaboration_";
    public static final String PERMISSION_BASE_NAME = "collaboration";
 
+   private List<RecordFeature> defaultFeatures = List.of(RecordFeature.FAVORITES, RecordFeature.RECENTS, RecordFeature.TIMELINE);
+   private Map<String, List<RecordFeature>> tableFeatures = new LinkedHashMap<>();
+   private List<String> mirroredSecurityKeyTypes = List.of();
+
    private QCodeReference notifier = null;
    private Function<String, String> recipientEmailResolver = null;
-   private QCodeReference userSessionSupplier = null;
+   private QCodeReference userSessionProvider = null;
    private String defaultTagMode = "FREE";
    private List<String> tagActionTables = List.of();
    private List<String> followActionTables = List.of();
@@ -50,13 +58,50 @@ public class CollaborationQBitConfig implements QBitConfig
    private List<String> assignActionTables = List.of();
    private String backendName;
    private String schedulerName;
+   private Boolean managedIndexes = true;
    private String appName = "collaboration";
    private String parentAppName;
    private Boolean adminApp = true;
+   private Boolean uiApi = true;
+   private QCodeReference attachmentStorage = new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentStorage.class);
    private Integer recentsPerUser = 200;
    private String attachmentsBucketName = "collaboration";
    private Long defaultMaxBytes = 100L * 1024 * 1024;
    private List<String> blockedExtensions = List.of();
+
+   /*******************************************************************************
+    ** Whether the versioned collaboration UI API is registered.
+    *******************************************************************************/
+   public Boolean getUiApi()
+   {
+      return (uiApi);
+   }
+
+   /*******************************************************************************
+    ** Enable or disable the versioned UI API (enabled by default).
+    *******************************************************************************/
+   public CollaborationQBitConfig withUiApi(Boolean uiApi)
+   {
+      this.uiApi = uiApi;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Storage boundary used by attachment operations, including HTTP uploads.
+    *******************************************************************************/
+   public QCodeReference getAttachmentStorage()
+   {
+      return (attachmentStorage);
+   }
+
+   /*******************************************************************************
+    ** Configure a storage adapter; the default uses qbit-object-storage.
+    *******************************************************************************/
+   public CollaborationQBitConfig withAttachmentStorage(QCodeReference attachmentStorage)
+   {
+      this.attachmentStorage = attachmentStorage;
+      return (this);
+   }
 
 
 
@@ -415,19 +460,19 @@ public class CollaborationQBitConfig implements QBitConfig
    }
 
    /*******************************************************************************
-    ** Get userSessionSupplier.
+    ** Get userSessionProvider.
     *******************************************************************************/
-   public QCodeReference getUserSessionSupplier()
+   public QCodeReference getUserSessionProvider()
    {
-      return (userSessionSupplier);
+      return (userSessionProvider);
    }
 
    /*******************************************************************************
-    ** Configure userSessionSupplier.
+    ** Configure userSessionProvider.
     *******************************************************************************/
-   public CollaborationQBitConfig withUserSessionSupplier(QCodeReference userSessionSupplier)
+   public CollaborationQBitConfig withUserSessionProvider(QCodeReference userSessionProvider)
    {
-      this.userSessionSupplier = userSessionSupplier;
+      this.userSessionProvider = userSessionProvider;
       return (this);
    }
 
@@ -548,5 +593,85 @@ public class CollaborationQBitConfig implements QBitConfig
    {
       this.assignActionTables = value;
       return (this);
+   }
+
+   /*******************************************************************************
+    ** Replace the instance feature defaults.
+    *******************************************************************************/
+   public CollaborationQBitConfig withDefaultFeatures(RecordFeature... features)
+   {
+      defaultFeatures = List.of(features);
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Declare the complete enabled feature set for a host table.
+    *******************************************************************************/
+   public CollaborationQBitConfig withTableFeatures(String table, RecordFeature... features)
+   {
+      tableFeatures.put(table, List.of(features));
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Apply code declarations before core enrichment and permission registration.
+    *******************************************************************************/
+   public void applyFeatures(QInstance instance)
+   {
+      RecordFeaturesMetaData defaults = RecordFeaturesMetaData.ofOrWithNew(instance);
+      for(RecordFeature feature : RecordFeature.values())
+      {
+         defaults.getEnabled().putIfAbsent(feature, defaultFeatures.contains(feature));
+      }
+      tableFeatures.forEach((name, features) ->
+      {
+         RecordFeaturesMetaData metadata = RecordFeaturesMetaData.ofOrWithNew(instance.getTable(name));
+         for(RecordFeature feature : RecordFeature.values())
+         {
+            metadata.withEnabled(feature, features.contains(feature));
+         }
+      });
+   }
+
+   /*******************************************************************************
+    ** Parent security key types copied into extension tables; none by default.
+    *******************************************************************************/
+   public List<String> getMirroredSecurityKeyTypes()
+   {
+      return (mirroredSecurityKeyTypes);
+   }
+
+   /*******************************************************************************
+    ** Configure mirrored parent locks.
+    *******************************************************************************/
+   public CollaborationQBitConfig withMirroredSecurityKeyTypes(List<String> types)
+   {
+      mirroredSecurityKeyTypes = List.copyOf(types);
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Whether the index job executes DDL or only records migration statements.
+    *******************************************************************************/
+   public Boolean getManagedIndexes()
+   {
+      return (managedIndexes);
+   }
+
+   /*******************************************************************************
+    ** Configure host-managed migrations instead of runtime index creation.
+    *******************************************************************************/
+   public CollaborationQBitConfig withManagedIndexes(Boolean managedIndexes)
+   {
+      this.managedIndexes = managedIndexes;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Bean configuration support.
+    *******************************************************************************/
+   public void setManagedIndexes(Boolean managedIndexes)
+   {
+      this.managedIndexes = managedIndexes;
    }
 }

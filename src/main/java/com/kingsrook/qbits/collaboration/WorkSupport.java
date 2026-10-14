@@ -24,7 +24,7 @@ package com.kingsrook.qbits.collaboration;
 import java.io.Serializable;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
-import com.kingsrook.qbits.collaboration.security.OtherUserAccess;
+import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
@@ -77,9 +77,9 @@ public final class WorkSupport
    public static void requireReader(String user, String table, Serializable id) throws QException
    {
       if(user != null && (user.isBlank() || (!user.equals(PersonalRecords.currentUserId())
-         && !new OtherUserAccess().canRead(user, table, id).orElse(false))))
+         && !new CollaborationRecordAccessChecker().canRead(user, table, id).orElse(false))))
       {
-         throw (new QException(new PeopleService().displayName(user) + " can't open this record."));
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException(new PeopleService().displayName(user) + " can't open this record."));
       }
    }
 
@@ -90,7 +90,7 @@ public final class WorkSupport
    {
       if((required && (value == null || value.isBlank())) || (value != null && value.length() > max))
       {
-         throw (new QException("Text must contain " + (required ? "1" : "0") + " to " + max + " characters."));
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Text must contain " + (required ? "1" : "0") + " to " + max + " characters."));
       }
    }
 }

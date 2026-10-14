@@ -60,6 +60,13 @@ public final class CollaborationSchema
             columns.add("   " + field.getBackendName() + " " + type + (field.getName().equals("parentDeleted") ? " DEFAULT FALSE" : "") + (Boolean.TRUE.equals(field.getIsRequired()) ? " NOT NULL" : ""));
          }
          statements.add("CREATE TABLE IF NOT EXISTS " + table.getName() + " (\n" + String.join(",\n", columns) + "\n)");
+         for(QFieldMetaData field : table.getFields().values())
+         {
+            if(field.getName().startsWith("lockKey_"))
+            {
+               statements.add("ALTER TABLE " + table.getName() + " ADD COLUMN IF NOT EXISTS " + field.getBackendName() + " " + sqlType(field));
+            }
+         }
          int index = 0;
          for(UniqueKey key : table.getUniqueKeys() == null ? List.<UniqueKey>of() : table.getUniqueKeys())
          {
@@ -111,5 +118,17 @@ public final class CollaborationSchema
          case DECIMAL -> "NUMERIC";
          default -> throw new IllegalArgumentException("Unsupported schema type: " + field.getType());
       });
+   }
+
+   /*******************************************************************************
+    ** Host-owned one-time PostgreSQL migration; this helper never executes SQL.
+    *******************************************************************************/
+   public static String customFieldsDdl(String tableName)
+   {
+      String table = java.util.Arrays.stream(tableName.split("\\.")).map(com.kingsrook.qbits.collaboration.customfields.CustomFieldStorage::identifier)
+         .collect(java.util.stream.Collectors.joining("."));
+      String index = "cf_gin_" + Integer.toUnsignedString(tableName.hashCode(), 16);
+      return ("ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS qqq_custom_fields JSONB NOT NULL DEFAULT '{}';\n"
+         + "CREATE INDEX IF NOT EXISTS " + index + " ON " + table + " USING gin (qqq_custom_fields jsonb_path_ops);\n");
    }
 }

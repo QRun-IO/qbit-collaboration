@@ -24,6 +24,7 @@ package com.kingsrook.qbits.collaboration;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
@@ -57,7 +58,7 @@ public record RecordCursor(Instant at, String kind, Long id)
       }
       catch(RuntimeException e)
       {
-         throw (new QException("Invalid cursor", e));
+         throw (new QBadRequestException("Invalid cursor", e));
       }
    }
 

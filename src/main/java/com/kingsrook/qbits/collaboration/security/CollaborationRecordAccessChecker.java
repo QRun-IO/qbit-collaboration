@@ -38,22 +38,31 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
 
 /*******************************************************************************
- ** Stand-in for core RecordAccessCheckerInterface. Unknown is never a grant.
+ ** Core other-user access checker. Unknown is never a grant.
  *******************************************************************************/
-public class OtherUserAccess
+public class CollaborationRecordAccessChecker implements com.kingsrook.qqq.backend.core.actions.collaboration.RecordAccessCheckerInterface
 {
+   /*******************************************************************************
+    ** Core reference-based access contract.
+    *******************************************************************************/
+   @Override
+   public Optional<Boolean> canRead(String userId, com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReference ref) throws QException
+   {
+      return (canRead(userId, ref.tableName(), ref.primaryKey()));
+   }
+
    /*******************************************************************************
     ** The temporary context has no inherited permission bypass or caller transaction.
     *******************************************************************************/
    public Optional<Boolean> canRead(String userId, String table, Serializable recordId) throws QException
    {
       CollaborationQBitConfig config = CollaborationRecords.config();
-      if(config.getUserSessionSupplier() == null)
+      if(config.getUserSessionProvider() == null)
       {
          return (Optional.empty());
       }
-      UserSessionSupplier supplier = QCodeLoader.getAdHoc(UserSessionSupplier.class, config.getUserSessionSupplier());
-      Optional<QSession> session = supplier.sessionFor(userId);
+      com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface supplier = QCodeLoader.getAdHoc(com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface.class, config.getUserSessionProvider());
+      Optional<QSession> session = supplier.sessionForUser(userId);
       if(session.isEmpty())
       {
          return (Optional.empty());
@@ -87,11 +96,11 @@ public class OtherUserAccess
    public Optional<String> recordLabel(String userId, String table, Serializable recordId) throws QException
    {
       CollaborationQBitConfig config = CollaborationRecords.config();
-      if(config.getUserSessionSupplier() == null || table == null || recordId == null)
+      if(config.getUserSessionProvider() == null || table == null || recordId == null)
       {
          return (Optional.empty());
       }
-      Optional<QSession> session = QCodeLoader.getAdHoc(UserSessionSupplier.class, config.getUserSessionSupplier()).sessionFor(userId);
+      Optional<QSession> session = QCodeLoader.getAdHoc(com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface.class, config.getUserSessionProvider()).sessionForUser(userId);
       if(session.isEmpty() || session.get().getUser() == null || !userId.equals(session.get().getUser().getIdReference()))
       {
          return (Optional.empty());

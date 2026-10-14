@@ -23,7 +23,6 @@ package com.kingsrook.qbits.collaboration;
 
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
@@ -40,7 +39,8 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
-import com.kingsrook.qqq.backend.core.model.dashboard.widgets.RawHTML;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.MultiStatisticsData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.authentication.QAuthenticationMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.QAuthenticationType;
@@ -114,9 +114,18 @@ class CollaborationTest
          CollaborationTables.SCOPE_TYPE, CollaborationTables.FEATURE, CollaborationTables.PERMISSION_MODE);
       assertThat(instance.getPossibleValueSource(CollaborationTables.FEATURE).getEnumValues()).hasSize(12);
       assertThat(instance.getApp("collaboration").getChildren()).extracting(child -> child.getName())
-         .containsExactlyInAnyOrder(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER);
-      assertThat(instance.getApp("collaboration").getWidgets()).containsExactly(CollaborationHome.HOME_WIDGET);
-      assertThat(instance.getWidget(CollaborationHome.HOME_WIDGET)).isNotNull();
+         .containsExactlyInAnyOrder(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER);
+      assertThat(instance.getApp("collaboration").getWidgets()).containsExactlyElementsOf(CollaborationHome.HOME_WIDGETS);
+      for(String widget : CollaborationHome.HOME_WIDGETS)
+      {
+         assertThat(instance.getWidget(widget)).as(widget).isNotNull();
+         assertThat(instance.getWidget(widget).getGridColumns()).isEqualTo(12);
+         assertThat(instance.getWidget(widget).getIsCard()).isFalse();
+      }
+      assertThat(instance.getWidget(CollaborationHome.KPI_WIDGET).getType()).isEqualTo("multiStatistics");
+      assertThat(instance.getWidget(CollaborationHome.TAGS_WIDGET).getType()).isEqualTo("table");
+      assertThat(instance.getWidget(CollaborationHome.FIELDS_WIDGET).getType()).isEqualTo("table");
+      assertThat(instance.getWidget(CollaborationHome.PRESENCE_WIDGET).getType()).isEqualTo("table");
       assertThat(instance.getTable(CollaborationTables.FEATURE_SETTING).getAuditRules().getAuditLevel()).isEqualTo(AuditLevel.FIELD);
       assertThat(instance.getTable(CollaborationTables.FEATURE_SETTING).getUniqueKeys().getFirst().getFieldNames()).containsExactly("scopeType", "scopeName", "feature");
       assertThat(instance.getTable(CollaborationTables.USER).getUniqueKeys().getFirst().getFieldNames()).containsExactly("userId");
@@ -169,6 +178,41 @@ class CollaborationTest
 
 
    /*******************************************************************************
+    ** Without a parent app, Collaboration is a top-level node of the frontend app tree.
+    *******************************************************************************/
+   @Test
+   void appTreeTopLevelWithoutParent() throws Exception
+   {
+      new QInstanceValidator().validate(instance);
+      var output = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction().execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput());
+      assertThat(output.getApps()).containsKey("collaboration");
+      assertThat(output.getAppTree()).extracting(node -> node.getName()).contains("collaboration");
+   }
+
+
+
+   /*******************************************************************************
+    ** With a parent app, Collaboration is nested under it and not duplicated at the top.
+    *******************************************************************************/
+   @Test
+   void appTreeNestedUnderParent() throws Exception
+   {
+      instance = new QInstance();
+      instance.withInstanceDefaultAuthentication(new QAuthenticationMetaData().withName("anonymous").withType(QAuthenticationType.FULLY_ANONYMOUS));
+      instance.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
+      instance.setEnforcePermissionsInCoreActions(true);
+      instance.addApp(new QAppMetaData().withName("admin").withLabel("Admin").withIcon(new QIcon("settings")));
+      new CollaborationQBitProducer().withQBitConfig(new CollaborationQBitConfig().withBackendName("memory").withParentAppName("admin")).produce(instance);
+      QContext.init(instance, new QSession().withUser(new com.kingsrook.qqq.backend.core.model.session.QUser().withIdReference("admin")).withPermissions(CollaborationPermissions.ADMIN));
+      new QInstanceValidator().validate(instance);
+      var output = new com.kingsrook.qqq.backend.core.actions.metadata.MetaDataAction().execute(new com.kingsrook.qqq.backend.core.model.actions.metadata.MetaDataInput());
+      assertThat(output.getAppTree()).extracting(node -> node.getName()).containsExactly("admin");
+      assertThat(output.getAppTree().getFirst().getChildren()).extracting(node -> node.getName()).contains("collaboration");
+   }
+
+
+
+   /*******************************************************************************
     ** Headless hosts keep the tables without app or widgets.
     *******************************************************************************/
    @Test
@@ -177,9 +221,9 @@ class CollaborationTest
       QInstance headless = new QInstance();
       headless.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
       new CollaborationQBitProducer().withQBitConfig(config.withAdminApp(false)).produce(headless);
-      assertThat(headless.getTables()).hasSize(17);
+      assertThat(headless.getTables()).hasSize(19);
       assertThat(headless.getApps()).isEmpty();
-      assertThat(headless.getWidgets()).hasSize(4);
+      assertThat(headless.getWidgets()).hasSize(5);
    }
 
 
@@ -190,29 +234,59 @@ class CollaborationTest
    @Test
    void emptyHome() throws Exception
    {
-      String html = CollaborationHome.render(Instant.now());
-      assertThat(html).contains("No feature settings yet: features follow the code defaults", "People known: 0", "Active in the last 7 days: 0", "No people yet");
-      RawHTML widget = (RawHTML) new CollaborationHome.HomeRenderer().render(new RenderWidgetInput()).getWidgetData();
-      assertThat(widget.getHtml()).contains("People known: 0");
+      assertThat(HomeWidgetData.stats(Instant.now())).containsExactly(
+         java.util.Map.entry("Comments this week", 0), java.util.Map.entry("Open threads", 0), java.util.Map.entry("Open tasks", 0),
+         java.util.Map.entry("Overdue tasks", 0), java.util.Map.entry("Open access requests", 0), java.util.Map.entry("Attachments", 0),
+         java.util.Map.entry("Active custom fields", 0));
+      assertThat(CollaborationHome.tags().getRows()).isEmpty();
+      assertThat(CollaborationHome.tags().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_TAGS);
+      assertThat(CollaborationHome.fields().getRows()).isEmpty();
+      assertThat(CollaborationHome.fields().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NO_FIELDS);
+      assertThat(CollaborationHome.presence().getRows()).isEmpty();
+      assertThat(CollaborationHome.presence().getNoRowsFoundHTML()).isEqualTo("Nobody else is here right now.");
+      assertThat(((TableData) new CollaborationHome.PresenceRenderer().render(new RenderWidgetInput()).getWidgetData()).getNoRowsFoundHTML()).isEqualTo(CollaborationHome.NOBODY_HERE);
+      assertThat(new CollaborationHome.KpiRenderer().render(new RenderWidgetInput()).getWidgetData()).isInstanceOf(MultiStatisticsData.class);
+      assertThat(new CollaborationHome.TagsRenderer().render(new RenderWidgetInput()).getWidgetData()).isInstanceOf(TableData.class);
+      assertThat(new CollaborationHome.FieldsRenderer().render(new RenderWidgetInput()).getWidgetData()).isInstanceOf(TableData.class);
+      assertThat(HomeWidgetData.subheader(CollaborationHome.kpis(Instant.now()), "Work")).isEqualTo("Nothing waiting");
    }
 
 
 
    /*******************************************************************************
-    ** Counts distinguish disabled settings and the inclusive seven-day window.
+    ** Display names resolve in one query; unknown, blank and null ids stay readable.
     *******************************************************************************/
    @Test
-   void realCounts() throws Exception
+   void displayNamesResolveInBatches() throws Exception
    {
-      Instant now = Instant.parse("2026-10-13T12:00:00Z");
-      seed(CollaborationTables.FEATURE_SETTING,
-         setting("INSTANCE", "instance", "COMMENTS", true), setting("APP", "sales", "TAGS", true),
-         setting("TABLE", "orders", "TASKS", true), setting("TABLE", "orders", "COMMENTS", true),
-         setting("TABLE", "orders", "PRESENCE", false));
-      seed(CollaborationTables.USER, person("one", now), person("boundary", now.minus(7, ChronoUnit.DAYS)),
-         person("old", now.minus(7, ChronoUnit.DAYS).minusSeconds(1)), person("never", null), person("future", now.plusSeconds(1)));
-      String html = CollaborationHome.render(now);
-      assertThat(html).contains("INSTANCE: 1", "APP: 1", "TABLE: 2", "People known: 5", "Active in the last 7 days: 2").doesNotContain("No feature settings yet", "No people yet");
+      seed(CollaborationTables.USER, new QRecord().withValue("userId", "ann").withValue("displayName", "Ann Lee").withValue("active", true),
+         new QRecord().withValue("userId", "nameless").withValue("displayName", " ").withValue("active", true));
+      var names = new com.kingsrook.qbits.collaboration.people.PeopleService().displayNames(java.util.Arrays.asList("ann", "nameless", "ghost", null, "", "ann"));
+      assertThat(names).containsExactly(java.util.Map.entry("ann", "Ann Lee"), java.util.Map.entry("nameless", "nameless"), java.util.Map.entry("ghost", "ghost"));
+      assertThat(new com.kingsrook.qbits.collaboration.people.PeopleService().displayNames(List.of())).isEmpty();
+      assertThat(instance.getTable(CollaborationTables.TASK).getField("assigneeUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.COMMENT).getField("authorUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.ATTACHMENT).getField("createdByUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.USER).getField("userId").getPossibleValueSourceName()).isNull();
+      assertThat(instance.getPossibleValueSource(CollaborationTables.USER).getOverrideIdField()).isEqualTo("userId");
+   }
+
+
+
+   /*******************************************************************************
+    ** Tags and custom fields list real rows with table labels, All tables for global ones.
+    *******************************************************************************/
+   @Test
+   void tablesListRealRows() throws Exception
+   {
+      seed(CollaborationTables.TAG,
+         new QRecord().withValue("name", "global").withValue("label", "Global").withValue("approved", true).withValue("createdByUserId", "admin").withValue("usageCount", 3),
+         new QRecord().withValue("name", "popular").withValue("label", "Popular").withValue("approved", true).withValue("createdByUserId", "admin").withValue("usageCount", 5));
+      var tags = CollaborationHome.tags();
+      assertThat(tags.getColumns()).extracting(TableData.Column::getHeader).containsExactly("Label", "Table", "Records");
+      assertThat(tags.getRows()).hasSize(2);
+      assertThat(tags.getRows().get(0)).containsEntry("label", "Popular").containsEntry("table", "All tables").containsEntry("records", 5);
+      assertThat(tags.getRows().get(1)).containsEntry("label", "Global").containsEntry("table", "All tables").containsEntry("records", 3);
    }
 
 
@@ -225,7 +299,7 @@ class CollaborationTest
    {
       QContext.getQSession().setPermissions(new java.util.HashSet<>());
       assertThatThrownBy(() -> new QueryAction().execute(new QueryInput(CollaborationTables.USER))).isInstanceOf(QPermissionDeniedException.class);
-      assertThatThrownBy(() -> CollaborationHome.render(Instant.now())).isInstanceOf(QPermissionDeniedException.class);
+      assertThatThrownBy(() -> CollaborationHome.kpis(Instant.now())).isInstanceOf(QPermissionDeniedException.class);
       QContext.getQSession().withPermissions(CollaborationPermissions.VIEW);
       new QueryAction().execute(new QueryInput(CollaborationTables.FEATURE_SETTING));
       new QueryAction().execute(new QueryInput(CollaborationTables.USER));
@@ -252,14 +326,16 @@ class CollaborationTest
    void homeUsesCurrentSession() throws Exception
    {
       Instant now = Instant.now();
-      seed(CollaborationTables.USER, person("visible", now), person("hidden", now));
+      seed(CollaborationTables.TAG, new QRecord().withValue("name", "visible").withValue("label", "Visible").withValue("approved", true).withValue("createdByUserId", "admin"),
+         new QRecord().withValue("name", "hidden").withValue("label", "Hidden").withValue("approved", true).withValue("createdByUserId", "admin"));
       instance.addSecurityKeyType(new QSecurityKeyType().withName("person").withAllAccessKeyName("allPeople"));
-      instance.getTable(CollaborationTables.USER).withRecordSecurityLock(new RecordSecurityLock().withSecurityKeyType("person").withFieldName("userId"));
+      instance.getTable(CollaborationTables.TAG).withRecordSecurityLock(new RecordSecurityLock().withSecurityKeyType("person").withFieldName("name"));
       QContext.init(instance, new QSession().withUser(new com.kingsrook.qqq.backend.core.model.session.QUser().withIdReference("viewer")).withPermissions(CollaborationPermissions.VIEW).withSecurityKeyValue("person", "visible"));
-      assertThat(CollaborationHome.render(now)).contains("People known: 1", "Active in the last 7 days: 1");
+      assertThat(CollaborationHome.tags().getRows()).singleElement().satisfies(row -> assertThat(row).containsEntry("label", "Visible"));
+      assertThat(CollaborationHome.presence().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.PRESENCE_ADMIN_ONLY);
       instance.setEnforcePermissionsInCoreActions(false);
       QContext.getQSession().setPermissions(new java.util.HashSet<>());
-      assertThatThrownBy(() -> new CollaborationHome.HomeRenderer().render(new RenderWidgetInput())).isInstanceOf(QPermissionDeniedException.class);
+      assertThatThrownBy(() -> new CollaborationHome.KpiRenderer().render(new RenderWidgetInput())).isInstanceOf(QPermissionDeniedException.class);
    }
 
 

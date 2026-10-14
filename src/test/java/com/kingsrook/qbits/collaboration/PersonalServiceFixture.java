@@ -68,7 +68,7 @@ public abstract class PersonalServiceFixture
       instance = new QInstance().withInstanceDefaultAuthentication(new QAuthenticationMetaData().withName("anonymous").withType(QAuthenticationType.FULLY_ANONYMOUS));
       instance.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
       instance.setEnforcePermissionsInCoreActions(true);
-      config = new CollaborationQBitConfig().withBackendName("memory");
+      config = new CollaborationQBitConfig().withBackendName("memory").withDefaultFeatures(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature.values());
       new CollaborationQBitProducer().withQBitConfig(config).produce(instance);
       instance.addSecurityKeyType(new QSecurityKeyType().withName("tenant").withAllAccessKeyName("allTenants"));
       instance.addTable(new QTableMetaData().withName("document").withLabel("Documents").withBackendName("memory").withPrimaryKeyField("id")
@@ -79,6 +79,7 @@ public abstract class PersonalServiceFixture
          .withRecordLabelFormatAndFields("%s", "title")
          .withRecordSecurityLock(new RecordSecurityLock().withFieldName("tenant").withSecurityKeyType("tenant")
             .withLockScope(RecordSecurityLock.LockScope.READ_AND_WRITE)));
+      new com.kingsrook.qqq.backend.core.instances.QInstanceEnricher(instance).enrich();
       login("alice");
       QContext.getQSession().withSecurityKeyValue("allTenants", true);
       InsertInput insert = new InsertInput("document").withRecords(List.of(
@@ -118,6 +119,8 @@ public abstract class PersonalServiceFixture
    @AfterEach
    public void tearDown()
    {
+      com.kingsrook.qbits.collaboration.presence.PresenceRegistry.close(instance);
+      com.kingsrook.qqq.backend.core.realtime.RealtimeBus.close(instance);
       QContext.clear();
       MemoryRecordStore.getInstance().reset();
    }

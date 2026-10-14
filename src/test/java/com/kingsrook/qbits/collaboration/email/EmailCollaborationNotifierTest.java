@@ -32,7 +32,7 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.NoOpNotifier;
 import com.kingsrook.qbits.collaboration.notify.Notifications;
-import com.kingsrook.qbits.collaboration.security.UserSessionSupplier;
+import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
 import com.kingsrook.qbits.collaboration.sharing.SharingService;
 import com.kingsrook.qbits.collaboration.tasks.TasksService;
 import com.kingsrook.qbits.email.EmailQBitConfig;
@@ -63,13 +63,13 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
    /*******************************************************************************
     ** Sessions for the recipients, so access is re-checked as them.
     *******************************************************************************/
-   public static class TestSessions implements UserSessionSupplier
+   public static class TestSessions implements UserSessionProviderInterface
    {
       /*******************************************************************************
        ** The recipient own session.
        *******************************************************************************/
       @Override
-      public Optional<QSession> sessionFor(String user)
+      public Optional<QSession> sessionForUser(String user)
       {
          return (Optional.ofNullable(sessions.get(user)));
       }
@@ -88,7 +88,7 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
       {
          sessions.put(user, new QSession().withUser(new QUser().withIdReference(user)).withPermissions("document.read", "document.task").withSecurityKeyValue("tenant", "a"));
       }
-      config.withUserSessionSupplier(new QCodeReference(TestSessions.class));
+      config.withUserSessionProvider(new QCodeReference(TestSessions.class));
       CollaborationRecords.insert(CollaborationTables.USER, new QRecord().withValue("userId", "bob").withValue("displayName", "Bob").withValue("email", "bob@example.org"));
       CollaborationRecords.insert(CollaborationTables.USER, new QRecord().withValue("userId", "eve").withValue("displayName", "Eve").withValue("email", "eve@example.org"));
    }

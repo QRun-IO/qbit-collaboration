@@ -128,13 +128,14 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();
       CollaborationSecurity.buildSecurityKeyTypes().forEach(output::add);
       output.add(TrimRecentsProcess.metadata(qBitConfig));
+      output.add(com.kingsrook.qbits.collaboration.customfields.BuildFieldIndexes.metadata(qBitConfig));
+      com.kingsrook.qbits.collaboration.customfields.FieldProcesses.metadata().forEach(output::add);
       output.add(com.kingsrook.qbits.collaboration.tasks.SendTaskRemindersProcess.metadata(qBitConfig));
       WorkProcesses.management().forEach(output::add);
       for(String table : qBitConfig.getAssignActionTables())
       {
          WorkProcesses.assignments(table).forEach(output::add);
       }
-      instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(WorkCleanup.class));
       output.add(com.kingsrook.qbits.collaboration.follow.SendFollowDigestsProcess.metadata(qBitConfig));
       for(String table : qBitConfig.getFollowActionTables())
       {
@@ -161,10 +162,16 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       }
       if(Boolean.TRUE.equals(qBitConfig.getAdminApp()))
       {
-         output.add(CollaborationHome.widget());
+         CollaborationHome.widgets().forEach(output::add);
          output.add(CollaborationHome.app(qBitConfig));
       }
       output.addSelfToInstance(instance);
+      CoreCollaboration.install(instance, qBitConfig);
+      instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(CollaborationRealtime.class));
+      if(Boolean.TRUE.equals(qBitConfig.getUiApi()))
+      {
+         com.kingsrook.qbits.collaboration.api.CollaborationApi.register(instance);
+      }
       com.kingsrook.qbits.collaboration.model.ConversationChildren.install(instance);
       if(Boolean.TRUE.equals(qBitConfig.getAdminApp()) && qBitConfig.getParentAppName() != null)
       {

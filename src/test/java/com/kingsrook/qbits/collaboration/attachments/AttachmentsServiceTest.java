@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
 import com.kingsrook.qbits.collaboration.CollaborationSchema;
+import com.kingsrook.qbits.collaboration.HomeWidgetData;
 import com.kingsrook.qbits.collaboration.PersonalServiceFixture;
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
@@ -202,6 +203,7 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
       QContext.getQSession().getPermissions().remove("document.write");
       assertThatThrownBy(() -> service.delete(List.of(bob.id()))).isInstanceOf(QPermissionDeniedException.class);
       admin();
+      QContext.getQSession().withPermissions("document.attach");
       QContext.getQSession().getPermissions().remove("document.write");
       assertThat(service.rename(alice.id(), "renamed.txt", "new description").fileName()).isEqualTo("renamed.txt");
       assertThat(service.describe(alice.id(), "").description()).isEmpty();
@@ -429,10 +431,17 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
    void homeAndSchema() throws Exception
    {
       admin();
-      assertThat(CollaborationHome.render(Instant.now())).contains("Attachments: 0", "No attachments yet.", "Total size (bytes): 0");
+      assertThat(HomeWidgetData.stats(Instant.now())).containsEntry("Attachments", 0);
+      assertThat(HomeWidgetData.subheader(CollaborationHome.kpis(Instant.now()), "Attachments")).isEqualTo("No attachments yet");
       upload("a.txt", "12345");
       upload("b.txt", "123");
-      assertThat(CollaborationHome.render(Instant.now())).contains("Attachments: 2", "Total size (bytes): 8", "Approximate totals").doesNotContain("No attachments yet.");
+      assertThat(HomeWidgetData.stats(Instant.now())).containsEntry("Attachments", 2);
+      assertThat(HomeWidgetData.subheader(CollaborationHome.kpis(Instant.now()), "Attachments")).isEqualTo("8 B in total");
+      assertThat(CollaborationHome.humanSize(0)).isEqualTo("0 B");
+      assertThat(CollaborationHome.humanSize(1023)).isEqualTo("1023 B");
+      assertThat(CollaborationHome.humanSize(4813)).isEqualTo("4.7 KB");
+      assertThat(CollaborationHome.humanSize(5L * 1024 * 1024)).isEqualTo("5.0 MB");
+      assertThat(CollaborationHome.humanSize(3L * 1024 * 1024 * 1024)).isEqualTo("3.0 GB");
       String ddl = CollaborationSchema.postgresScript(config);
       assertThat(ddl).contains("CREATE TABLE IF NOT EXISTS collaboration_attachment", "size_bytes BIGINT", "parent_deleted BOOLEAN DEFAULT FALSE NOT NULL",
          "ON collaboration_attachment (table_name, record_id)").doesNotContain("preview_url", "download_url");

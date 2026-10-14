@@ -204,7 +204,7 @@ public class TasksService
       int size = limit == null ? 20 : limit;
       if(size < 1 || size > 100)
       {
-         throw (new QException("Limit must be between 1 and 100."));
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Limit must be between 1 and 100."));
       }
       List<QRecord> rows = mineRows(status);
       if(cursor != null)
@@ -224,7 +224,7 @@ public class TasksService
       String selected = status == null ? "OPEN" : status;
       if(!List.of("OPEN", "DONE", "CANCELLED").contains(selected))
       {
-         throw (new QException("Unknown task status."));
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Unknown task status."));
       }
       List<QRecord> visible = new ArrayList<>();
       for(QRecord row : CollaborationRecords.query(CollaborationTables.TASK, new QQueryFilter()
@@ -307,7 +307,7 @@ public class TasksService
       }
       catch(RuntimeException e)
       {
-         throw (new QException("Invalid cursor", e));
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Invalid cursor", e));
       }
    }
 

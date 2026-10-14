@@ -24,15 +24,22 @@ package com.kingsrook.qbits.collaboration.app;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
+import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
+import com.kingsrook.qbits.collaboration.presence.PresenceRegistry;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
 import com.kingsrook.qqq.backend.core.actions.permissions.PermissionEnforcement;
 import com.kingsrook.qqq.backend.core.actions.tables.AggregateAction;
 import com.kingsrook.qqq.backend.core.actions.tables.CountAction;
+import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.Aggregate;
@@ -41,27 +48,44 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateOp
 import com.kingsrook.qqq.backend.core.model.actions.tables.aggregate.AggregateResult;
 import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetOutput;
-import com.kingsrook.qqq.backend.core.model.dashboard.widgets.RawHTML;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.MultiStatisticsData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.MultiStatisticsData.StatisticsGroupData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.MultiStatisticsData.StatisticsGroupData.Statistic;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.WidgetType;
+import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppSection;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QIcon;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 
 /*******************************************************************************
- ** The Collaboration app and its home. Counts use QQQ actions with the current
- ** QContext session, preserving permissions and record security.
+ ** The Collaboration app and its home, built from standard QQQ widgets: a KPI
+ ** block and three full-width tables (tags, custom fields, who's here). Counts
+ ** use QQQ actions with the current QContext session, so permissions and record
+ ** security apply, and every block carries a real empty-state message. No colors
+ ** are specified, so the frontend theme (including dark mode) decides.
  *******************************************************************************/
 public final class CollaborationHome
 {
-   public static final String HOME_WIDGET = "collaborationHome";
+   public static final String KPI_WIDGET = "collaborationKpis";
+   public static final String TAGS_WIDGET = "collaborationTags";
+   public static final String FIELDS_WIDGET = "collaborationCustomFields";
+   public static final String PRESENCE_WIDGET = "collaborationWhosHere";
+   public static final List<String> HOME_WIDGETS = List.of(KPI_WIDGET, TAGS_WIDGET, FIELDS_WIDGET, PRESENCE_WIDGET);
+
+   public static final String NOBODY_HERE = "Nobody else is here right now.";
+   public static final String NO_TAGS = "No tags yet. Tags appear here once someone creates one on a record.";
+   public static final String NO_FIELDS = "No custom fields yet. Define one under Custom fields.";
+   public static final String PRESENCE_ADMIN_ONLY = "Who's here is visible to collaboration administrators.";
 
 
 
@@ -81,9 +105,9 @@ public final class CollaborationHome
    {
       QAppMetaData app = new QAppMetaData().withName(config.getAppName()).withLabel("Collaboration").withIcon(new QIcon("forum"))
          .withPermissionRules(CollaborationPermissions.permissionRules())
-         .withWidgets(List.of(HOME_WIDGET))
+         .withWidgets(HOME_WIDGETS)
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -91,140 +115,235 @@ public final class CollaborationHome
 
 
    /*******************************************************************************
-    ** Full-width HTML widget, following the reference Storage home renderer.
+    ** The four full-width home widgets, in display order.
     *******************************************************************************/
-   public static QWidgetMetaData widget()
+   public static List<QWidgetMetaData> widgets()
    {
-      return (new QWidgetMetaData().withName(HOME_WIDGET).withLabel("Overview").withType(WidgetType.HTML.getType())
-         .withCodeReference(new QCodeReference(HomeRenderer.class)).withGridColumns(12).withIsCard(false)
+      return (List.of(
+         widget(KPI_WIDGET, "Overview", WidgetType.MULTI_STATISTICS, KpiRenderer.class),
+         widget(TAGS_WIDGET, "Tags", WidgetType.TABLE, TagsRenderer.class),
+         widget(FIELDS_WIDGET, "Custom fields", WidgetType.TABLE, FieldsRenderer.class),
+         widget(PRESENCE_WIDGET, "Who's here", WidgetType.TABLE, PresenceRenderer.class)));
+   }
+
+
+
+   /*******************************************************************************
+    ** One full-width card-less widget guarded by the shared permission rules.
+    *******************************************************************************/
+   private static QWidgetMetaData widget(String name, String label, WidgetType type, Class<? extends AbstractWidgetRenderer> renderer)
+   {
+      return (new QWidgetMetaData().withName(name).withLabel(label).withType(type.getType())
+         .withCodeReference(new QCodeReference(renderer)).withGridColumns(12).withIsCard(false)
          .withPermissionRules(CollaborationPermissions.permissionRules()));
    }
 
 
 
    /*******************************************************************************
-    ** Show persisted enabled overrides by scope type, and recent directory use.
-    ** These are settings counts, not a claim about resolved host-table features.
+    ** The KPI groups: conversations, work, files and custom fields.
     *******************************************************************************/
-   public static String render(Instant now) throws QException
+   public static MultiStatisticsData kpis(Instant now) throws QException
    {
       CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
-      StringBuilder html = new StringBuilder("<div style=\"display:flex;flex-direction:column;gap:1rem;width:100%;overflow-wrap:anywhere;\"><section><h3>Feature settings</h3>");
-      long settings = count(CollaborationTables.FEATURE_SETTING, new QQueryFilter());
-      if(settings == 0)
-      {
-         html.append("<p>No feature settings yet: features follow the code defaults</p>");
-      }
-      else
-      {
-         html.append("<p>Enabled feature settings per scope:</p><ul>");
-         for(String scope : List.of("INSTANCE", "APP", "TABLE"))
-         {
-            long enabled = count(CollaborationTables.FEATURE_SETTING, new QQueryFilter()
-               .withCriteria(new QFilterCriteria("scopeType", QCriteriaOperator.EQUALS, scope))
-               .withCriteria(new QFilterCriteria("enabled", QCriteriaOperator.EQUALS, true)));
-            html.append("<li>").append(scope).append(": ").append(enabled).append("</li>");
-         }
-         html.append("</ul><p>Stored overrides; applying them awaits the core collaboration contracts.</p>");
-      }
-      long people = count(CollaborationTables.USER, new QQueryFilter());
-      long recent = count(CollaborationTables.USER, new QQueryFilter()
-         .withCriteria(new QFilterCriteria("lastSeenAt", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS)))
-         .withCriteria(new QFilterCriteria("lastSeenAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, now)));
-      html.append("</section><section><h3>People</h3><p>People known: ").append(people)
-         .append("</p><p>Active in the last 7 days: ").append(recent).append("</p>");
-      if(people == 0)
-      {
-         html.append("<p>No people yet: the directory will be filled by collaboration calls when the feature services are installed.</p>");
-      }
-      html.append("</section>");
-      personalSummary(html, CollaborationTables.FAVORITE, "Favorites");
-      personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
-      attachmentSummary(html);
-      tagSummary(html);
-      html.append("<section><h3>Open access requests</h3><p>").append(count(CollaborationTables.ACCESS_REQUEST,
-         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"))).append("</p></section>");
-      html.append("<section><h3>Open tasks</h3><p>").append(count(CollaborationTables.TASK,
-         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"))).append("</p></section>");
-      html.append("<section><h3>Overdue tasks</h3><p>").append(count(CollaborationTables.TASK,
-         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN").withCriteria("dueAt", QCriteriaOperator.LESS_THAN, now))).append("</p></section>");
-      html.append("<section><h3>Shares this week</h3><p>").append(count(CollaborationTables.SHARE,
-         new QQueryFilter().withCriteria("sentAt", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
-            .withCriteria("sentAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, now))).append("</p></section>");
-      html.append("<section><h3>Comments this week</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
-         .withCriteria("createDate", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
-         .withCriteria("createDate", QCriteriaOperator.LESS_THAN_OR_EQUALS, now).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");
-      html.append("<section><h3>Open threads</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
-         .withCriteria("threadId", QCriteriaOperator.IS_BLANK).withCriteria("resolvedAt", QCriteriaOperator.IS_BLANK)
-         .withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");
-      if(QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN))
-      {
-         html.append("<section><h3>Followers</h3><p>").append(count(CollaborationTables.FOLLOW, new QQueryFilter())).append("</p></section>");
-      }
-      html.append("<p>Conversation totals are approximate where parent record locks require post-filtering.</p>");
-      return (html.append("</div>").toString());
-   }
-
-
-
-   /*******************************************************************************
-    ** Caller-filtered vocabulary totals and five most used active tags.
-    *******************************************************************************/
-   private static void tagSummary(StringBuilder html) throws QException
-   {
-      QQueryFilter active = new QQueryFilter().withCriteria("mergedIntoTagId", QCriteriaOperator.IS_BLANK);
-      html.append("<section><h3>Tags</h3><p>Vocabulary size: ").append(count(CollaborationTables.TAG, active))
-         .append("</p><p>Pending suggestions: ").append(count(CollaborationTables.TAG, new QQueryFilter()
-            .withCriteria("mergedIntoTagId", QCriteriaOperator.IS_BLANK).withCriteria("approved", QCriteriaOperator.EQUALS, false)))
-         .append("</p><ul>");
-      com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput input = new com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput(CollaborationTables.TAG)
-         .withFilter(active.withCriteria("approved", QCriteriaOperator.EQUALS, true).withOrderBy(new QFilterOrderBy("usageCount", false)).withOrderBy(new QFilterOrderBy("label")).withLimit(5));
-      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
-      for(com.kingsrook.qqq.backend.core.model.data.QRecord tag : new com.kingsrook.qqq.backend.core.actions.tables.QueryAction().execute(input).getRecords())
-      {
-         html.append("<li>").append(tag.getValueString("label").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
-            .append(": ").append(tag.getValueInteger("usageCount")).append("</li>");
-      }
-      html.append("</ul></section>");
-   }
-
-   /*******************************************************************************
-    ** Real table aggregates, restricted to readable parent tables. Parent locks
-    ** are post-filtered on rows, so these aggregate totals are approximate.
-    *******************************************************************************/
-   private static void attachmentSummary(StringBuilder html) throws QException
-   {
-      Aggregate count = new Aggregate().withFieldName("id").withOperator(AggregateOperator.COUNT);
+      Instant weekAgo = now.minus(7, ChronoUnit.DAYS);
+      int commentsThisWeek = count(CollaborationTables.COMMENT, new QQueryFilter()
+         .withCriteria("createDate", QCriteriaOperator.GREATER_THAN_OR_EQUALS, weekAgo)
+         .withCriteria("createDate", QCriteriaOperator.LESS_THAN_OR_EQUALS, now).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK));
+      int openThreads = count(CollaborationTables.COMMENT, new QQueryFilter().withCriteria("threadId", QCriteriaOperator.IS_BLANK)
+         .withCriteria("resolvedAt", QCriteriaOperator.IS_BLANK).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK));
+      int openTasks = count(CollaborationTables.TASK, new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"));
+      int overdue = count(CollaborationTables.TASK, new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN")
+         .withCriteria("dueAt", QCriteriaOperator.LESS_THAN, now));
+      int openRequests = count(CollaborationTables.ACCESS_REQUEST, new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"));
+      int activeFields = count(CollaborationTables.FIELD_DEFINITION, new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "ACTIVE"));
+      Aggregate files = new Aggregate().withFieldName("id").withOperator(AggregateOperator.COUNT);
       Aggregate bytes = new Aggregate().withFieldName("sizeBytes").withOperator(AggregateOperator.SUM);
-      AggregateInput input = new AggregateInput(CollaborationTables.ATTACHMENT).withAggregates(List.of(count, bytes));
-      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
-      List<AggregateResult> results = new AggregateAction().execute(input).getResults();
-      Object rowCount = results.isEmpty() ? 0 : results.getFirst().getAggregateValue(count);
-      Object totalBytes = results.isEmpty() ? 0 : results.getFirst().getAggregateValue(bytes);
-      html.append("<section><h3>Attachments</h3><p>Attachments: ").append(rowCount)
-         .append("</p><p>Total size (bytes): ").append(totalBytes == null ? 0 : totalBytes)
-         .append("</p><p>Approximate totals: parent record locks are applied when browsing attachments.</p>");
-      if("0".equals(String.valueOf(rowCount)))
-      {
-         html.append("<p>No attachments yet.</p>");
-      }
-      html.append("</section>");
+      AggregateInput aggregateInput = new AggregateInput(CollaborationTables.ATTACHMENT).withAggregates(List.of(files, bytes));
+      aggregateInput.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
+      List<AggregateResult> results = new AggregateAction().execute(aggregateInput).getResults();
+      int attachments = results.isEmpty() ? 0 : numberOf(results.getFirst().getAggregateValue(files)).intValue();
+      long totalBytes = results.isEmpty() ? 0 : numberOf(results.getFirst().getAggregateValue(bytes)).longValue();
+      String fileSubheader = attachments == 0 ? "No attachments yet" : humanSize(totalBytes) + " in total";
+
+      return (new MultiStatisticsData("Collaboration", List.of(
+         new StatisticsGroupData("forum", null, "Conversations", "Last 7 days and open", List.of(
+            new Statistic("Comments this week", commentsThisWeek, path(CollaborationTables.COMMENT)),
+            new Statistic("Open threads", openThreads, path(CollaborationTables.COMMENT)))),
+         new StatisticsGroupData("task_alt", null, "Work", openTasks == 0 && openRequests == 0 ? "Nothing waiting" : "Waiting on someone", List.of(
+            new Statistic("Open tasks", openTasks, path(CollaborationTables.TASK)),
+            new Statistic("Overdue tasks", overdue, path(CollaborationTables.TASK)),
+            new Statistic("Open access requests", openRequests, path(CollaborationTables.ACCESS_REQUEST)))),
+         new StatisticsGroupData("attach_file", null, "Attachments", fileSubheader, List.of(
+            new Statistic("Attachments", attachments, path(CollaborationTables.ATTACHMENT)))),
+         new StatisticsGroupData("tune", null, "Custom fields", activeFields == 0 ? "None active yet" : "Defined by administrators", List.of(
+            new Statistic("Active custom fields", activeFields, path(CollaborationTables.FIELD_DEFINITION)))))));
    }
 
 
 
    /*******************************************************************************
-    ** Aggregate rows and distinct owners without loading high-volume personal data.
+    ** Approved and pending tags, most used first: label, table label, records.
     *******************************************************************************/
-   private static void personalSummary(StringBuilder html, String table, String label) throws QException
+   public static TableData tags() throws QException
    {
-      Aggregate rows = new Aggregate().withFieldName("id").withOperator(AggregateOperator.COUNT);
-      Aggregate users = new Aggregate().withFieldName("userId").withOperator(AggregateOperator.COUNT_DISTINCT);
-      AggregateInput input = new AggregateInput(table).withAggregates(List.of(rows, users));
+      CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
+      QueryInput input = new QueryInput(CollaborationTables.TAG).withFilter(new QQueryFilter().withCriteria("mergedIntoTagId", QCriteriaOperator.IS_BLANK)
+         .withOrderBy(new QFilterOrderBy("usageCount", false)).withOrderBy(new QFilterOrderBy("label")).withLimit(200));
       input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
-      List<AggregateResult> results = new AggregateAction().execute(input).getResults();
-      html.append("<section><h3>").append(label).append("</h3><p>Rows: ").append(results.isEmpty() ? 0 : results.getFirst().getAggregateValue(rows))
-         .append("</p><p>Distinct users: ").append(results.isEmpty() ? 0 : results.getFirst().getAggregateValue(users)).append("</p></section>");
+      List<Map<String, Object>> rows = new ArrayList<>();
+      for(QRecord tag : new QueryAction().execute(input).getRecords())
+      {
+         Map<String, Object> row = new LinkedHashMap<>();
+         row.put("label", tag.getValueString("label"));
+         row.put("table", tableLabel(tag.getValueString("tableName")));
+         row.put("records", tag.getValueInteger("usageCount") == null ? 0 : tag.getValueInteger("usageCount"));
+         rows.add(row);
+      }
+      return (table("Tags", NO_TAGS, rows, column("Label", "label", "3fr", "left"), column("Table", "table", "2fr", "left"), column("Records", "records", "1fr", "right")));
+   }
+
+
+
+   /*******************************************************************************
+    ** Custom field definitions: name, table, status and index state.
+    *******************************************************************************/
+   public static TableData fields() throws QException
+   {
+      CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
+      QueryInput input = new QueryInput(CollaborationTables.FIELD_DEFINITION).withFilter(new QQueryFilter()
+         .withOrderBy(new QFilterOrderBy("tableName")).withOrderBy(new QFilterOrderBy("name")).withLimit(200));
+      input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
+      List<Map<String, Object>> rows = new ArrayList<>();
+      for(QRecord definition : new QueryAction().execute(input).getRecords())
+      {
+         Map<String, Object> row = new LinkedHashMap<>();
+         row.put("name", definition.getValueString("name"));
+         row.put("table", tableLabel(definition.getValueString("tableName")));
+         row.put("status", friendly(definition.getValueString("status")));
+         row.put("indexState", friendly(definition.getValueString("indexState")));
+         rows.add(row);
+      }
+      return (table("Custom fields", NO_FIELDS, rows, column("Name", "name", "3fr", "left"), column("Table", "table", "2fr", "left"),
+         column("Status", "status", "1fr", "left"), column("Index state", "indexState", "1fr", "left")));
+   }
+
+
+
+   /*******************************************************************************
+    ** Live viewer counts per table. Only administrators see them (they cover
+    ** records the viewer may not be able to open); others get an explanation.
+    *******************************************************************************/
+   public static TableData presence() throws QException
+   {
+      CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
+      boolean admin = QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN);
+      List<Map<String, Object>> rows = new ArrayList<>();
+      if(admin)
+      {
+         PresenceRegistry.get(QContext.getQInstance()).counts().forEach((table, viewers) ->
+         {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("table", tableLabel(table));
+            row.put("viewers", viewers);
+            rows.add(row);
+         });
+      }
+      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "3fr", "left"), column("People", "viewers", "1fr", "right")));
+   }
+
+
+
+   /*******************************************************************************
+    ** Assemble a table widget whose empty state is a sentence, not a blank grid.
+    *******************************************************************************/
+   private static TableData table(String label, String emptyMessage, List<Map<String, Object>> rows, TableData.Column... columns)
+   {
+      return (new TableData(label, List.of(columns), rows).withNoRowsFoundHTML(emptyMessage).withRowsPerPage(10));
+   }
+
+
+
+   /*******************************************************************************
+    ** A plain column; the frontend styles it.
+    *******************************************************************************/
+   private static TableData.Column column(String header, String accessor, String width, String align)
+   {
+      return (new TableData.Column("default", header, accessor, width, align));
+   }
+
+
+
+   /*******************************************************************************
+    ** A table's display label, "All tables" when there is none (global).
+    *******************************************************************************/
+   private static String tableLabel(String name)
+   {
+      if(name == null || name.isBlank())
+      {
+         return ("All tables");
+      }
+      QTableMetaData table = QContext.getQInstance().getTable(name);
+      return (table == null || table.getLabel() == null ? name : table.getLabel());
+   }
+
+
+
+   /*******************************************************************************
+    ** ACTIVE becomes Active; a missing value becomes a dash.
+    *******************************************************************************/
+   private static String friendly(String value)
+   {
+      if(value == null || value.isBlank())
+      {
+         return ("-");
+      }
+      String lower = value.toLowerCase(Locale.ROOT).replace('_', ' ');
+      return (Character.toUpperCase(lower.charAt(0)) + lower.substring(1));
+   }
+
+
+
+   /*******************************************************************************
+    ** Binary sizes with one decimal, like 4.7 KB; whole bytes below 1 KB.
+    *******************************************************************************/
+   public static String humanSize(long bytes)
+   {
+      if(bytes < 1024)
+      {
+         return (bytes + " B");
+      }
+      String[] units = { "KB", "MB", "GB", "TB", "PB" };
+      double value = bytes;
+      int unit = -1;
+      while(value >= 1024 && unit < units.length - 1)
+      {
+         value /= 1024;
+         unit++;
+      }
+      return (String.format(Locale.ROOT, "%.1f %s", value, units[unit]));
+   }
+
+
+
+   /*******************************************************************************
+    ** Aggregate values come back as any numeric type, or null for empty sets.
+    *******************************************************************************/
+   private static Number numberOf(Object value)
+   {
+      return (value instanceof Number number ? number : 0);
+   }
+
+
+
+   /*******************************************************************************
+    ** The path of a Collaboration table page, under the parent app when configured.
+    *******************************************************************************/
+   private static String path(String table)
+   {
+      CollaborationQBitConfig config = CollaborationRecords.config();
+      String prefix = config.getParentAppName() == null ? "/" + config.getAppName() : "/" + config.getParentAppName() + "/" + config.getAppName();
+      return (prefix + "/" + table);
    }
 
 
@@ -232,7 +351,7 @@ public final class CollaborationHome
    /*******************************************************************************
     ** Count without materializing rows or substituting a privileged session.
     *******************************************************************************/
-   private static long count(String table, QQueryFilter filter) throws QException
+   private static int count(String table, QQueryFilter filter) throws QException
    {
       CountInput input = new CountInput(table).withFilter(filter);
       input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
@@ -242,9 +361,9 @@ public final class CollaborationHome
 
 
    /*******************************************************************************
-    ** Widget renderer instantiated by QQQ.
+    ** KPI renderer instantiated by QQQ.
     *******************************************************************************/
-   public static class HomeRenderer extends AbstractWidgetRenderer
+   public static class KpiRenderer extends AbstractWidgetRenderer
    {
       /*******************************************************************************
        ** Render using the current session and time.
@@ -252,7 +371,58 @@ public final class CollaborationHome
       @Override
       public RenderWidgetOutput render(RenderWidgetInput input) throws QException
       {
-         return (new RenderWidgetOutput(new RawHTML(null, CollaborationHome.render(Instant.now()))));
+         return (new RenderWidgetOutput(kpis(Instant.now())));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Tags renderer instantiated by QQQ.
+    *******************************************************************************/
+   public static class TagsRenderer extends AbstractWidgetRenderer
+   {
+      /*******************************************************************************
+       ** Render using the current session.
+       *******************************************************************************/
+      @Override
+      public RenderWidgetOutput render(RenderWidgetInput input) throws QException
+      {
+         return (new RenderWidgetOutput(tags()));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Custom fields renderer instantiated by QQQ.
+    *******************************************************************************/
+   public static class FieldsRenderer extends AbstractWidgetRenderer
+   {
+      /*******************************************************************************
+       ** Render using the current session.
+       *******************************************************************************/
+      @Override
+      public RenderWidgetOutput render(RenderWidgetInput input) throws QException
+      {
+         return (new RenderWidgetOutput(fields()));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Presence renderer instantiated by QQQ.
+    *******************************************************************************/
+   public static class PresenceRenderer extends AbstractWidgetRenderer
+   {
+      /*******************************************************************************
+       ** Render using the current session.
+       *******************************************************************************/
+      @Override
+      public RenderWidgetOutput render(RenderWidgetInput input) throws QException
+      {
+         return (new RenderWidgetOutput(presence()));
       }
    }
 }

@@ -1,6 +1,6 @@
 # QBit Collaboration
 
-Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and standalone filter translation. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g remain planned; general runtime overrides are still deferred. TAGS mode settings are read directly by the service.
+Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and core-integrated tag filtering/search. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g add the custom-field designer and ephemeral replicated presence. Runtime overrides and TAGS mode settings resolve through core.
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
@@ -11,10 +11,83 @@ Comment parents list the selected thread's root and replies. Feature-setting sco
 ## Requirements
 
 - Java 21.
-- QQQ 4.1.0-RC.5 or newer compatible 4.1 release. The build pins RC.5.
+- QQQ `4.1.0-SNAPSHOT` installed from develop, including UI API extension point #1128. The build will move to `4.1.0-RC.6` once released; middleware Javalin is a compile dependency.
 - A configured QQQ backend supporting query, get, insert, update, delete, count and aggregate actions. PostgreSQL 15+ is the intended persistent store (the generated personal-target indexes use `NULLS NOT DISTINCT`); tests use the memory backend.
 - Attachments require `qbit-object-storage:0.1.0-RC.2` (a pinned dependency), installed with a PRIVATE bucket alias matching `attachmentsBucketName`. Configure its connection and credentials in the host; this qbit does not provision buckets.
-- Later phases and runtime overrides need the core contracts from the QQQ collaboration PRs. Favorites and recents use only APIs released in RC.5. String enum ids match the spec until the core collaboration enums are released.
+- Core feature resolution, permissions, reference security, summaries, query expansion and realtime use QQQ `4.1.0-SNAPSHOT`, targeting RC.6.
+
+## Demo server
+
+`CollaborationDevServer` is a disposable, memory-backed Sales CRM for trying the
+Next dashboard and taking screenshots. It needs Java 21 and the locally installed
+QQQ `4.1.0-SNAPSHOT` from develop. No database, Docker or MinIO is needed. It binds
+to `127.0.0.1`; stopping the JVM discards edits and uploaded attachments.
+
+Build the Next static export in `qqq-frontend-next`:
+
+```bash
+QQQ_NEXT_OUTPUT=export pnpm build
+```
+
+In PowerShell, use `$env:QQQ_NEXT_OUTPUT = 'export'; pnpm build` for that command.
+Then, from this repository, prepare the test classpath and place the export under
+a classpath directory named `next-dashboard`, following StorageDevServer's layout:
+
+```powershell
+.\mvnw.cmd -o -q test-compile dependency:build-classpath '-Dmdep.includeScope=test' '-Dmdep.outputFile=target/demo-classpath.txt'
+New-Item -ItemType Directory -Force target/demo-frontend/next-dashboard | Out-Null
+Copy-Item -Path ../qqq-frontend-next/out/* -Destination target/demo-frontend/next-dashboard -Recurse -Force
+$demoDeps = (Get-Content target/demo-classpath.txt -Raw).Trim()
+$demoClasspath = "target/test-classes;target/classes;$demoDeps;target/demo-frontend"
+java '-Dqqq.javalin.frontend=next' '-Dcollab.dev.port=8098' '-Dcollab.dev.user=alice' -cp $demoClasspath com.kingsrook.qbits.collaboration.devserver.CollaborationDevServer
+```
+
+The equivalent Java command is
+`java -Dqqq.javalin.frontend=next -Dcollab.dev.port=8098 -Dcollab.dev.user=alice -cp "target/test-classes;target/classes;DEPS;EXPORT" com.kingsrook.qbits.collaboration.devserver.CollaborationDevServer`.
+`DEPS` is the generated classpath file's contents; `EXPORT` is the folder **containing**
+`next-dashboard/`, not the export itself. On macOS/Linux use `./mvnw` and `:` instead
+of `;` between classpath entries.
+
+Open [the demo](http://localhost:8098/?createMockSession=true), then **Sales → People**
+or **Sales orders**. [Person 1](http://localhost:8098/app/person/1) and
+[order 1](http://localhost:8098/app/sales_order/1) have the richest collaboration panels.
+Pick the user per browser: add `user=` to the page load, for example
+`http://localhost:8098/?createMockSession=true&user=bob`. The server remembers the choice in a
+`collab_dev_user` cookie, so **open a second browser with `?user=bob` to see presence** (your
+first browser keeps its own user; browsers on the same profile share the cookie). Without a
+choice, `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list) is the default.
+The MOCK session customizer supplies stable identities, display names (the sidebar shows
+Alice Morgan, not Anonymous) and real permissions, also used by recipient access checks.
+Shared record links are absolute (`frontendBaseUrl` is `http://localhost:<port>`):
+
+| User | Permissions |
+| --- | --- |
+| `alice` — Alice Morgan (default) | Full Sales access and comment, attach, tag, share, task and assign permissions |
+| `bob` — Bob Chen | People read/comment; no Sales order access |
+| `admin` — Demo Administrator | Full Sales access plus `collaboration.admin`, vocabulary/field management and Admin → Collaboration |
+
+Both tables enable every record feature. People use FREE tags and host owner/assignee
+fields; orders use APPROVED_ONLY tags. The seed contains 25 fictional contacts at
+10 companies, 40 orders with deterministic amounts/dates, eight approved tags,
+two ACTIVE custom fields (Preferred contact; searchable Purchase order no.), six
+comments with three mentions and a resolved thread, three generated PNG/PDF attachments,
+follows, four tasks (one overdue and one completed), two order assignments, two shares, Bob's open order-access
+request, and six favorites/recents for Alice. Ordinary record updates create FIELD
+audit history. Task deadlines are relative to startup so the overdue example stays useful.
+
+Attachment previews/downloads use real in-memory bytes and expiring local URLs.
+Notifications are recorded in memory; they do not send email. Presence is live and
+ephemeral: the current browser supplies its heartbeat; there are no fake persistent viewers.
+Two current permission edge cases remain visible in this snapshot: Bob can start a
+comment thread, but replying to another author's thread fails its activity update;
+an access request carrying a share ID for an unreadable parent returns 404. The seed
+uses Bob's own thread and a direct access request without a share ID.
+The test builds and seeds without frontend assets, validates the instance, then checks
+the version/collaboration endpoints, downloads and Bob's restricted access on a free port:
+
+```powershell
+.\mvnw.cmd -o -q verify
+```
 
 ## Install
 
@@ -66,7 +139,7 @@ Omit `withParentAppName` for a top-level app. Run normal QQQ instance validation
 
 All tables include `id`, `createDate` and `modifyDate`, identity/details/dates sections, and table possible-value sources. SQL table names match metadata table names; SQL columns use snake_case. Use a stable nonempty scope name (convention: `instance` for INSTANCE; the metadata app/table name otherwise). JSON validation and override resolution arrive with the provider, not in this scaffold.
 
-The home reports persisted enabled settings by scope type, people known and people seen within the inclusive last seven days, plus Favorites and Recently viewed row counts and distinct user counts, attachment count and total bytes, comments in the last seven days, open root threads, and follower subscriptions (admins). Attachment aggregates are explicitly approximate until core can mirror parent locks. Recent activity is based on `lastSeenAt`, independently of the directory's `active` account flag. Empty states explain missing data. These counts do not represent resolved feature enablement on host tables.
+The home is four full-width standard widgets (no custom HTML, no hard-coded colors, so dark mode works): an Overview of KPIs (comments this week, open threads, open and overdue tasks, open access requests, attachments with a human-readable total size such as 4.7 KB, active custom fields), a Tags table (label, table or All tables, records), a Custom fields table (name, table, status, index state) and an admin-only Who's here table of live viewer counts per table. Every block has a real empty-state message. Counts use the caller's session and permissions; attachment aggregates remain approximate until core can mirror parent locks.
 
 ## Permissions
 
@@ -107,7 +180,6 @@ List<FavoriteEntry> recents = RecentsService.list(50);
 - Hrefs mirror Next's accepted flat routes: `/app/<table>/`, `/app/<table>/<id>/`, `/app/<app-or-process-or-report>/`, and `/app/<table>/savedView/<id>/`. Segments are URL-encoded. This avoids reconstructing nested app paths; trailing slashes support dotted process names.
 - Record views upsert a unique personal target. If its persisted `lastViewedAt` is less than 60 seconds ago, nothing is written; otherwise its timestamp, cached label and count update. The hidden backend-only `collaborationTrimRecents` process retains the newest `recentsPerUser` targets independently for each user, breaking timestamp ties by ID.
 
-The UI API endpoints in spec Â§10.2 will arrive in a **follow-up PR once QQQ's UI API extension point ([QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128)) is released**. This PR adds no endpoint or unreleased core dependency. Runtime feature overrides and the record-feature summary SPI also await released core contracts; the home counts are implemented now.
 
 ## Attachments
 
@@ -131,13 +203,13 @@ File names are reduced to a safe basename (maximum 255 characters). Object keys 
 
 The admin Attachments table additionally requires `collaboration.view` (or `collaboration.admin`). The panel service bypasses that browse grant only after its own parent/feature/ownership checks. Direct table insert/update/delete is denied; use the service and record action so storage and rows remain coordinated. Storage operations use `ObjectStorage.asSystem("collaboration", runId).bucket(alias)` after these checks, preserving calling-qbit/initiating-user operation logging without requiring users to hold `object_storage.*` grants.
 
-RC.5 has no PRE_QUERY customizer. `AttachmentSecurity` uses its custom permission checker as the pre-query hook, adding `tableName IN (readable parent tables)` to queries, counts and aggregates. Enable core permission enforcement for direct model API use. A POST_QUERY customizer checks each row's parent and removes invisible rows before signing any URLs. This applies to direct get/query as well as browsing. **Counts and aggregate bytes are approximate, and pages may be short** because parent record locks are checked after querying; the home labels the approximation. RC.5 cannot publish an `approximate` flag or refill pages through this hook. Replace this stand-in with core's record-reference security when released. Per-table feature enablement/settings and permission catalog integration also await those contracts.
+Core reference metadata now restricts parent tables/features and enforces parent visibility and record feature permissions. Direct writes remain service-only. The qbit retains its unpinned row-visibility fallback because core does not yet post-filter unmirrored parent locks or refill pages. Counts and aggregates remain approximate.
 
 **Preview and download.** The record view has `FILE_PREVIEW` and `FILE_DOWNLOAD` virtual fields, filled with five-minute presigned GETs only for visible rows (up to 200 rows per query). Downloads use RC.2's `PresignGet.downloadAs(fileName)`. RC.2 has no arbitrary response-header override for explicit inline disposition, so uploads store `Content-Disposition: inline`, and previews leave that header unchanged. URLs are never persisted. Images/PDF use the standard media preview; the host must allow its storage host in the frontend CSP (PDF frames need compatible `frame-src`). `thumbnailKey` is nullable and unused: object storage has no thumbnail generator, so thumbnails use FILE_PREVIEW rather than generated thumbnail files.
 
 **Actions and cleanup.** `Delete attachments` is a standard streamed ETL record action with Review/Result counts, skipped unauthorized rows, permission rechecks at execution and per-row failure summaries. It is not in navigation. Soft deletion follows the bucket's versioning/trash; without either, deletion is permanent. There is deliberately no **Attach files** table action: uploads come through the API/panel. The current browse action requires `collaboration.view`; the panel may call the service without that grant.
 
-After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. Wiring to core's `RecordReferenceCleanupInterface` waits for its release. UI API endpoints and the panel transport wait for [#1128](https://github.com/QRun-IO/qqq/pull/1128); direct/presigned upload endpoints and realtime events remain future integrations. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
+After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. Wiring to core's `RecordReferenceCleanupInterface` waits for its release. UI API endpoints use the merged #1128 extension point from the locally installed snapshot; direct/presigned upload endpoints and realtime events remain future integrations. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
 
 Tests use real QQQ memory actions and record locks plus an in-memory `AttachmentStorage` adapter. Object storage RC.2 exposes no fake bucket; its provider conformance suite uses MinIO/Testcontainers. This suite requires no Docker and does not claim MinIO/S3 conformance.
 
@@ -147,7 +219,7 @@ Run services in the caller's `QContext`. Register host tables before producing t
 
 ```java
 config.withNotifier(new QCodeReference(MyCollaborationNotifier.class))
-   .withUserSessionSupplier(new QCodeReference(MyUserSessions.class))
+   .withUserSessionProvider(new QCodeReference(MyUserSessions.class))
    .withFollowActionTables(List.of("order"))
    .withFollowChangeTables(List.of("order"))
    .withSchedulerName("scheduler");
@@ -174,7 +246,7 @@ TimelinePage timeline = new TimelineService().timeline("order", "123", null, 20,
 Classes live in the `comments`, `follow`, `timeline`, `people` and `notify` packages under `com.kingsrook.qbits.collaboration`.
 
 - Comments require visible parents and the `comment` feature check (explicit `<table>.comment` or table EDIT). Markdown is nonblank and at most 20,000 characters; clients must sanitize rendered HTML. Replies to replies attach to the root. Roots have null `threadId`; replies store the root ID in both thread/parent fields. Deleted DTO bodies are null. Authors alone edit; authors with comment permission or admins delete. Resolve/reopen applies only to roots. History follows parent READ.
-- Mentions use `@[Name](user:<userId>)`, deduplicate IDs and reject more than 50. `OtherUserAccess.canRead` returns `Optional<Boolean>` using a supplied recipient session and an enforced GetAction in a temporary context. Missing providers/sessions and mismatched identities are unknown. False/unknown recipients get neither record data nor automatic follows. Edits notify only previously unmentioned users. Mention delivery and ordinary follower delivery are deduplicated; authors never receive their own comment notifications.
+- Mentions use `@[Name](user:<userId>)`, deduplicate IDs and reject more than 50. `CollaborationRecordAccessChecker.canRead` returns `Optional<Boolean>` using a supplied recipient session and an enforced GetAction in a temporary context. Missing providers/sessions and mismatched identities are unknown. False/unknown recipients get neither record data nor automatic follows. Edits notify only previously unmentioned users. Mention delivery and ordinary follower delivery are deduplicated; authors never receive their own comment notifications.
 - `CommentEntry` includes author display name, capabilities, deleted/resolved state, mentions with visibility, and ordered replies. `CommentPage` pages 1–50 root threads by latest activity then ID, with replies oldest first. Pass `nextCursor` unchanged. Cursors are opaque, versioned Base64 tuple encodings, not authorization tokens.
 - Manual/assigned follow creation defaults change notifications on; other reasons default them off. Comment notifications default on. Existing preferences survive automatic follows and repeated calls; non-null arguments to `follow` change preferences. Follow needs only parent READ. The internal `ensureFollower` helper also verifies other-user access. Muted subscriptions are skipped until `mutedUntil` expires.
 - `FollowProcesses.processesFor(tableName)` returns the same Follow/Unfollow processes for manual host registration. Review performs no writes; Result rechecks permissions and reports successes/failures. They work with the host's actual primary-key field, not just `id`, and are never navigation entries.
@@ -185,7 +257,7 @@ Classes live in the `comments`, `follow`, `timeline`, `people` and `notify` pack
 
 The main comments/activity tables, revision/mention child joins and Followers child list are ordinary QQQ metadata. Direct API writes are refused; services authorize the actual parent. Shared `ParentTableRestriction` protects attachment and conversation queries/counts/aggregates; parent post-filtering protects row reads. Aggregate counts remain approximate and browse pages can be short for unmirrored parent locks. Raw persistence, activity writing and change-hook helpers are trusted internal boundaries and must not become public endpoints.
 
-UI API endpoints remain deferred to [QRun-IO/qqq#1128](https://github.com/QRun-IO/qqq/pull/1128). Runtime feature enablement, mirrored WRITE locks and core record-access/session contracts remain replacement points; the services do not claim to resolve feature-setting overrides. QAlerts.notify integration waits for #1125. Host-configured ESB listeners receive ordinary QQQ writes; realtime/UI and Quick Search provider registration remain host/later-phase integrations.
+UI API endpoints are described below. Runtime feature enablement, mirrored WRITE locks and core record-access/session contracts remain replacement points; the services do not claim to resolve feature-setting overrides. QAlerts.notify integration waits for #1125. Host-configured ESB listeners receive ordinary QQQ writes; realtime/UI and Quick Search provider registration remain host/later-phase integrations.
 
 ## Configuration
 
@@ -198,8 +270,8 @@ UI API endpoints remain deferred to [QRun-IO/qqq#1128](https://github.com/QRun-I
 | `blockedExtensions` | Empty | Case-insensitive extension denylist, with or without leading dots. |
 | `recentsPerUser` | `200` | Positive retention count per user. Enforced by the trim process. |
 | `notifier` | None | Implements `CollaborationNotifier`; replace with a QAlerts.notify adapter when QRun-IO/qqq#1125 is released. When unset: `EmailCollaborationNotifier` if qbit-email is on the classpath and produced in the instance, otherwise `NoOpNotifier`. |
-| `recipientEmailResolver` | People directory | `Function<String, String>` from user id to email address for the email notifier. Unset reads the `email` of the matching `collaboration_person` row; no address means no email. |
-| `userSessionSupplier` | None | `QCodeReference` implementing `UserSessionSupplier`; missing user sessions mean unknown access. |
+| `recipientEmailResolver` | People directory | `Function<String, String>` from user id to email address for the email notifier. Unset reads the `email` of the matching `collaboration_user` row; no address means no email. |
+| `userSessionProvider` | None | `QCodeReference` implementing `UserSessionProviderInterface`; missing user sessions mean unknown access. |
 | `followActionTables` | Empty | Existing host tables to receive standard Follow and Unfollow Review/Result processes. |
 | `followChangeTables` | Empty | Existing host tables whose UPDATE events should produce five-minute follow digests. |
 | `appName` | `collaboration` | Metadata name of the app. |
@@ -208,11 +280,13 @@ UI API endpoints remain deferred to [QRun-IO/qqq#1128](https://github.com/QRun-I
 
 ## Email through qbit-email
 
-qbit-email is an optional dependency (`<optional>true</optional>`). When it is on the classpath, produced in the same instance, and `notifier` is not configured, mentions, shares and task notifications are emailed by `EmailCollaborationNotifier` (package `email`, the only class that references qbit-email). Without qbit-email nothing changes: `NoOpNotifier` sends nothing. A configured `notifier` always wins.
+qbit-email 0.1.0-RC.1 is an optional dependency (`<optional>true</optional>`). When it is on the classpath, produced in the same instance, and `notifier` is not configured, mentions, shares and task notifications are emailed by `EmailCollaborationNotifier` (package `email`, the only class that references qbit-email). Without qbit-email nothing changes: `NoOpNotifier` sends nothing. A configured `notifier` always wins.
+
+The parent 2.1.0 guardrail allowlists explicitly include the qbit-email artifact and API package, preserving the parent's existing allowances. The package allowance includes the root because `EmailRuntime.config` lives there; keep all direct email references inside the adapter. Strict UI API route checks are enabled.
 
 - Templates (NOTIFICATION, Markdown, owner `qbit-collaboration`), registered on first send and never overwritten: `collaboration_mention`, `collaboration_share`, `collaboration_task_reminder` (task assignment, reminder and overdue). Follow digests are not emailed.
 - One message per recipient, idempotency key `collaboration:<mention|share|task>:<event id>:<recipient user id>`, linked to the parent record, sender `qbit-collaboration`. A repeat is a duplicate. The event id is the mention, share, task or assignment row id (task reminders add the due field); `CollaborationNotification` carries it as `sourceId`, with the acting user as `actorUserId`.
-- No comment bodies, task titles, notes or share messages are emailed, since they may hold PHI. The email says who did what on which record, with a link. The record label is read as the recipient (needs `userSessionSupplier`) and used only when `FieldAccessHelper.isRecordLabelFullAccess` allows it (reflective guard); otherwise the text says "a record in <table label>". Variables are classified CONFIDENTIAL so the templates need no PHI approval.
+- No comment bodies, task titles, notes or share messages are emailed, since they may hold PHI. The email says who did what on which record, with a link. The record label is read as the recipient (needs `userSessionProvider`) and used only when `FieldAccessHelper.isRecordLabelFullAccess` allows it (reflective guard); otherwise the text says "a record in <table label>". Variables are classified CONFIDENTIAL so the templates need no PHI approval.
 - The link is sent only when absolute: set `frontendBaseUrl`.
 - Recipient addresses come from `withRecipientEmailResolver(Function<userId, String>)`, else the people directory email. Refused or suppressed sends are logged by user id and status only; delivery problems never fail the collaboration action.
 
@@ -222,7 +296,7 @@ qbit-email is an optional dependency (`<optional>true</optional>`). When it is o
 2. For PostgreSQL, generate `CollaborationSchema.postgresScript(config)` and apply it with the host's migration tool. It creates tables and unique indexes, never executes DDL, and does not migrate existing schemas. QQQ owns date/default values on writes.
 3. Grant `collaboration.view` and `collaboration.admin` as appropriate; wire the host's audit persistence for FIELD audit events.
 4. Validate the assembled instance. Navigate to Collaboration for Comments, Attachments, Activity (admins), Feature Settings and People. People populate as signed-in users call collaboration services.
-5. Wait for the released core contracts and later qbit phases before enabling collaboration features on host records. Favorites, recents, attachments, comments, follow and timeline services can be used now. This phase installs no endpoints or host-table overlays; scheduled work is opt-in.
+5. Wait for the released core contracts and later qbit phases before enabling collaboration features on host records. Favorites, recents, attachments, comments, follow and timeline services can be used now. The versioned UI API is enabled by default; host-table overlays remain separate and scheduled work is opt-in.
 
 ## Build
 
@@ -284,23 +358,104 @@ multi-select belongs to the separate Next UI phase. The qbit tests exercise the
 submitted arrays and real streamed Review/Result lifecycle.
 
 `AttachmentCleanup.onParentsDeleted` now also removes tag assignments and
-recounts vocabulary usage. Hosts keep using this trusted callback until the core
-cleanup registration contract ships. The home shows session-visible vocabulary
+recounts vocabulary usage. Core invokes `CollaborationCleanup` after committed parent deletion. The home shows session-visible vocabulary
 size, pending suggestions, and the five most-used approved tags.
 
-`TagFilterTranslator.recordIds(table, operatorName, tags)` supports `IN` (any),
-`CONTAINS_ALL`, `NOT_IN` (none), `IS_BLANK`, and `IS_NOT_BLANK`. Every operator
-returns matching visible parent IDs as strings, including complements. Exactly
-10,000 results are allowed; larger results throw. Unknown tags match nothing;
-empty IN matches nothing and empty CONTAINS_ALL/NOT_IN match all visible parents.
-Numeric inputs are IDs, strings are normalized names; if a global and local tag
-share a name, the global tag wins (use IDs to disambiguate).
+`collaborationTags` is a virtual STRING field labeled Tags with possible-value source `collaboration_tag`. `TagCriteriaExpander` supports IN, NOT_IN, EQUALS, NOT_EQUALS, IS_BLANK, IS_NOT_BLANK and CONTAINS_ALL using core `QSubQuery` membership filters. Ordinary quick search matches labels; `#name` matches normalized names. Numeric criteria are tag IDs; string criteria are names. The old ID materializer is removed. Core owns SQL execution or bounded cross-backend materialization; its bound applies to inner rows, not final parent matches.
 
-**Filter/quick-search integration lands after QRun-IO/qqq#1140 is released.** This
-phase does not register a virtual filter field, core expander, `QSubQuery`, tag
-column filler, or `#tag`/host-record quick-search provider. The standalone
-translator deliberately imports none of those unreleased types.
+The runtime provider adds this field and its search entry where TAGS is enabled. It is queryable but not selectable: the overlay has no virtual-field post-query hook and existing host customizers must be preserved.
 
+## UI API
+
+The producer registers extension `collaboration` version `1.0.0` at
+`/qqq/v1/qbit/collaboration`. It uses the signed-in user's session and existing
+services. Disable registration with `new CollaborationQBitConfig().withUiApi(false)`.
+Presence, shares, tasks, my-work, direct upload and thumbnail routes are not part
+of this extension version.
+
+All successes return HTTP 200. All bodies have named `Collaboration*V1` schemas
+in [the extension contract](src/main/resources/openapi/qqq-v1/collaboration.yaml).
+The server publishes these alongside core at `/qqq/v1/openapi.yaml` and `.json`.
+
+| Method | Path (relative to `/qqq/v1/qbit/collaboration`) | Purpose | Request schema | Response schema |
+|---|---|---|---|---|
+| GET | `/favorites` | List personal favorites | — | `CollaborationFavoriteListV1` |
+| PUT | `/favorites` | Star a target | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| DELETE | `/favorites` | Unstar a target | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| POST | `/recents` | Record a recent view | `CollaborationTargetRequestV1` | `CollaborationMutationResultV1` |
+| PATCH | `/favorites/order` | Reorder personal favorites | `CollaborationFavoriteOrderRequestV1` | `CollaborationMutationResultV1` |
+| GET | `/recents` | List recent targets | — | `CollaborationRecentListV1` |
+| GET | `/records/{table}/{pk}/attachments` | List record attachments | — | `CollaborationAttachmentListV1` |
+| GET | `/attachments/{id}/download` | Get a temporary download URL; clients follow url | — | `CollaborationDownloadV1` |
+| GET | `/attachments/{id}/preview` | Get a temporary preview URL; clients follow url | — | `CollaborationDownloadV1` |
+| PATCH | `/attachments/{id}` | Rename or describe an attachment | `CollaborationAttachmentPatchRequestV1` | `CollaborationAttachmentV1` |
+| DELETE | `/attachments/{id}` | Delete an attachment | — | `CollaborationMutationResultV1` |
+| GET | `/tags` | Search table tag vocabulary | — | `CollaborationTagListV1` |
+| POST | `/tags` | Create or suggest a tag | `CollaborationTagCreateRequestV1` | `CollaborationTagV1` |
+| GET | `/records/{table}/{pk}/tags` | List applied record tags | — | `CollaborationTagListV1` |
+| PUT | `/records/{table}/{pk}/tags` | Add and remove record tags | `CollaborationTagApplyRequestV1` | `CollaborationTagListV1` |
+| GET | `/records/{table}/{pk}/comments` | Page record comment threads | — | `CollaborationCommentPageV1` |
+| POST | `/records/{table}/{pk}/comments` | Post a comment or reply | `CollaborationCommentPostRequestV1` | `CollaborationCommentV1` |
+| PATCH | `/comments/{id}` | Edit the caller's comment | `CollaborationCommentEditRequestV1` | `CollaborationCommentV1` |
+| DELETE | `/comments/{id}` | Delete a comment thread | — | `CollaborationMutationResultV1` |
+| POST | `/comments/{id}/resolve` | Resolve a comment thread | — | `CollaborationMutationResultV1` |
+| POST | `/comments/{id}/reopen` | Reopen a comment thread | — | `CollaborationMutationResultV1` |
+| GET | `/comments/{id}/history` | Read comment edit history | — | `CollaborationCommentHistoryV1` |
+| GET | `/mentions/candidates` | Find people to mention on a record | — | `CollaborationMentionCandidateListV1` |
+| GET | `/records/{table}/{pk}/follow` | Get the caller's follow state | — | `CollaborationFollowStateV1` |
+| PUT | `/records/{table}/{pk}/follow` | Follow a record and configure notifications | `CollaborationFollowRequestV1` | `CollaborationFollowStateV1` |
+| DELETE | `/records/{table}/{pk}/follow` | Unfollow a record | — | `CollaborationFollowStateV1` |
+| GET | `/records/{table}/{pk}/followers` | List record followers | — | `CollaborationFollowerListV1` |
+| GET | `/records/{table}/{pk}/timeline` | Page the merged record timeline | — | `CollaborationTimelinePageV1` |
+| GET | `/people` | Search the active people directory | — | `CollaborationPersonListV1` |
+| GET | `/people/{userId}` | Get an active directory person | — | `CollaborationPersonV1` |
+| POST | `/records/{table}/{pk}/attachments` | Upload one file (multipart) | `CollaborationAttachmentUploadRequestV1` | `CollaborationAttachmentV1` |
+
+List requests accept `limit` (default 20, range 1-100). Responses include
+`nextCursor`: pass it as `cursor` to continue. Comments page root threads by last
+activity; replies are oldest first. Timeline uses its `(at, kind, id)` keyset and
+also accepts `before` as an alias for `cursor` (supply only one), plus comma-separated
+`types` (`AUDIT`, `ACTIVITY`, or activity names such as `COMMENTED`). Complete-list
+services use opaque offset cursors and recheck visibility on every request;
+concurrent list changes may shift offsets. Recents and mention candidates retain
+their service's 50-item window. People and vocabulary search accept `q` and `limit`
+only and return null `nextCursor`; narrow the search to find more matches. Tag apply
+returns the full resulting tag set.
+
+Upload is real `multipart/form-data`, with exactly one binary part named `file`
+and an optional text `description`. The direct `AbstractEndpointSpec` reads Javalin's
+uploaded parts and streams the file to `AttachmentsService`, which enforces parent
+access, filename rules and bounded storage. Hosts retain the default
+`AttachmentStorage` adapter backed by object storage RC.2; an alternative adapter
+can be configured with `withAttachmentStorage(new QCodeReference(Adapter.class))`.
+
+Download and preview both return `CollaborationDownloadV1 {url}` with status 200:
+**clients follow url**. The presigned URL lasts five minutes. Download requests an
+attachment filename; preview requests inline content. QQQ's current OpenAPI
+`Response` model cannot declare the `Location` header, so this contract uses the
+JSON URL alternative consistently.
+
+A missing or invisible parent returns identical `404 {"error":"Not found"}`.
+Missing write permissions return 403; invalid input returns 400 with an `error`
+message through QQQ's exception mapper. Provider/backend failures remain server
+errors. Services continue to own author, record-lock and permission checks.
+Mention candidates expose `canRead` as the string enum `"true"`, `"false"`,
+`"unknown"`; unknown does not imply the recipient can read the record.
+
+QQQ's schema model currently lacks object-property `required` and numeric
+minimum/maximum keywords. Required fields and limit bounds are described in the
+schemas and enforced at runtime; the request body itself is marked required.
+
+Regenerate the fragment after intentionally changing the contract:
+
+```powershell
+.\mvnw.cmd -o -q '-Dtest=CollaborationApiContractTest' '-Dcollaboration.openapi.update=true' test
+```
+
+Normal `mvnw.cmd -o -q verify` checks the fragment without modifying it, runs real
+HTTP integration tests on a free port with the memory backend, and retains the
+70% instruction / 90% class coverage gates. This is the first release of the
+extension, so there is no prior release baseline yet.
 ## Sharing and work services (phases h/i)
 
 Services run in the caller's `QContext`. UI API endpoints and screens follow in a separate PR.
@@ -404,3 +559,142 @@ idempotent hook. Schema generation includes the four tables, supporting indexes 
 `ALTER TABLE collaboration_mention ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ` for upgrades.
 Hosts apply generated SQL through their migration tooling; ESB/search publication uses the same
 host integrations as other collaboration tables.
+
+
+## Core contracts and completed UI API
+
+The qbit targets QQQ RC.6 using the locally installed `4.1.0-SNAPSHOT`. Defaults enable FAVORITES, RECENTS and TIMELINE for eligible host tables; all other features start off. Configure before producing metadata:
+
+```java
+config.withDefaultFeatures(RecordFeature.FAVORITES, RecordFeature.RECENTS, RecordFeature.TIMELINE)
+   .withTableFeatures("order", RecordFeature.TAGS, RecordFeature.COMMENTS, RecordFeature.FOLLOW)
+   .withMirroredSecurityKeyTypes(List.of("clientId"))
+   .withUserSessionProvider(new QCodeReference(MyUserSessions.class));
+```
+
+`withTableFeatures` supplies the complete enabled set for that table. Host declarations and hard limits use `RecordFeaturesMetaData`. After declaring host tables and producing/enriching the instance, call `RuntimeMetaDataOverlay.refresh(instance)` after database initialization with that instance in `QContext`, as required by core. This loads stored policy and initial runtime fields. Feature-setting insert/update/delete refresh again after commit. Rollback discards callbacks; invalid contributions retain the previous accepted snapshot.
+
+Feature permissions appear automatically in the policy editor through core enrichment. Record-level implied EDIT grants also require the parent's WRITE locks. `mirroredSecurityKeyTypes` defaults to none; configured keys add `lockKey_<type>` fields, null-ALLOW locks and PostgreSQL columns/ALTER statements. Apply generated DDL before enabling the configuration. Core propagates parent lock changes. Revisions and mentions already carry denormalized references in this schema and receive core protection too.
+
+`CollaborationCleanup` removes attachments, tags, work and conversation data after committed parent deletion, retaining access requests. `CollaborationRecordAccessChecker` implements `RecordAccessCheckerInterface` through core `UserSessionProviderInterface.sessionForUser`; missing/mismatched recipient sessions mean unknown access. `CollaborationSummaryProvider` fills core `GET /qqq/v1/table/{table}/{pk}/features` with favorite/follow state, open comment/task counts, attachment/tag/follower counts and owner/assignee values.
+
+New routes, all under `/qqq/v1/qbit/collaboration`:
+
+| Method | Path |
+| --- | --- |
+| GET | `/records/{table}/{pk}/link` |
+| POST | `/records/{table}/{pk}/shares/preview` |
+| POST | `/records/{table}/{pk}/shares` |
+| POST | `/access-requests` |
+| GET | `/access-requests/mine` |
+| GET, POST | `/records/{table}/{pk}/tasks` |
+| PATCH | `/tasks/{id}` |
+| GET | `/tasks/mine` |
+| PUT | `/records/{table}/{pk}/assignment` |
+| GET | `/my-work` |
+
+Typed `CollaborationWorkSchemas` describe requests and results. Task PATCH preserves omitted fields, accepts OPEN/DONE/CANCELLED transitions, and permits explicit null for optional fields; null `remindAt` selects the service's due-date default. Assignment PUT replaces owner and assignee; null clears. Invalid input is 400, denied visible-record operations are 403, and missing/invisible parents are 404. Access requests deliberately never inspect parent existence. The extension stays at unreleased **1.0.0**; contract tooling accepts these additions without a bump.
+
+`CollaborationRealtime` publishes `comment.added/updated/deleted`, `attachment.changed`, `tags.changed` and `task.changed` on `record:{table}:{pk}` after commit. Successful notification delivery publishes `notification.created` on `user:{userId}`. Payloads contain identifiers only. The optional followers provider is skipped because `RecordFollowersProviderInterface` is absent from the installed jar. Selectable Tags values remain unavailable because the overlay has no output hook.
+
+
+## Custom fields (phase f)
+
+Enable `RecordFeature.CUSTOM_FIELDS` on each host table. **Custom Fields** is the standard,
+FIELD-audited `collaboration_field_definition` table. Reads require `collaboration.view` (or
+admin); writes/actions require `collaboration.fields.manage` (or admin). Definitions have a
+unique `(tableName, name)` key. The CUSTOM table picker lists enabled host tables; this core
+snapshot has no generic table-name provider. EAV values are a secured child list, not a nav item.
+
+Create a DRAFT named `[a-z][a-z0-9_]{0,40}`, then run **Publish field**. ACTIVE definitions appear
+as ordinary `cf_<name>` fields through the overlay. **Archive field** counts records with values
+in Review and hides the field, retaining its values. This version publishes DRAFT definitions
+only. **Rebuild index** reruns the index job. Types can change only in DRAFT; table/name identity
+is immutable. Lifecycle/index fields are server-managed; published definitions cannot be deleted.
+
+Types: STRING, TEXT, INTEGER, DECIMAL, BOOLEAN, DATE, DATE_TIME, SELECT, MULTI_SELECT, USER and
+RECORD_LINK. Select options use stable ids, for example:
+
+```json
+[{"id":"normal","label":"Normal"},{"id":"urgent","label":"Urgent"}]
+```
+
+Active options may be added or relabeled. PostgreSQL containment counts refuse removal of an id
+still in use; other backends skip this check with a visible warning. USER uses `collaboration_user`
+PVS; RECORD_LINK requires the linked table's PVS. MULTI_SELECT is a JSON-array **STRING** with a
+PVS: native array membership operators and multi-select editing await core support. Numeric
+bounds use `ValueRangeBehavior`; required, maxLength, defaultValue and plain-text help use normal
+metadata. Optional PUBLIC/CONFIDENTIAL/PII/PHI classification is carried by `AiFieldMetaData`.
+Sections follow `sectionName`, defaulting to Custom fields. `sortOrder` controls contribution
+order; searchable definitions join the normal search-field list.
+
+Definition writes refresh metadata after commit; rollbacks do not. Perform the initial
+`RuntimeMetaDataOverlay.refresh(instance)` after metadata and database initialization. Other pods
+must refresh their overlays when definitions change; presence replication does not replicate
+metadata.
+
+Memory uses core `JsonPathStorage`. PostgreSQL uses it after a cached
+`SELECT qqq_custom_fields FROM <backend table> LIMIT 0` probe succeeds. Missing columns and
+unsupported backends get read-only EAV virtual filters over `collaboration_field_value`, with
+typed `QSubQuery` criteria. These fields are not query-selectable; EAV value writes and projection
+are outside this version. `statusMessage` records the fallback reason. After adding a missing
+column, call `CustomFieldStorage.invalidate(instance, tableName)` and refresh the overlay.
+
+### PostgreSQL setup and indexes
+
+Apply the one-time migration with your normal migration tool:
+
+```sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS qqq_custom_fields JSONB NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS orders_custom_fields_gin ON orders
+   USING gin (qqq_custom_fields jsonb_path_ops);
+```
+
+`CollaborationSchema.customFieldsDdl("orders")` generates equivalent SQL with quoted identifiers
+and a deterministic index name. `postgresScript(config)` includes the two new collaboration
+tables. Neither helper executes SQL. Do not declare the backing column as a regular QQQ field.
+
+The hidden `collaborationBuildFieldIndexes` job runs every 60 seconds when `schedulerName` is
+set, and through Publish/Rebuild/Archive. Definitions show BUILDING/READY/FAILED, SQL and errors.
+Range fields get typed expression indexes; searchable text uses `gin_trgm_ops` when `pg_trgm`
+is installed, otherwise a normal expression index. Concurrent DDL uses a fresh backend
+connection with autocommit, outside the record transaction. PostgreSQL can reject temporal text
+casts as non-immutable; that failure is recorded. A host migration can supply its chosen
+immutable expression. Rebuild uses `IF NOT EXISTS`, preserving existing index definitions.
+Archive drops the index concurrently while retaining values.
+
+`withManagedIndexes(false)` records `indexDdl` only, with indexState NONE, for host migrations.
+There is no automatic migration receipt. The home shows definition/index status totals and the
+number of definitions with diagnostic messages.
+
+## Presence (phase g)
+
+Enable `RecordFeature.PRESENCE` on the table. The typed endpoints below
+`/qqq/v1/qbit/collaboration` are:
+
+| Operation | Input |
+| --- | --- |
+| `POST /presence` | `{connectionId, table, pk?, mode: "VIEWING"|"EDITING", fieldName?}` |
+| `DELETE /presence` | `{connectionId, table, pk?}` |
+| `GET /presence?table=...&pk=...` | Omit pk for a table snapshot |
+
+Session identity supplies userId and displayName. Every call rechecks table READ and record
+GetAction visibility. Disabled features and denied/missing parents return the same 404. A
+refused renewal removes the caller's previous lease. Connection ids are namespaced by user;
+they need not be active SSE connections, allowing polling clients to participate.
+
+Renew on open/focus change and every 20 seconds. Leases expire after 45 seconds, with a one-second
+sweep and expiry checks on reads. The cap is 50,000 leases per pod: new targets are refused with
+a warning while existing leases can renew. Tabs merge per user; EDITING wins and the latest
+editor supplies focus. Nothing is persisted, including directory rows.
+
+Every heartbeat/leave replicates over core's bus on `instance:presence`, a channel refused by
+core client subscriptions. `presence.changed` is emitted to record and table channels. Table
+snapshots aggregate users without record ids or focused field names; those stay on record
+channels. Configure core's ESB bus for multiple pods. Delivery is best effort; clients renew and
+refetch after reconnecting.
+
+The initial overlay refresh starts the registry on every pod, including those without local
+viewers. Endpoints also initialize it lazily. At shutdown call `PresenceRegistry.close(instance)`
+before `RealtimeBus.close(instance)`. The admin-only **Who's here** home card shows user counts
+per table, and core record-feature summaries include the presence snapshot.
