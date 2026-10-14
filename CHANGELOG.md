@@ -4,6 +4,13 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Added
+
+- Feature Settings table action **Create rows from configuration**: writes the code configuration out as editable `collaboration_feature_setting` rows (insert-only, only when the table is empty, no change in behavior).
+- Setup card on the Collaboration home: each record feature, whether it is on, for which tables, and where that comes from.
+- Help bundle `help/qbit-collaboration.yaml`: every table says what it is for and how its rows get created.
+- `CollaborationTablesGuardrailTest` and `FeatureSettingsDefaultsTest`.
+
 ### Changed
 
 - Upgrade the default QQQ BOM to `4.1.0-RC.7` from Maven Central.
