@@ -229,6 +229,21 @@ class CollaborationTest
 
 
    /*******************************************************************************
+    ** Home tables leave column widths to the frontend, so narrow cards wrap
+    ** instead of scrolling sideways (issue #21).
+    *******************************************************************************/
+   @Test
+   void homeTablesHaveNoFixedColumnWidths() throws Exception
+   {
+      for(TableData table : java.util.List.of(CollaborationHome.tags(), CollaborationHome.fields(), CollaborationHome.presence()))
+      {
+         assertThat(table.getColumns()).isNotEmpty().allSatisfy(column -> assertThat(column.getWidth()).isNull());
+      }
+   }
+
+
+
+   /*******************************************************************************
     ** Empty states explain what has not been populated.
     *******************************************************************************/
    @Test

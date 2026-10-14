@@ -102,6 +102,20 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
    /*******************************************************************************
     ** Upload, metadata, newest-first list, signed download and deletion round trip.
     *******************************************************************************/
+   /*******************************************************************************
+    ** The action steps can be constructed without a QContext, as QQQ does during
+    ** instance validation (issue #20); the service is created on first use.
+    *******************************************************************************/
+   @Test
+   void stepsConstructWithoutContext()
+   {
+      QContext.clear();
+      assertThat(new DeleteAttachmentsProcess.Review()).isNotNull();
+      assertThat(new DeleteAttachmentsProcess.Delete()).isNotNull();
+   }
+
+
+
    @Test
    void roundTrip() throws Exception
    {
