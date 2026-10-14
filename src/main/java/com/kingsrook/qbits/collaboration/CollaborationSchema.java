@@ -77,6 +77,18 @@ public final class CollaborationSchema
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_revision_comment ON collaboration_comment_revision (comment_id, edited_at, id)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_activity_parent ON collaboration_activity (table_name, record_id, at, id)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_digest_due ON collaboration_follow_digest (due_at)");
+      statements.add("CREATE UNIQUE INDEX IF NOT EXISTS uq_collaboration_access_request_open ON collaboration_access_request (table_name, record_id, requester_user_id) WHERE status = 'OPEN'");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_share_parent ON collaboration_share (table_name, record_id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_share_sent ON collaboration_share (sent_at)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_access_request_requester ON collaboration_access_request (requester_user_id, status)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_task_parent ON collaboration_task (table_name, record_id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_task_mine ON collaboration_task (assignee_user_id, status, due_at, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_task_reminder ON collaboration_task (remind_at) WHERE status = 'OPEN' AND reminded_at IS NULL");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_task_overdue ON collaboration_task (due_at) WHERE status = 'OPEN' AND overdue_notified_at IS NULL");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_assignment_owner ON collaboration_record_assignment (owner_user_id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_assignment_assignee ON collaboration_record_assignment (assignee_user_id)");
+      statements.add("ALTER TABLE collaboration_mention ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_mention_unread ON collaboration_mention (mentioned_user_id) WHERE notified_at IS NOT NULL AND read_at IS NULL");
       return (String.join(";\n", statements) + ";\n");
    }
 

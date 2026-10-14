@@ -493,7 +493,7 @@ public class ConversationServicesTest extends PersonalServiceFixture
       new CollaborationQBitProducer().withQBitConfig(configured).produce(installed);
       assertThat(installed.getProcess("collaborationFollow_document").getLabel()).isEqualTo("Follow");
       assertThat(installed.getProcess("collaborationUnfollow_document").getLabel()).isEqualTo("Unfollow");
-      assertThat(installed.getRecordChangeListeners()).hasSize(1);
+      assertThat(installed.getRecordChangeListeners()).hasSize(2);
       assertThat(installed.getProcess("collaborationAddTags_document").getLabel()).isEqualTo("Add tags");
       assertThat(installed.getProcess("collaborationRemoveTags_document").getLabel()).isEqualTo("Remove tags");
       assertThat(installed.getProcess(SendFollowDigestsProcess.NAME).getSchedule().getRepeatSeconds()).isEqualTo(60);

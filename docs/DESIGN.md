@@ -2,7 +2,7 @@
 
 The authoritative design is [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md` ([develop document](https://github.com/QRun-IO/qqq/blob/develop/docs/COLLABORATION.md)).
 
-Collaboration adds metadata-driven record features to QQQ: attachments, tags, custom fields, comments and mentions, presence, sharing, favorites, follow, timeline, recents, tasks and assignment. Core owns security, query and runtime metadata contracts; this qbit owns visible `collaboration_*` tables and feature services. Implemented: phase-a configuration, feature settings and people tables, plus phase-b favorites/recents tables, services, owner locks, retention and home counts against QQQ 4.1.0-RC.5. The phase-b UI API endpoints await the released extension point from QRun-IO/qqq#1128. The override and record-feature summary providers await released core contracts; phase-c attachments are implemented on object storage 0.1.0-RC.2; phase e comments/follow/timeline is implemented against released RC.5; phase d and phases f to i remain planned. The table below is the full roadmap from the specification, not a list of shipped functionality.
+Collaboration adds metadata-driven record features to QQQ: attachments, tags, custom fields, comments and mentions, presence, sharing, favorites, follow, timeline, recents, tasks and assignment. Core owns security, query and runtime metadata contracts; this qbit owns visible `collaboration_*` tables and feature services. Implemented: phase-a configuration, feature settings and people tables, plus phase-b favorites/recents tables, services, owner locks, retention and home counts against QQQ 4.1.0-RC.5. The phase-b UI API endpoints await the released extension point from QRun-IO/qqq#1128. The override and record-feature summary providers await released core contracts; phase-c attachments are implemented on object storage 0.1.0-RC.2; phase e comments/follow/timeline is implemented against released RC.5; phase d tags and phases h/i sharing, tasks and ownership services are implemented. Phases f/g and endpoint publication remain separate work. The table below is the full roadmap from the specification, not a list of shipped functionality.
 
 | Phase | Core | Qbit | Next UI |
 |---|---|---|---|
@@ -82,3 +82,39 @@ The service API and configuration are documented in [README](../README.md#commen
 - **Presentation.** Tags is in the admin app nav; Record Tags is a child widget.
   The home queries under the caller session and HTML-escapes labels. Native tag
   label search metadata is present; host-record tag search awaits #1140.
+
+
+## Phases h/i implementation choices
+
+- Shares, tasks and assignments reuse parent checks, extension restrictions and FIELD audits.
+  Access requests use requester/admin locks, no parent read, and metadata-only table labels.
+  Trusted persistence removes only the request owner lock on a private metadata clone after
+  explicit service authorization. Standard table actions retain that lock; audit keeps the caller.
+- Previews retain true/false/unknown. Unknown never enables record-data delivery or following.
+  Safe access notices use after-commit delivery without a parent check and omit record labels,
+  sender messages and approver notes. Record-data notifications recheck access at delivery.
+- OPEN request identity is `(tableName, recordId, requesterUserId)`. Local serialization and a
+  PostgreSQL partial unique index protect it; insert collisions reread the existing row. No
+  parent query distinguishes existing from missing records. Permission-holder resolution is an
+  optional host SPI, with the qbit record owner as fallback. TABLE-scope SHARING settings supply
+  the approver permission; native ownership integration awaits the released core phase-i API.
+- Streamed actions choose table/operation from installed metadata, validate in Review and again
+  at load, and report Result counts. Configured approvers use an authorized request extractor
+  without widening ordinary table reads. Grant records an identity-system outcome only.
+- Tasks default to the creator, compute reminder times using an injectable Clock, and keep
+  independent reminder/overdue delivery receipts. Creation/completion also enter the existing
+  follow digest. Run one scheduler per installation; delivery then receipt has the same crash
+  retry/idempotency limitation as follow digests. Unknown access and no-op delivery leave no receipt.
+- Assignment is a qbit fallback. Hosts with owner/assignee columns use core RecordOwnership and
+  ordinary updates, not collaboration_record_assignment or its configured actions. Bulk actions
+  preserve the other role. Virtual fields and CurrentUser integration belong to core phase i.
+- My work/my-records counts recheck parents, removing invisible content and counts. RC.5 candidate
+  rows are materialized for portable null-last sorting/counting. Home aggregates retain the
+  existing documented parent-lock approximation until core mirrored locks are released.
+- The producer registers a host DELETE listener with after-commit cleanup. Access requests
+  survive deletion. Schema SQL includes partial request/reminder indexes and a readAt migration
+  for the existing mention table. Task title search metadata is present; ESB/Quick Search
+  publication remains a host integration.
+
+See the README for service signatures, defaults, configuration and the exact access-request
+prefill route. UI API endpoints and screens follow in their separate PR.

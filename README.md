@@ -1,6 +1,6 @@
 # QBit Collaboration
 
-Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and standalone filter translation. Phases f to i remain planned; general runtime overrides are still deferred. TAGS mode settings are read directly by the service.
+Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and standalone filter translation. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g remain planned; general runtime overrides are still deferred. TAGS mode settings are read directly by the service.
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
@@ -54,9 +54,13 @@ Omit `withParentAppName` for a top-level app. Run normal QQQ instance validation
 | `collaboration_mention` (Mentions) | Unique comment + mentioned user, recipient visibility and actual delivery timestamp; comment child list. |
 | `collaboration_follow` (Followers) | Unique parent + user, reason, change/comment notification preferences and mute timestamp. Admin browse only; Followers child list on Comments. |
 | `collaboration_activity` (Activity) | Event time, actor, type, summary and reference. Read-only admin main table. |
+| `collaboration_share` (Shares) | Recipient, sender, message, access outcome and sent/opened times. Parent security and FIELD audit. |
+| `collaboration_access_request` (Access Requests) | Requester/admin visibility, optional share reference, OPEN/GRANTED/DECLINED/WITHDRAWN status and outcome fields. FIELD audit; no parent-data lookup. |
+| `collaboration_task` (Tasks) | Title, markdown notes, assignee, due/reminder/delivery times and completion fields. Parent security, FIELD audit and title search metadata. |
+| `collaboration_record_assignment` (Record Owners) | Unique parent reference with owner/assignee. Admin-only nav with HIDDEN denial, parent security and FIELD audit. |
 | `collaboration_follow_digest` (Follow Digests) | Service-managed pending five-minute batches, unique parent + recipient, due timestamp and changed-field summaries. Admin browse only, outside navigation. |
 
-All eleven include `id`, `createDate` and `modifyDate`, identity/details/dates sections, and table possible-value sources. SQL table names match metadata table names; SQL columns use snake_case. Use a stable nonempty scope name (convention: `instance` for INSTANCE; the metadata app/table name otherwise). JSON validation and override resolution arrive with the provider, not in this scaffold.
+All tables include `id`, `createDate` and `modifyDate`, identity/details/dates sections, and table possible-value sources. SQL table names match metadata table names; SQL columns use snake_case. Use a stable nonempty scope name (convention: `instance` for INSTANCE; the metadata app/table name otherwise). JSON validation and override resolution arrive with the provider, not in this scaffold.
 
 The home reports persisted enabled settings by scope type, people known and people seen within the inclusive last seven days, plus Favorites and Recently viewed row counts and distinct user counts, attachment count and total bytes, comments in the last seven days, open root threads, and follower subscriptions (admins). Attachment aggregates are explicitly approximate until core can mirror parent locks. Recent activity is based on `lastSeenAt`, independently of the directory's `active` account flag. Empty states explain missing data. These counts do not represent resolved feature enablement on host tables.
 
@@ -373,3 +377,106 @@ Normal `mvnw.cmd -o -q verify` checks the fragment without modifying it, runs re
 HTTP integration tests on a free port with the memory backend, and retains the
 70% instruction / 90% class coverage gates. This is the first release of the
 extension, so there is no prior release baseline yet.
+## Sharing and work services (phases h/i)
+
+Services run in the caller's `QContext`. UI API endpoints and screens follow in a separate PR.
+
+```java
+SharingService sharing = new SharingService();
+sharing.link("order", "123"); // Link(url, label)
+sharing.preview("order", "123", List.of("sam")); // canRead: true, false or null (unknown)
+sharing.share("order", "123", List.of("sam"), "Please review");
+sharing.markOpened(shareId); // recipient only
+
+AccessRequestService access = new AccessRequestService();
+access.request("order", "123", "Please grant access", shareId); // optional shareId
+access.withdraw(requestId);
+
+TasksService tasks = new TasksService();
+QRecord task = tasks.create("order", "123", "Review order", "Markdown notes", "sam", dueAt, null);
+tasks.complete(task.getValueInteger("id"));
+tasks.reopen(task.getValueInteger("id"));
+tasks.cancel(task.getValueInteger("id"));
+tasks.list("order", "123", false);
+tasks.mine("OPEN", 20, null); // Page(tasks, nextCursor)
+
+AssignmentService assignments = new AssignmentService();
+assignments.assign("order", "123", "owner", "sam");
+assignments.get("order", "123");
+assignments.myRecords(null, 20); // owner OR assignee; per-table count and first 20
+new MyWorkService().summary();
+new MyWorkService().markMentionsRead(null); // all visible unread mentions; or supply IDs
+```
+
+Set `frontendBaseUrl` for absolute record links; omission produces
+`/app/{encodedTable}/{encodedId}`. Sharing and notifications reuse `TargetResolver.recordHref`.
+This is trusted host configuration. Sharing requires parent READ and `<table>.share` or EDIT,
+1-25 recipients (deduplicated), and a message of at most 2,000 characters. Readers get the
+record label/message/link and SHARED following. False/unknown recipients get only sender name,
+table label and an access-request link. The sender's message is omitted because it may contain
+record data. The prefill route for the follow-up UI is:
+
+`/app/collaboration_access_request/create?tableName={encodedTable}&recordId={encodedId}&shareId={id}`
+
+The UI consumes these parameters and calls `request`; a supplied share ID must match its
+recipient and parent reference. Sharing never grants access. Parent-data notifications recheck
+recipient access at delivery, after commit. Access notices contain no parent data and can reach
+nonreaders.
+
+Any signed-in user may request access, without a parent read or existence check. Existing and
+nonexistent targets return the same request shape and OPEN status; generated IDs/timestamps
+and submitted targets naturally differ. Duplicate OPEN requests return the existing row.
+A PostgreSQL partial unique index protects that natural key across instances. Ordinary table
+reads are requester/admin only; all direct writes are denied. Approver actions use an explicitly
+authorized extractor without widening ordinary table visibility.
+
+Set TABLE-scope SHARING `settings` to `{"accessApproverPermission":"order.approve"}` (default:
+`collaboration.admin`). Configure `.withPermissionHolderDirectory(new QCodeReference(MyDirectory.class))`;
+`sharing.PermissionHolderDirectory.userIdsWithPermission(permission)` returns stable user IDs.
+Recipients are the union of admin holders, configured approver holders and the qbit record owner.
+Without a directory, only the owner is notified and a warning is logged once per JVM. Mark granted
+and Decline accept an optional note and tell the requester the outcome. Review explicitly says
+"Record the outcome; grant access in your identity system first." No permission is changed.
+Notifications omit free-form messages and notes.
+
+Task create requires `task`. Changes additionally require creator, assignee or admin authority,
+while retaining parent visibility and task permission checks. Titles contain 1-200 characters;
+notes are markdown TEXT. An omitted create assignee defaults to self. Other assignees need a
+positive read check; false/unknown is refused with "Sam can't open this record." The full-field
+`update(id, title, notes, assignee, due, remind)` replaces editable fields: null clears an assignee
+or due time; null remind computes the default from due. The reminder defaults to due minus one
+day, or due itself when less than a day away. Assignments add ASSIGNED following and notify the
+new assignee unless self. Creation/completion writes activity and queues notify-on-change follower
+digests. Reopen clears completion fields but retains delivery history; changing due/reminder time
+or assignee resets the relevant delivery receipt.
+
+The hidden `collaborationSendTaskReminders` process runs every 60 seconds with `schedulerName`.
+It requires an admin/system session and no open transaction. `TaskReminders(Clock)` and
+`TasksService(Clock)` allow deterministic time. Separate timestamps track successful reminder
+and overdue delivery; revoked/unknown access and the no-op notifier do not mark delivery.
+Run one scheduler per installation. A crash between delivery and receipt can cause a retry;
+stronger guarantees require transport idempotency, as with follow digests.
+
+Configure `assignActionTables` for streamed Assign to and Take ownership actions. Assign needs
+`<table>.assign` or EDIT and verifies both roles can read (self passes after the parent check).
+`assign` replaces both roles, with null clearing a role; bulk actions preserve the other role.
+For host tables with their own owner/assignee columns, use core `RecordOwnership` metadata and
+normal host-table updates instead. Do not use the qbit assignment table or configure these bulk
+actions for such tables. Core phase-i virtual fields, CurrentUser and filter integration remain
+separate work; RC.5 does not provide that contract.
+
+My work returns the exact visible open-task count and first ten, assigned-record counts per
+table, and delivered unread mentions. Personal lists/counts recheck each parent. This portable
+RC.5 implementation materializes matching candidates for null-last sorting/counting; large
+installations should replace it with core mirrored-lock queries when available. Task cursors
+encode `(dueAt, id)` and limits are 1-100. My records limits returned rows per table, counting all
+visible matches.
+
+The home adds open access requests, open/overdue tasks and shares in the last seven days.
+Task/share aggregate counts retain the existing approximation for parent record locks until
+core mirrors them. `WorkCleanup` is registered for committed host deletes: it removes tasks,
+assignments and shares, retaining access requests. Attachment cleanup also invokes the
+idempotent hook. Schema generation includes the four tables, supporting indexes and
+`ALTER TABLE collaboration_mention ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ` for upgrades.
+Hosts apply generated SQL through their migration tooling; ESB/search publication uses the same
+host integrations as other collaboration tables.
