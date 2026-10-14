@@ -120,6 +120,8 @@ class CollaborationDevServerTest
                assertThat(detail.oldValue()).isEqualTo("Purchasing Director");
                assertThat(detail.newValue()).isEqualTo("VP of Purchasing");
             }));
+         assertThat(new TimelineService().timeline("person", 1, null, 100, null).items()).extracting(item -> item.summary())
+            .anyMatch(summary -> summary.startsWith("Edited by ") && summary.contains("Title")).noneMatch(summary -> summary.startsWith("Record was"));
          assertThat(new SharingService().preview("person", 1, List.of("bob")).getFirst().canRead()).isTrue();
          assertThat(new SharingService().preview("sales_order", 1, List.of("bob")).getFirst().canRead()).isFalse();
          QContext.setQSession(CollaborationDevServer.session("admin"));

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
+import com.kingsrook.qbits.collaboration.timeline.TimelineDetail;
 import com.kingsrook.qbits.collaboration.timeline.TimelineItem;
 import com.kingsrook.qbits.collaboration.timeline.TimelinePage;
 import com.kingsrook.qbits.collaboration.timeline.TimelineService;
@@ -114,6 +115,48 @@ public class TimelineServiceTest extends PersonalServiceFixture
       assertThat(timeline.timeline("document", 1, null, 50, Set.of("COMMENTED")).items()).hasSize(3);
       assertThat(timeline.timeline("document", 1, null, 50, Set.of("AUDIT")).items()).hasSize(3);
       assertThat(timeline.timeline("document", 2, null, 50, null).items()).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** Core wording becomes who-did-what; detail rows and unknown messages are untouched.
+    *******************************************************************************/
+   @Test
+   void auditSummariesSayWhoDidWhat() throws Exception
+   {
+      seedAudit(4, "Record was Edited", 100);
+      seedAudit(5, "Record was Inserted", 101);
+      seedAudit(6, "Record was Edited", 102);
+      seedAudit(7, "Record was Deleted", 103);
+      seed("auditDetail", new QRecord().withValue("id", 10L).withValue("auditId", 4L).withValue("fieldName", "title").withValue("oldValue", "Old").withValue("newValue", "New"));
+      seed("auditDetail", new QRecord().withValue("id", 11L).withValue("auditId", 4L).withValue("fieldName", "tenant").withValue("oldValue", "a").withValue("newValue", "b"));
+      seed("auditDetail", new QRecord().withValue("id", 12L).withValue("auditId", 4L).withValue("fieldName", "title").withValue("oldValue", "New").withValue("newValue", "Newer"));
+      seed("auditDetail", new QRecord().withValue("id", 13L).withValue("auditId", 5L).withValue("fieldName", "title").withValue("newValue", "Created title"));
+      var items = timeline.timeline("document", 1, null, 50, Set.of("AUDIT")).items();
+      java.util.function.Function<Long, TimelineItem> byId = id -> items.stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();
+      assertThat(byId.apply(4L).summary()).isEqualTo("Edited by Audit Actor: Title, Tenant");
+      assertThat(byId.apply(4L).details()).hasSize(3);
+      assertThat(byId.apply(5L).summary()).isEqualTo("Created by Audit Actor");
+      assertThat(byId.apply(5L).details()).hasSize(1);
+      assertThat(byId.apply(6L).summary()).isEqualTo("Edited by Audit Actor");
+      assertThat(byId.apply(7L).summary()).isEqualTo("Deleted by Audit Actor");
+      assertThat(byId.apply(1L).summary()).as("unrecognized messages are kept").isEqualTo("Record changed");
+      assertThat(items).extracting(TimelineItem::summary).noneMatch(summary -> summary.startsWith("Record was"));
+
+      assertThat(TimelineService.friendlySummary("Record was Inserted", null, List.of(), null)).isEqualTo("Created");
+      assertThat(TimelineService.friendlySummary("Record was Inserted via import", " ", List.of(), null)).isEqualTo("Created");
+      assertThat(TimelineService.friendlySummary(null, "A", List.of(), null)).isNull();
+      List<TimelineDetail> many = java.util.stream.IntStream.rangeClosed(1, 6).mapToObj(n -> new TimelineDetail("f" + n, "a", "b", null)).toList();
+      assertThat(TimelineService.friendlySummary("Record was Edited", "A", many, null)).isEqualTo("Edited by A: f1, f2, f3, f4 and 2 more");
+      assertThat(TimelineService.friendlySummary("Record was Edited", "A", List.of(new TimelineDetail(null, null, null, "note"), new TimelineDetail(" ", null, null, null)), null)).isEqualTo("Edited by A");
+   }
+
+   /*******************************************************************************
+    ** One audit header for the first document, as a different time.
+    *******************************************************************************/
+   private void seedAudit(long id, String message, long secondsAfter) throws Exception
+   {
+      seed("audit", new QRecord().withValue("id", id).withValue("auditTableId", 1).withValue("auditUserId", 1)
+         .withValue("recordId", "1").withValue("timestamp", at.plusSeconds(secondsAfter)).withValue("message", message));
    }
 
    /*******************************************************************************

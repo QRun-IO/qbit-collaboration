@@ -56,6 +56,8 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
  *******************************************************************************/
 public class TimelineService
 {
+   private static final int MAX_FIELDS_IN_SUMMARY = 4;
+
    /*******************************************************************************
     ** Types accepts AUDIT/ACTIVITY or individual collaboration activity type names.
     *******************************************************************************/
@@ -154,8 +156,10 @@ public class TimelineService
          List<TimelineItem> result = new ArrayList<>();
          for(QRecord row : headers)
          {
-            result.add(new TimelineItem("AUDIT", row.getValueLong("id"), row.getValueInstant("timestamp"), null, actors.get(row.getValueInteger("auditUserId")),
-               row.getValueString("message"), List.copyOf(details.getOrDefault(row.getValueLong("id"), List.of())), AuditsMetaDataProvider.TABLE_NAME_AUDIT, row.getValueString("id")));
+            String actor = actors.get(row.getValueInteger("auditUserId"));
+            List<TimelineDetail> rowDetails = List.copyOf(details.getOrDefault(row.getValueLong("id"), List.of()));
+            result.add(new TimelineItem("AUDIT", row.getValueLong("id"), row.getValueInstant("timestamp"), null, actor,
+               friendlySummary(row.getValueString("message"), actor, rowDetails, personalized), rowDetails, AuditsMetaDataProvider.TABLE_NAME_AUDIT, row.getValueString("id")));
          }
          return (result);
       }
@@ -163,6 +167,40 @@ public class TimelineService
       {
          return (List.of());
       }
+   }
+
+   /*******************************************************************************
+    ** Core words its audits "Record was Edited" or "Record was Inserted"; the timeline
+    ** says who did what instead: "Edited by Alice Morgan: Status, Total" or "Created by
+    ** Alice Morgan". The detail rows are unchanged. Any other message is kept as written.
+    *******************************************************************************/
+   public static String friendlySummary(String message, String actor, List<TimelineDetail> details, QTableMetaData table)
+   {
+      String verb = message == null ? null : message.startsWith("Record was Inserted") ? "Created" : message.startsWith("Record was Edited") ? "Edited"
+         : message.startsWith("Record was Deleted") ? "Deleted" : null;
+      if(verb == null)
+      {
+         return (message);
+      }
+      StringBuilder summary = new StringBuilder(verb);
+      if(actor != null && !actor.isBlank())
+      {
+         summary.append(" by ").append(actor);
+      }
+      if(verb.equals("Edited"))
+      {
+         List<String> labels = details.stream().map(TimelineDetail::fieldName).filter(name -> name != null && !name.isBlank()).distinct()
+            .map(name -> table != null && table.getFields().containsKey(name) && table.getFields().get(name).getLabel() != null ? table.getFields().get(name).getLabel() : name).toList();
+         if(!labels.isEmpty())
+         {
+            summary.append(": ").append(String.join(", ", labels.subList(0, Math.min(MAX_FIELDS_IN_SUMMARY, labels.size()))));
+            if(labels.size() > MAX_FIELDS_IN_SUMMARY)
+            {
+               summary.append(" and ").append(labels.size() - MAX_FIELDS_IN_SUMMARY).append(" more");
+            }
+         }
+      }
+      return (summary.toString());
    }
 
    /*******************************************************************************
