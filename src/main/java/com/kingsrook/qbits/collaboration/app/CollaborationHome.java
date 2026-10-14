@@ -76,11 +76,12 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
  *******************************************************************************/
 public final class CollaborationHome
 {
+   public static final String SETUP_WIDGET = "collaborationSetup";
    public static final String KPI_WIDGET = "collaborationKpis";
    public static final String TAGS_WIDGET = "collaborationTags";
    public static final String FIELDS_WIDGET = "collaborationCustomFields";
    public static final String PRESENCE_WIDGET = "collaborationWhosHere";
-   public static final List<String> HOME_WIDGETS = List.of(KPI_WIDGET, TAGS_WIDGET, FIELDS_WIDGET, PRESENCE_WIDGET);
+   public static final List<String> HOME_WIDGETS = List.of(SETUP_WIDGET, KPI_WIDGET, TAGS_WIDGET, FIELDS_WIDGET, PRESENCE_WIDGET);
 
    public static final String NOBODY_HERE = "Nobody else is here right now.";
    public static final String NO_TAGS = "No tags yet. Tags appear here once someone creates one on a record.";
@@ -120,6 +121,7 @@ public final class CollaborationHome
    public static List<QWidgetMetaData> widgets()
    {
       return (List.of(
+         widget(SETUP_WIDGET, "Setup", WidgetType.TABLE, SetupRenderer.class),
          widget(KPI_WIDGET, "Overview", WidgetType.MULTI_STATISTICS, KpiRenderer.class),
          widget(TAGS_WIDGET, "Tags", WidgetType.TABLE, TagsRenderer.class),
          widget(FIELDS_WIDGET, "Custom fields", WidgetType.TABLE, FieldsRenderer.class),
@@ -136,6 +138,30 @@ public final class CollaborationHome
       return (new QWidgetMetaData().withName(name).withLabel(label).withType(type.getType())
          .withCodeReference(new QCodeReference(renderer)).withGridColumns(12).withIsCard(false)
          .withPermissionRules(CollaborationPermissions.permissionRules()));
+   }
+
+
+
+   /*******************************************************************************
+    ** The Setup card: each record feature, whether it is on, for which tables,
+    ** where that comes from, and the next step.
+    *******************************************************************************/
+   public static TableData setup() throws QException
+   {
+      CollaborationSecurity.ensureSessionKeys(QContext.getQInstance(), QContext.getQSession());
+      List<Map<String, Object>> rows = new ArrayList<>();
+      for(CollaborationSetupStatus.Item item : CollaborationSetupStatus.load(QContext.getQInstance()))
+      {
+         Map<String, Object> row = new LinkedHashMap<>();
+         row.put("feature", item.feature());
+         row.put("state", item.state());
+         row.put("where", item.where());
+         row.put("source", item.source());
+         row.put("next", item.nextStep() == null ? "" : item.nextStep());
+         rows.add(row);
+      }
+      return (table("Setup", "Nothing to set up.", rows, column("Feature", "feature", "left"), column("State", "state", "left"), column("Where", "where", "left"),
+         column("From", "source", "left"), column("Next step", "next", "left")));
    }
 
 
@@ -359,6 +385,23 @@ public final class CollaborationHome
       CountInput input = new CountInput(table).withFilter(filter);
       input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
       return (new CountAction().execute(input).getCount());
+   }
+
+
+
+   /*******************************************************************************
+    ** Setup renderer instantiated by QQQ.
+    *******************************************************************************/
+   public static class SetupRenderer extends AbstractWidgetRenderer
+   {
+      /*******************************************************************************
+       ** Render using the current session.
+       *******************************************************************************/
+      @Override
+      public RenderWidgetOutput render(RenderWidgetInput input) throws QException
+      {
+         return (new RenderWidgetOutput(setup()));
+      }
    }
 
 

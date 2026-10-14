@@ -24,6 +24,7 @@ package com.kingsrook.qbits.collaboration;
 
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.attachments.DeleteAttachmentsProcess;
+import com.kingsrook.qbits.collaboration.metadata.CollaborationHelp;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.recents.TrimRecentsProcess;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -151,6 +152,7 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          com.kingsrook.qbits.collaboration.tags.TagProcesses.processesFor(table).forEach(output::add);
       }
       output.add(DeleteAttachmentsProcess.metadata());
+      output.add(FeatureSettingsDefaultsProcess.process());
       for(QPossibleValueSource source : CollaborationTables.possibleValueSources())
       {
          output.add(source);
@@ -178,6 +180,7 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          QAppMetaData parent = instance.getApp(qBitConfig.getParentAppName());
          parent.withChild(instance.getApp(qBitConfig.getAppName()));
       }
+      CollaborationHelp.apply(instance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
    }
 }
