@@ -1,0 +1,108 @@
+bundle: qbit-collaboration
+version: 1
+layer: QBIT
+# Help for the Collaboration app and every collaboration_* table, in the QQQ help-bundle
+# format (qqq#1198). Each table entry says what the table is for and how its rows get
+# created, so an empty table explains itself. CollaborationHelp applies it until the core
+# HelpBundles registry ships in a QQQ release (STAND-IN(core=#1198)).
+# Summaries stay under 120 characters (CollaborationTablesGuardrailTest).
+entries:
+  - key: app:collaboration;slot:help
+    summary: "Comments, files, tags, tasks and sharing on any record, and the switches that turn each on."
+    content: |
+      The Setup card on the home lists every record feature, whether it is on, for which tables and where that comes from. Features start from the configuration in code; open Feature Settings and run Create rows from configuration to see those settings as rows you can edit. Everything else here is content that people create while they work.
+
+  - key: table:collaboration_feature_setting;slot:help
+    summary: "Turns a record feature on or off for the whole instance, an app or one table, with its permission mode."
+    content: |
+      **How rows get created:** run the table action Create rows from configuration once. It writes the settings the code configuration already applies (one Instance row per feature, plus an App or Table row wherever the code declares one), so nothing changes until you edit a row. After that an administrator adds or edits rows: pick a scope (Instance, App or Table), a feature, and turn it on. The most specific scope wins. Tags also take `{"mode":"FREE"}` or `{"mode":"APPROVED_ONLY"}` in Settings. Rows only fill in when the table is empty, so the action never overwrites an edit.
+
+  - key: table:collaboration_user;slot:help
+    summary: "The people directory used for mentions, sharing and assignment, kept up to date automatically."
+    content: |
+      **How rows get created:** automatically, the first time a signed-in person uses a collaboration feature (and again when their name or avatar changes). It cannot be edited by hand. Empty means nobody has used a collaboration feature yet.
+
+  - key: table:collaboration_favorite;slot:help
+    summary: "Records, tables and apps each person has starred, in the order they chose."
+    content: |
+      **How rows get created:** a person stars a record, table or app (the star in the record header), and the row belongs to them alone. Administrators can browse them. Empty means nobody has starred anything yet, or Favorites is off in Feature Settings.
+
+  - key: table:collaboration_recent;slot:help
+    summary: "The records each person opened lately, newest first, trimmed daily."
+    content: |
+      **How rows get created:** automatically when a person opens a record while Recents is on. The Trim recents job keeps each person's newest rows. Empty means nobody has opened a record yet, or Recents is off in Feature Settings.
+
+  - key: table:collaboration_attachment;slot:help
+    summary: "Files attached to records, with where each file is stored."
+    content: |
+      **How rows get created:** a person uploads a file on a record (the Attachments panel). The file itself goes to object storage; this row describes it. Turn Attachments on for the table in Feature Settings first.
+
+  - key: table:collaboration_comment;slot:help
+    summary: "Comments and replies on records, with who wrote them and whether the thread is resolved."
+    content: |
+      **How rows get created:** a person writes a comment on a record (the Comments panel). Turn Comments on for the table in Feature Settings first. Edits are kept in Comment Revisions.
+
+  - key: table:collaboration_comment_revision;slot:help
+    summary: "Earlier versions of edited comments."
+    content: |
+      **How rows get created:** automatically each time someone edits a comment. Empty means no comment has been edited.
+
+  - key: table:collaboration_mention;slot:help
+    summary: "Each @mention of a person in a comment, and whether they were told and have read it."
+    content: |
+      **How rows get created:** automatically when a comment mentions someone. Empty means no comment has mentioned anyone yet.
+
+  - key: table:collaboration_follow;slot:help
+    summary: "Who follows which record, and how they want to hear about changes."
+    content: |
+      **How rows get created:** a person follows a record (or is made a follower by an action), and chooses how to be notified. Turn Follow on for the table in Feature Settings first.
+
+  - key: table:collaboration_follow_digest;slot:help
+    summary: "Batched change notices waiting to go out to followers."
+    content: |
+      **How rows get created:** automatically when a followed record changes and the follower prefers a digest. The Send follow digests job sends them and clears them. Empty means nothing is waiting.
+
+  - key: table:collaboration_activity;slot:help
+    summary: "The timeline of what happened on each record: comments, files, tags, tasks and sharing."
+    content: |
+      **How rows get created:** automatically by the other collaboration features as people use them. Turn Timeline on for the table in Feature Settings to show it. Empty means nothing has happened on a record yet.
+
+  - key: table:collaboration_tag;slot:help
+    summary: "The tag vocabulary: global tags and tags scoped to one table, approved or waiting for approval."
+    content: |
+      **How rows get created:** a person adds a tag from a record (free mode), or suggests one that an administrator approves (approved-only mode, set in Feature Settings). Administrators can merge or delete tags with the table actions.
+
+  - key: table:collaboration_record_tag;slot:help
+    summary: "Which tags are on which records."
+    content: |
+      **How rows get created:** a person applies a tag on a record, or a bulk Add tags action on a host table does. Turn Tags on for the table in Feature Settings first.
+
+  - key: table:collaboration_field_definition;slot:help
+    summary: "Custom fields an administrator adds to a table without a deployment: name, type and status."
+    content: |
+      **How rows get created:** a field manager (collaboration.fields.manage) adds a definition with New: pick the table, name and type, then use the Publish field action to make it Active. Turn Custom fields on for the table in Feature Settings first. Rebuild index and Archive field are table actions too.
+
+  - key: table:collaboration_field_value;slot:help
+    summary: "The values people entered for custom fields on records."
+    content: |
+      **How rows get created:** a person fills in a custom field on a record. Empty means no custom field has a value yet.
+
+  - key: table:collaboration_share;slot:help
+    summary: "Records shared with a person, with a note, and when they opened it."
+    content: |
+      **How rows get created:** a person shares a record with someone from the record header. Turn Sharing on for the table in Feature Settings first.
+
+  - key: table:collaboration_access_request;slot:help
+    summary: "Requests for access to a record that someone could not open, and how each was answered."
+    content: |
+      **How rows get created:** a person who cannot open a record asks for access. Approvers answer from My work or here; who approves is the table's accessApproverPermission setting (default collaboration.admin). Turn Sharing on for the table first.
+
+  - key: table:collaboration_task;slot:help
+    summary: "Tasks on records with an assignee, a due date and a reminder."
+    content: |
+      **How rows get created:** a person adds a task on a record (the Tasks panel). The Send task reminders job sends the reminders. Turn Tasks on for the table in Feature Settings first.
+
+  - key: table:collaboration_record_assignment;slot:help
+    summary: "Who owns and who is assigned to each record."
+    content: |
+      **How rows get created:** a person assigns a record from its header, or the Assign action on a host table does it in bulk. Turn Assignment on for the table in Feature Settings first.
