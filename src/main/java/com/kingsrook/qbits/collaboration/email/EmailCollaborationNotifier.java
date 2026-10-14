@@ -30,13 +30,12 @@ import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotifier;
 import com.kingsrook.qbits.collaboration.people.PeopleService;
 import com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker;
-import com.kingsrook.qbits.email.EmailRuntime;
-import com.kingsrook.qbits.email.outbox.EmailCategory;
-import com.kingsrook.qbits.email.outbox.EmailRequest;
-import com.kingsrook.qbits.email.outbox.EmailSendResult;
-import com.kingsrook.qbits.email.outbox.EmailService;
-import com.kingsrook.qbits.email.template.EmailTemplateDefinition;
-import com.kingsrook.qbits.email.template.EmailTemplates;
+import com.kingsrook.qbits.email.api.EmailApi;
+import com.kingsrook.qbits.email.api.EmailApiCategory;
+import com.kingsrook.qbits.email.api.EmailApiRequest;
+import com.kingsrook.qbits.email.api.EmailApiResult;
+import com.kingsrook.qbits.email.api.EmailApiStatus;
+import com.kingsrook.qbits.email.api.EmailApiTemplate;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
@@ -78,7 +77,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
     *******************************************************************************/
    public static boolean isAvailable(QInstance qInstance)
    {
-      return (EmailRuntime.config(qInstance) != null);
+      return (EmailApi.isInstalled(qInstance));
    }
 
 
@@ -91,7 +90,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    @Override
    public void notify(CollaborationNotification n)
    {
-      EmailTemplateDefinition template = templateFor(n.category());
+      EmailApiTemplate template = templateFor(n.category());
       if(template == null)
       {
          return;
@@ -104,9 +103,9 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
             LOG.info("Collaboration email skipped: no address for recipient", logPair("userId", n.recipientUserId()));
             return;
          }
-         EmailTemplates.ensure(template);
+         EmailApi.ensureTemplate(template);
          String eventId = n.sourceId() != null ? n.sourceId() : n.sourceRecordId();
-         EmailRequest request = new EmailRequest().withTemplateName(template.getName()).withCategory(EmailCategory.NOTIFICATION).withTo(address)
+         EmailApiRequest request = new EmailApiRequest().withTemplateName(template.getName()).withCategory(EmailApiCategory.NOTIFICATION).withTo(address)
             .withIdempotencyKey("collaboration:" + kind(n.category()) + ":" + eventId + ":" + n.recipientUserId())
             .withSender(OWNER_QBIT, "notify-" + kind(n.category()))
             .withVariable("actorName", actorName(n.actorUserId())).withVariable("recordLabel", recordLabel(n));
@@ -118,8 +117,8 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
          {
             request.withVariable("link", n.link());
          }
-         EmailSendResult result = EmailService.send(request);
-         if(result.status() != EmailSendResult.Status.QUEUED)
+         EmailApiResult result = EmailApi.send(request);
+         if(result.status() != EmailApiStatus.QUEUED)
          {
             LOG.info("Collaboration email not queued", logPair("userId", n.recipientUserId()), logPair("status", result.status()),
                logPair("messageId", result.messageId()));
@@ -193,7 +192,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    /*******************************************************************************
     ** The shipped template for a category, or null when none exists.
     *******************************************************************************/
-   static EmailTemplateDefinition templateFor(CollaborationNotification.Category category)
+   static EmailApiTemplate templateFor(CollaborationNotification.Category category)
    {
       return (switch(category)
       {
@@ -212,9 +211,9 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
     ** the template needs no PHI approval because labels are passed only when the
     ** record label fields are fully accessible.
     *******************************************************************************/
-   private static EmailTemplateDefinition definition(String name, String label, String subject, String body)
+   private static EmailApiTemplate definition(String name, String label, String subject, String body)
    {
-      return (new EmailTemplateDefinition().withName(name).withLabel(label).withCategory(EmailCategory.NOTIFICATION).withKind("MARKDOWN")
+      return (new EmailApiTemplate().withName(name).withLabel(label).withCategory(EmailApiCategory.NOTIFICATION).withKind("MARKDOWN")
          .withOwnerQbit(OWNER_QBIT).withSubject(subject).withBody(body)
          .withVariable("actorName", "Person who acted", "STRING", true, "CONFIDENTIAL")
          .withVariable("recordLabel", "Record label", "STRING", true, "CONFIDENTIAL")
@@ -227,7 +226,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    /*******************************************************************************
     ** Someone mentioned the recipient.
     *******************************************************************************/
-   static EmailTemplateDefinition mentionTemplate()
+   static EmailApiTemplate mentionTemplate()
    {
       return (definition(MENTION_TEMPLATE, "Collaboration mention", "{{actorName}} mentioned you on {{recordLabel}}",
          "**{{actorName}}** mentioned you on {{recordLabel}}.\n\n" + OPEN_LINK));
@@ -238,7 +237,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    /*******************************************************************************
     ** Someone shared a record with the recipient.
     *******************************************************************************/
-   static EmailTemplateDefinition shareTemplate()
+   static EmailApiTemplate shareTemplate()
    {
       return (definition(SHARE_TEMPLATE, "Collaboration share", "{{actorName}} shared {{recordLabel}} with you",
          "**{{actorName}}** shared {{recordLabel}} with you.\n\n" + OPEN_LINK));
@@ -249,7 +248,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    /*******************************************************************************
     ** A task assigned to the recipient was assigned, is due, or is overdue.
     *******************************************************************************/
-   static EmailTemplateDefinition taskReminderTemplate()
+   static EmailApiTemplate taskReminderTemplate()
    {
       return (definition(TASK_REMINDER_TEMPLATE, "Collaboration task reminder", "A task on {{recordLabel}} needs your attention",
          "A task assigned to you on {{recordLabel}} needs your attention.\n\n" + OPEN_LINK));

@@ -32,16 +32,20 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.notify.CollaborationNotification;
 import com.kingsrook.qbits.collaboration.notify.NoOpNotifier;
 import com.kingsrook.qbits.collaboration.notify.Notifications;
-import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
 import com.kingsrook.qbits.collaboration.sharing.SharingService;
 import com.kingsrook.qbits.collaboration.tasks.TasksService;
 import com.kingsrook.qbits.email.EmailQBitConfig;
 import com.kingsrook.qbits.email.EmailQBitProducer;
-import com.kingsrook.qbits.email.metadata.EmailTables;
-import com.kingsrook.qbits.email.permissions.EmailPermissions;
-import com.kingsrook.qbits.email.support.SystemWrites;
+import com.kingsrook.qbits.email.api.EmailApi;
+import com.kingsrook.qbits.email.api.EmailApiCategory;
+import com.kingsrook.qbits.email.api.EmailApiMessage;
+import com.kingsrook.qqq.backend.core.actions.collaboration.UserSessionProviderInterface;
+import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
+import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
@@ -96,25 +100,30 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
 
 
    /*******************************************************************************
-    ** Produce the email qbit in the test instance.
+    ** Host fixture wiring only: G1 scans production classes and sources. Create
+    ** the provider through standard QQQ actions with the documented permissions.
     *******************************************************************************/
    private void withEmail() throws Exception
    {
       new EmailQBitProducer().withQBitConfig(new EmailQBitConfig().withBackendName("memory").withPublicBaseUrl("https://app.example.org")
          .withSecretResolver(name -> "k")).produce(instance);
-      QContext.getQSession().withPermissions(EmailPermissions.ALL);
-      SystemWrites.insertOne(EmailTables.PROVIDER, new QRecord().withValue("name", "relay").withValue("label", "Relay").withValue("kind", "SMTP").withValue("host", "127.0.0.1")
-         .withValue("port", 2525).withValue("security", "NONE").withValue("fromAddress", "sender@example.com").withValue("enabled", true).withValue("isDefault", true));
+      QContext.getQSession().withPermissions("email.view", "email.send", "email.manage", "email.admin", "email.hasAccess");
+      QRecord provider = new QRecord().withValue("name", "relay").withValue("label", "Relay").withValue("kind", "SMTP").withValue("host", "127.0.0.1")
+         .withValue("port", 2525).withValue("security", "NONE").withValue("fromAddress", "sender@example.com").withValue("enabled", true).withValue("isDefault", true);
+      assertThat(new InsertAction().execute(new InsertInput("email_provider").withRecords(List.of(provider))).getRecords())
+         .singleElement().satisfies(row -> assertThat(row.getErrors()).isNullOrEmpty());
    }
 
 
 
    /*******************************************************************************
-    ** All outbox messages.
+    ** Inspect rendered test content through the standard, permission-checked
+    ** table action. The public API deliberately exposes only message metadata.
     *******************************************************************************/
    private List<QRecord> messages() throws Exception
    {
-      return (SystemWrites.query(EmailTables.MESSAGE, new QQueryFilter()));
+      return (new QueryAction().execute(new QueryInput("email_message").withFilter(new QQueryFilter())
+         .withShouldFetchHeavyFields(true).withShouldOmitHiddenFields(false)).getRecords());
    }
 
 
@@ -154,7 +163,14 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
          assertThat(message.getValueString("subject") + message.getValueString("textBody") + message.getValueString("htmlBody")).doesNotContain("secret comment body");
          assertThat(message.getValueString("htmlBody")).contains("https://app.example.org/app/document/1");
       });
-      assertThat(SystemWrites.query(EmailTables.TEMPLATE, new QQueryFilter())).extracting(t -> t.getValueString("name")).contains("collaboration_mention");
+      assertThat(EmailApi.getMessageByIdempotencyKey("collaboration:mention:7:bob")).hasValueSatisfying(message ->
+      {
+         assertThat(message.status()).isEqualTo("QUEUED");
+         assertThat(message.category()).isEqualTo(EmailApiCategory.NOTIFICATION);
+         assertThat(message.templateName()).isEqualTo("collaboration_mention");
+         assertThat(message.linkedTableName()).isEqualTo("document");
+         assertThat(message.linkedRecordId()).isEqualTo("1");
+      });
    }
 
 
@@ -174,7 +190,7 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
       assertThat(messages()).extracting(m -> m.getValueString("idempotencyKey"))
          .containsExactlyInAnyOrder("collaboration:share:3:bob", "collaboration:share:3:eve", "collaboration:task:9:remindAt:bob");
       assertThat(messages()).allSatisfy(m -> assertThat(m.getValueString("toAddresses")).doesNotContain(","));
-      assertThat(SystemWrites.query(EmailTables.TEMPLATE, new QQueryFilter())).extracting(t -> t.getValueString("name"))
+      assertThat(EmailApi.findMessagesByIdempotencyKeyPrefix("collaboration:", 10)).extracting(EmailApiMessage::templateName)
          .contains("collaboration_share", "collaboration_task_reminder");
    }
 
