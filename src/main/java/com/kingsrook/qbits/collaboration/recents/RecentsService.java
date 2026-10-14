@@ -70,7 +70,7 @@ public final class RecentsService
       if(existing.isEmpty())
       {
          QRecord row = new QRecord().withValue("userId", userId).withValue("targetType", targetType).withValue("targetName", targetName)
-            .withValue("recordId", target.recordId()).withValue("label", target.label()).withValue("lastViewedAt", now).withValue("viewCount", 1);
+            .withValue("recordId", target.recordId()).withValue("label", TargetResolver.cacheableLabel(target)).withValue("lastViewedAt", now).withValue("viewCount", 1);
          try
          {
             PersonalRecords.insert(CollaborationTables.RECENT, row);
@@ -92,7 +92,7 @@ public final class RecentsService
          return;
       }
       PersonalRecords.update(CollaborationTables.RECENT, List.of(new QRecord().withValue("id", row.getValue("id"))
-         .withValue("lastViewedAt", now).withValue("viewCount", Math.addExact(row.getValueInteger("viewCount"), 1)).withValue("label", target.label())));
+         .withValue("lastViewedAt", now).withValue("viewCount", Math.addExact(row.getValueInteger("viewCount"), 1)).withValue("label", TargetResolver.cacheableLabel(target))));
    }
 
 

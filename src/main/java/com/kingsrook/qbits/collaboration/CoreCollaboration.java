@@ -68,6 +68,7 @@ public final class CoreCollaboration
    {
       config.applyFeatures(instance);
       var features = RecordFeaturesMetaData.ofOrWithNew(instance);
+      features.withFollowersProvider(new QCodeReference(com.kingsrook.qbits.collaboration.follow.CollaborationFollowersProvider.class));
       features.withOverrideProvider(new QCodeReference(FeatureSettingsProvider.class));
       features.getRuntimeProviders().add(new QCodeReference(com.kingsrook.qbits.collaboration.tags.TagsMetaDataProvider.class));
       features.getRuntimeProviders().add(new QCodeReference(com.kingsrook.qbits.collaboration.customfields.CustomFieldsProvider.class));

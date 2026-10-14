@@ -97,7 +97,8 @@ public class SharingService
             .withValue("recipientCouldRead", recipient.canRead()).withValue("sentAt", Instant.now()).withValue("parentDeleted", false));
          if(Boolean.TRUE.equals(recipient.canRead()))
          {
-            Notifications.send(new CollaborationNotification(recipient.userId(), name + " shared " + link.label() + " with you", message,
+            Notifications.send(new CollaborationNotification(recipient.userId(), name + " shared "
+               + new CollaborationRecordAccessChecker().notificationLabel(recipient.userId(), table, id) + " with you", message,
                CollaborationNotification.Category.SHARE, table, id, link.url()).withEvent(row.getValue("id"), from));
             new FollowService().ensureFollower(recipient.userId(), table, id, "SHARED");
          }

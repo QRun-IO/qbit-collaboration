@@ -11,16 +11,33 @@ Comment parents list the selected thread's root and replies. Feature-setting sco
 ## Requirements
 
 - Java 21.
-- QQQ `4.1.0-SNAPSHOT` installed from develop, including UI API extension point #1128. The build will move to `4.1.0-RC.6` once released; middleware Javalin is a compile dependency.
+- QQQ `4.1.0-RC.7` from Maven Central; middleware Javalin is a compile dependency.
 - A configured QQQ backend supporting query, get, insert, update, delete, count and aggregate actions. PostgreSQL 15+ is the intended persistent store (the generated personal-target indexes use `NULLS NOT DISTINCT`); tests use the memory backend.
 - Attachments require `qbit-object-storage:0.1.0-RC.2` (a pinned dependency), installed with a PRIVATE bucket alias matching `attachmentsBucketName`. Configure its connection and credentials in the host; this qbit does not provision buckets.
-- Core feature resolution, permissions, reference security, summaries, query expansion and realtime use QQQ `4.1.0-SNAPSHOT`, targeting RC.6.
+- Core feature resolution, permissions, reference security, summaries, query expansion and realtime use QQQ `4.1.0-RC.7`.
+
+## Followers and secured data
+
+The instance registers a core `RecordFollowersProviderInterface` backed by
+`collaboration_follow`, so alerts and other qbits can use `RecordFollowers.get`.
+CHANGE and ALERT select `notifyOnChange`; COMMENT selects `notifyOnComment`.
+Future mutes are excluded, and disabling FOLLOW returns no subscribers. The
+provider reads only the requested table/record as the system. Consumers must
+check each recipient's record access before sending data.
+
+Favorites and recents cache a record label only when every label field is FULL
+for the current session; otherwise the stored label is null. Lists continue to
+re-read labels as the viewer. Comment and share notification titles resolve
+labels in each recipient's session and fall back to the table label and id
+(for example, `Order #1042`) when label access is restricted or unavailable.
+Timeline audit reads use core's enforced query boundary: MASKED values are
+masked, HIDDEN details are omitted, and restricted audit messages are cleared.
+Comment bodies remain user content; realtime field-name filtering is handled by core.
 
 ## Demo server
 
 `CollaborationDevServer` is a disposable, memory-backed Sales CRM for trying the
-Next dashboard and taking screenshots. It needs Java 21 and the locally installed
-QQQ `4.1.0-SNAPSHOT` from develop. No database, Docker or MinIO is needed. It binds
+Next dashboard and taking screenshots. It needs Java 21 and QQQ `4.1.0-RC.7` from Maven Central. No database, Docker or MinIO is needed. It binds
 to `127.0.0.1`; stopping the JVM discards edits and uploaded attachments.
 
 Build the Next static export in `qqq-frontend-next`:
@@ -563,7 +580,7 @@ host integrations as other collaboration tables.
 
 ## Core contracts and completed UI API
 
-The qbit targets QQQ RC.6 using the locally installed `4.1.0-SNAPSHOT`. Defaults enable FAVORITES, RECENTS and TIMELINE for eligible host tables; all other features start off. Configure before producing metadata:
+The qbit uses QQQ `4.1.0-RC.7` from Maven Central. Defaults enable FAVORITES, RECENTS and TIMELINE for eligible host tables; all other features start off. Configure before producing metadata:
 
 ```java
 config.withDefaultFeatures(RecordFeature.FAVORITES, RecordFeature.RECENTS, RecordFeature.TIMELINE)
@@ -595,7 +612,7 @@ New routes, all under `/qqq/v1/qbit/collaboration`:
 
 Typed `CollaborationWorkSchemas` describe requests and results. Task PATCH preserves omitted fields, accepts OPEN/DONE/CANCELLED transitions, and permits explicit null for optional fields; null `remindAt` selects the service's due-date default. Assignment PUT replaces owner and assignee; null clears. Invalid input is 400, denied visible-record operations are 403, and missing/invisible parents are 404. Access requests deliberately never inspect parent existence. The extension stays at unreleased **1.0.0**; contract tooling accepts these additions without a bump.
 
-`CollaborationRealtime` publishes `comment.added/updated/deleted`, `attachment.changed`, `tags.changed` and `task.changed` on `record:{table}:{pk}` after commit. Successful notification delivery publishes `notification.created` on `user:{userId}`. Payloads contain identifiers only. The optional followers provider is skipped because `RecordFollowersProviderInterface` is absent from the installed jar. Selectable Tags values remain unavailable because the overlay has no output hook.
+`CollaborationRealtime` publishes `comment.added/updated/deleted`, `attachment.changed`, `tags.changed` and `task.changed` on `record:{table}:{pk}` after commit. Successful notification delivery publishes `notification.created` on `user:{userId}`. Payloads contain identifiers only. `CollaborationFollowersProvider` supplies the core followers SPI for alerts and other consumers. Selectable Tags values remain unavailable because the overlay has no output hook.
 
 
 ## Custom fields (phase f)

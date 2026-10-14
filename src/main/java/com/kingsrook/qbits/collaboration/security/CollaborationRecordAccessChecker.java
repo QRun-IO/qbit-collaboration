@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.kingsrook.qbits.collaboration.CollaborationQBitConfig;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader;
+import com.kingsrook.qqq.backend.core.actions.permissions.fieldaccess.FieldAccessHelper;
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
 import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -34,7 +35,6 @@ import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.get.GetInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
 
 /*******************************************************************************
@@ -90,8 +90,7 @@ public class CollaborationRecordAccessChecker implements com.kingsrook.qqq.backe
    /*******************************************************************************
     ** The record label as the recipient may see it: empty unless a session for the
     ** recipient exists, the record is readable, and every label field is fully
-    ** accessible (FieldAccessHelper.isRecordLabelFullAccess, absent in older QQQ
-    ** versions, which means no label).
+    ** accessible under the recipient session's field-access policy.
     *******************************************************************************/
    public Optional<String> recordLabel(String userId, String table, Serializable recordId) throws QException
    {
@@ -111,7 +110,7 @@ public class CollaborationRecordAccessChecker implements com.kingsrook.qqq.backe
          try
          {
             ParentRecordAccess.requireVisibleParent(table, recordId);
-            if(labelFullyAccessible(table))
+            if(FieldAccessHelper.isRecordLabelFullAccess(QContext.getQInstance().getTable(table)))
             {
                GetInput input = new GetInput(table).withPrimaryKey(recordId).withShouldGenerateDisplayValues(true);
                QRecord record = new GetAction().executeForRecord(input);
@@ -127,18 +126,10 @@ public class CollaborationRecordAccessChecker implements com.kingsrook.qqq.backe
    }
 
    /*******************************************************************************
-    ** Reflective guard: the helper only exists in QQQ versions with secured data.
+    ** Notification titles fall back to public table metadata and the record id.
     *******************************************************************************/
-   private static boolean labelFullyAccessible(String table)
+   public String notificationLabel(String userId, String table, Serializable recordId) throws QException
    {
-      try
-      {
-         Class<?> helper = Class.forName("com.kingsrook.qqq.backend.core.actions.permissions.fieldaccess.FieldAccessHelper");
-         return (Boolean.TRUE.equals(helper.getMethod("isRecordLabelFullAccess", QTableMetaData.class).invoke(null, QContext.getQInstance().getTable(table))));
-      }
-      catch(ReflectiveOperationException | LinkageError e)
-      {
-         return (false);
-      }
+      return (recordLabel(userId, table, recordId).orElse(QContext.getQInstance().getTable(table).getLabel() + " #" + recordId));
    }
 }
