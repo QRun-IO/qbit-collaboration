@@ -4,6 +4,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+- Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
+
 ### Added
 
 - Phase-h links, share previews, recipient-safe notifications and SHARED followers; access requests with requester/admin locks, duplicate OPEN handling, optional permission-holder directory and streamed Mark granted/Decline outcomes.
