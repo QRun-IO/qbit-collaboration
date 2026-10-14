@@ -318,7 +318,8 @@ public class CommentsService
    private void notify(QRecord row, String user, CollaborationNotification.Category category, String title, Integer mentionId) throws QException
    {
       Notifications.send(new CollaborationNotification(user, title, row.getValueString("body"), category,
-         row.getValueString("tableName"), row.getValueString("recordId"), Notifications.link(row.getValueString("tableName"), row.getValueString("recordId"))),
+         row.getValueString("tableName"), row.getValueString("recordId"), Notifications.link(row.getValueString("tableName"), row.getValueString("recordId")))
+         .withEvent(mentionId == null ? row.getValue("id") : mentionId, PersonalRecords.currentUserId()),
          mentionId == null ? null : () -> CollaborationRecords.update(CollaborationTables.MENTION,
             new QRecord().withValue("id", mentionId).withValue("notifiedAt", Instant.now())));
    }
