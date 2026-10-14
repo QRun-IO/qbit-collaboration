@@ -69,6 +69,6 @@ public class ListAttachmentsSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var page = page(input, new AttachmentsService().list(table(input), pk(input)));
-      return (new CollaborationAttachmentListV1(page.items().stream().map(CollaborationViews::attachment).toList(), page.nextCursor()));
+      return (new CollaborationAttachmentListV1(CollaborationViews.attachments(page.items()), page.nextCursor()));
    }
 }

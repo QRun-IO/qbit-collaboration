@@ -65,7 +65,7 @@ public class ListMyTasksSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var page = new com.kingsrook.qbits.collaboration.tasks.TasksService().mine(input.getQueryParam("status"), limit(input), input.getQueryParam("cursor"));
-      return (new CollaborationWorkSchemas.CollaborationTaskListV1(page.tasks().stream().map(CollaborationViews::task).toList(), page.nextCursor()));
+      return (new CollaborationWorkSchemas.CollaborationTaskListV1(CollaborationViews.tasks(page.tasks()), page.nextCursor()));
    }
 
 }

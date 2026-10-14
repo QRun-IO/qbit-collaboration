@@ -162,6 +162,37 @@ public class PeopleService
    }
 
    /*******************************************************************************
+    ** Resolve many display names with one directory query. Unknown ids map to
+    ** themselves, so a caller always has something readable to show.
+    *******************************************************************************/
+   public java.util.Map<String, String> displayNames(java.util.Collection<String> userIds) throws QException
+   {
+      java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+      Set<String> ids = new java.util.LinkedHashSet<>();
+      for(String id : userIds)
+      {
+         if(id != null && !id.isBlank())
+         {
+            ids.add(id);
+         }
+      }
+      if(ids.isEmpty())
+      {
+         return (names);
+      }
+      for(QRecord row : CollaborationRecords.query(CollaborationTables.USER, new QQueryFilter().withCriteria("userId", QCriteriaOperator.IN, new ArrayList<>(ids))))
+      {
+         String name = row.getValueString("displayName");
+         if(name != null && !name.isBlank())
+         {
+            names.put(row.getValueString("userId"), name);
+         }
+      }
+      ids.forEach(id -> names.putIfAbsent(id, id));
+      return (names);
+   }
+
+   /*******************************************************************************
     ** Look up one active person with the same signed-in boundary as search.
     *******************************************************************************/
    public PersonEntry get(String userId) throws QException

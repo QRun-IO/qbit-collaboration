@@ -254,6 +254,26 @@ class CollaborationTest
 
 
    /*******************************************************************************
+    ** Display names resolve in one query; unknown, blank and null ids stay readable.
+    *******************************************************************************/
+   @Test
+   void displayNamesResolveInBatches() throws Exception
+   {
+      seed(CollaborationTables.USER, new QRecord().withValue("userId", "ann").withValue("displayName", "Ann Lee").withValue("active", true),
+         new QRecord().withValue("userId", "nameless").withValue("displayName", " ").withValue("active", true));
+      var names = new com.kingsrook.qbits.collaboration.people.PeopleService().displayNames(java.util.Arrays.asList("ann", "nameless", "ghost", null, "", "ann"));
+      assertThat(names).containsExactly(java.util.Map.entry("ann", "Ann Lee"), java.util.Map.entry("nameless", "nameless"), java.util.Map.entry("ghost", "ghost"));
+      assertThat(new com.kingsrook.qbits.collaboration.people.PeopleService().displayNames(List.of())).isEmpty();
+      assertThat(instance.getTable(CollaborationTables.TASK).getField("assigneeUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.COMMENT).getField("authorUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.ATTACHMENT).getField("createdByUserId").getPossibleValueSourceName()).isEqualTo(CollaborationTables.USER);
+      assertThat(instance.getTable(CollaborationTables.USER).getField("userId").getPossibleValueSourceName()).isNull();
+      assertThat(instance.getPossibleValueSource(CollaborationTables.USER).getOverrideIdField()).isEqualTo("userId");
+   }
+
+
+
+   /*******************************************************************************
     ** Tags and custom fields list real rows with table labels, All tables for global ones.
     *******************************************************************************/
    @Test

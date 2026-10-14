@@ -70,7 +70,7 @@ public class ListTasksSpec extends CollaborationJsonSpec
          throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("includeDone must be true or false"));
       }
       var page = page(input, new com.kingsrook.qbits.collaboration.tasks.TasksService().list(table(input), pk(input), Boolean.valueOf(includeDone)));
-      return (new CollaborationWorkSchemas.CollaborationTaskListV1(page.items().stream().map(CollaborationViews::task).toList(), page.nextCursor()));
+      return (new CollaborationWorkSchemas.CollaborationTaskListV1(CollaborationViews.tasks(page.items()), page.nextCursor()));
    }
 
 }

@@ -95,7 +95,7 @@ public final class CollaborationWorkSchemas
    /*******************************************************************************
     ** Versioned Share body.
     *******************************************************************************/
-   public record CollaborationShareV1(Integer id, String tableName, String recordId, String fromUserId, String toUserId, String message, Boolean recipientCouldRead, Instant sentAt) implements ToSchema
+   public record CollaborationShareV1(Integer id, String tableName, String recordId, String fromUserId, String toUserId, String message, Boolean recipientCouldRead, Instant sentAt, String fromDisplayName, String toDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Explicit schema for generated clients.
@@ -111,7 +111,9 @@ public final class CollaborationWorkSchemas
             Map.entry("toUserId", new Schema().withType(Type.STRING).withDescription("toUserId.").withNullable(true)),
             Map.entry("message", new Schema().withType(Type.STRING).withDescription("message.").withNullable(true)),
             Map.entry("recipientCouldRead", new Schema().withType(Type.BOOLEAN).withDescription("recipientCouldRead.").withNullable(true)),
-            Map.entry("sentAt", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("sentAt.").withNullable(true))))));
+            Map.entry("sentAt", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("sentAt.").withNullable(true)),
+            Map.entry("fromDisplayName", new Schema().withType(Type.STRING).withDescription("Sender display name.").withNullable(true)),
+            Map.entry("toDisplayName", new Schema().withType(Type.STRING).withDescription("Recipient display name.").withNullable(true))))));
       }
    }
 
@@ -151,7 +153,7 @@ public final class CollaborationWorkSchemas
    /*******************************************************************************
     ** Versioned AccessRequest body.
     *******************************************************************************/
-   public record CollaborationAccessRequestV1(Integer id, String tableName, String recordId, String requesterUserId, String message, String status, Instant handledAt, String note) implements ToSchema
+   public record CollaborationAccessRequestV1(Integer id, String tableName, String recordId, String requesterUserId, String message, String status, Instant handledAt, String note, String requesterDisplayName, String handledByDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Explicit schema for generated clients.
@@ -167,7 +169,9 @@ public final class CollaborationWorkSchemas
             Map.entry("message", new Schema().withType(Type.STRING).withDescription("message.").withNullable(true)),
             Map.entry("status", new Schema().withType(Type.STRING).withDescription("status.").withNullable(true)),
             Map.entry("handledAt", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("handledAt.").withNullable(true)),
-            Map.entry("note", new Schema().withType(Type.STRING).withDescription("note.").withNullable(true))))));
+            Map.entry("note", new Schema().withType(Type.STRING).withDescription("note.").withNullable(true)),
+            Map.entry("requesterDisplayName", new Schema().withType(Type.STRING).withDescription("Requester display name.").withNullable(true)),
+            Map.entry("handledByDisplayName", new Schema().withType(Type.STRING).withDescription("Display name of the person who handled the request.").withNullable(true))))));
       }
    }
 
@@ -210,7 +214,7 @@ public final class CollaborationWorkSchemas
    /*******************************************************************************
     ** Versioned Task body.
     *******************************************************************************/
-   public record CollaborationTaskV1(Integer id, String tableName, String recordId, String title, String notes, String assigneeUserId, Instant dueAt, Instant remindAt, String status, String createdByUserId, Instant completedAt, String completedByUserId) implements ToSchema
+   public record CollaborationTaskV1(Integer id, String tableName, String recordId, String title, String notes, String assigneeUserId, Instant dueAt, Instant remindAt, String status, String createdByUserId, Instant completedAt, String completedByUserId, String assigneeDisplayName, String createdByDisplayName, String completedByDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Explicit schema for generated clients.
@@ -230,7 +234,10 @@ public final class CollaborationWorkSchemas
             Map.entry("status", new Schema().withType(Type.STRING).withDescription("status.").withNullable(true)),
             Map.entry("createdByUserId", new Schema().withType(Type.STRING).withDescription("createdByUserId.").withNullable(true)),
             Map.entry("completedAt", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("completedAt.").withNullable(true)),
-            Map.entry("completedByUserId", new Schema().withType(Type.STRING).withDescription("completedByUserId.").withNullable(true))))));
+            Map.entry("completedByUserId", new Schema().withType(Type.STRING).withDescription("completedByUserId.").withNullable(true)),
+            Map.entry("assigneeDisplayName", new Schema().withType(Type.STRING).withDescription("Assignee display name.").withNullable(true)),
+            Map.entry("createdByDisplayName", new Schema().withType(Type.STRING).withDescription("Creator display name.").withNullable(true)),
+            Map.entry("completedByDisplayName", new Schema().withType(Type.STRING).withDescription("Display name of the person who completed the task.").withNullable(true))))));
       }
    }
 
@@ -312,7 +319,7 @@ public final class CollaborationWorkSchemas
    /*******************************************************************************
     ** Versioned Assignment body.
     *******************************************************************************/
-   public record CollaborationAssignmentV1(Integer id, String tableName, String recordId, String ownerUserId, String assigneeUserId) implements ToSchema
+   public record CollaborationAssignmentV1(Integer id, String tableName, String recordId, String ownerUserId, String assigneeUserId, String ownerDisplayName, String assigneeDisplayName) implements ToSchema
    {
       /*******************************************************************************
        ** Explicit schema for generated clients.
@@ -325,7 +332,9 @@ public final class CollaborationWorkSchemas
             Map.entry("tableName", new Schema().withType(Type.STRING).withDescription("tableName.").withNullable(true)),
             Map.entry("recordId", new Schema().withType(Type.STRING).withDescription("recordId.").withNullable(true)),
             Map.entry("ownerUserId", new Schema().withType(Type.STRING).withDescription("ownerUserId.").withNullable(true)),
-            Map.entry("assigneeUserId", new Schema().withType(Type.STRING).withDescription("assigneeUserId.").withNullable(true))))));
+            Map.entry("assigneeUserId", new Schema().withType(Type.STRING).withDescription("assigneeUserId.").withNullable(true)),
+            Map.entry("ownerDisplayName", new Schema().withType(Type.STRING).withDescription("Owner display name.").withNullable(true)),
+            Map.entry("assigneeDisplayName", new Schema().withType(Type.STRING).withDescription("Assignee display name.").withNullable(true))))));
       }
    }
 
@@ -357,18 +366,18 @@ public final class CollaborationWorkSchemas
       schemas.put("CollaborationLinkV1", new CollaborationLinkV1(null, null).toSchema());
       schemas.put("CollaborationShareRecipientV1", new CollaborationShareRecipientV1(null, null, null).toSchema());
       schemas.put("CollaborationSharePreviewV1", new CollaborationSharePreviewV1(null).toSchema());
-      schemas.put("CollaborationShareV1", new CollaborationShareV1(null, null, null, null, null, null, null, null).toSchema());
+      schemas.put("CollaborationShareV1", new CollaborationShareV1(null, null, null, null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationShareListV1", new CollaborationShareListV1(null).toSchema());
       schemas.put("CollaborationShareRequestV1", new CollaborationShareRequestV1(null, null).toSchema());
-      schemas.put("CollaborationAccessRequestV1", new CollaborationAccessRequestV1(null, null, null, null, null, null, null, null).toSchema());
+      schemas.put("CollaborationAccessRequestV1", new CollaborationAccessRequestV1(null, null, null, null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationAccessRequestCreateRequestV1", new CollaborationAccessRequestCreateRequestV1(null, null, null, null).toSchema());
       schemas.put("CollaborationAccessRequestListV1", new CollaborationAccessRequestListV1(null, null).toSchema());
-      schemas.put("CollaborationTaskV1", new CollaborationTaskV1(null, null, null, null, null, null, null, null, null, null, null, null).toSchema());
+      schemas.put("CollaborationTaskV1", new CollaborationTaskV1(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationTaskCreateRequestV1", new CollaborationTaskCreateRequestV1(null, null, null, null, null).toSchema());
       schemas.put("CollaborationTaskPatchRequestV1", new CollaborationTaskPatchRequestV1(null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationTaskListV1", new CollaborationTaskListV1(null, null).toSchema());
       schemas.put("CollaborationAssignmentRequestV1", new CollaborationAssignmentRequestV1(null, null).toSchema());
-      schemas.put("CollaborationAssignmentV1", new CollaborationAssignmentV1(null, null, null, null, null).toSchema());
+      schemas.put("CollaborationAssignmentV1", new CollaborationAssignmentV1(null, null, null, null, null, null, null).toSchema());
       schemas.put("CollaborationMyWorkV1", new CollaborationMyWorkV1(null, null, null, null).toSchema());
       return (schemas);
    }

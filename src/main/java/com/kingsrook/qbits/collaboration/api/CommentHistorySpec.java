@@ -69,6 +69,6 @@ public class CommentHistorySpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var page = page(input, new CommentsService().history(id(input)));
-      return (new CollaborationCommentHistoryV1(page.items().stream().map(CollaborationViews::commentRevision).toList(), page.nextCursor()));
+      return (new CollaborationCommentHistoryV1(CollaborationViews.commentRevisions(page.items()), page.nextCursor()));
    }
 }

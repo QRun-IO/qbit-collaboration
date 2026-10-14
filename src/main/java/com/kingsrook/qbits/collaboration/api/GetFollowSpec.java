@@ -69,6 +69,6 @@ public class GetFollowSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var state = new FollowService().state(table(input), pk(input));
-      return (new CollaborationFollowStateV1(state.isPresent(), state.map(CollaborationViews::follow).orElse(null)));
+      return (new CollaborationFollowStateV1(state.isPresent(), state.isPresent() ? CollaborationViews.follow(state.get()) : null));
    }
 }
