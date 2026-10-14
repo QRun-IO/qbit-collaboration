@@ -22,8 +22,8 @@
       <maven.compiler.source>21</maven.compiler.source>
       <maven.compiler.target>21</maven.compiler.target>
       <jacoco.version>0.8.15</jacoco.version>
-      <!-- move to the first qbit-email RC -->
-      <qbit-email.version>0.1.0-SNAPSHOT</qbit-email.version>
+      <!-- qbit-email from Maven Central -->
+      <qbit-email.version>0.1.0-RC.1</qbit-email.version>
    </properties>
 
    <parent>
