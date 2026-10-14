@@ -6,6 +6,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Fixed
 
+- The share recipient search and mention candidates no longer offer the caller to themself.
+- The demo server configures `frontendBaseUrl`, so record links are absolute URLs (the API already returned absolute links once it is set).
 - Tag filters accept tag ids as any JSON number or numeric string; other strings remain names.
 - Collaboration home rebuilt from standard KPI and table widgets with empty states; the demo Admin parent app is reachable so Collaboration appears in the app tree.
 

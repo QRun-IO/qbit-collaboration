@@ -347,11 +347,15 @@ public class ConversationServicesTest extends PersonalServiceFixture
       new PeopleService(Clock.fixed(at, ZoneOffset.UTC)).touch();
       QContext.getQSession().getUser().setFullName("Changed Alice");
       new PeopleService(Clock.fixed(at.plusSeconds(599), ZoneOffset.UTC)).touch();
-      assertThat(new PeopleService().search("Alice", 5)).singleElement().satisfies(p -> assertThat(p.displayName()).isEqualTo("Alice Example"));
-      new PeopleService(Clock.fixed(at.plusSeconds(600), ZoneOffset.UTC)).touch();
-      assertThat(new PeopleService().search("changed", 5)).hasSize(1);
+      assertThat(new PeopleService().search("Alice", 5)).as("the caller never finds themself").isEmpty();
       login("bob");
       new PeopleService().touch();
+      assertThat(new PeopleService().search("Alice", 5)).singleElement().satisfies(p -> assertThat(p.displayName()).isEqualTo("Alice Example"));
+      login("alice");
+      QContext.getQSession().getUser().setFullName("Changed Alice");
+      new PeopleService(Clock.fixed(at.plusSeconds(600), ZoneOffset.UTC)).touch();
+      login("bob");
+      assertThat(new PeopleService().search("changed", 5)).hasSize(1);
       follows.follow("document", 1, null, null);
       login("eve");
       new PeopleService().touch();

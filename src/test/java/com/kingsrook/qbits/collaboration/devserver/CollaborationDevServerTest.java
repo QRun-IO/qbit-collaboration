@@ -81,7 +81,12 @@ class CollaborationDevServerTest
       try(HttpClient client = HttpClient.newHttpClient())
       {
          System.setProperty("collab.dev.user", "alice");
-         instance = CollaborationDevServer.buildInstance();
+         int port;
+         try(ServerSocket socket = new ServerSocket(0))
+         {
+            port = socket.getLocalPort();
+         }
+         instance = CollaborationDevServer.buildInstance(port);
          CollaborationDevServer.seed(instance);
          new QInstanceValidator().validate(instance);
          assertThat(rows("person")).hasSize(25);
@@ -142,11 +147,6 @@ class CollaborationDevServerTest
          }
          assertThatThrownBy(() -> CollaborationDevServer.session("unknown")).isInstanceOf(IllegalArgumentException.class);
          System.setProperty("collab.dev.user", "alice");
-         int port;
-         try(ServerSocket socket = new ServerSocket(0))
-         {
-            port = socket.getLocalPort();
-         }
          System.setProperty("collab.dev.port", Integer.toString(port));
          server = CollaborationDevServer.server(instance, port, false);
          server.start();
@@ -156,6 +156,7 @@ class CollaborationDevServerTest
          assertThat(response.statusCode()).isEqualTo(200);
          assertThat(new ObjectMapper().readTree(response.body()).get("threads")).hasSize(3);
          QContext.init(instance, CollaborationDevServer.session("alice"));
+         assertThat(new SharingService().link("person", 1).url()).isEqualTo("http://localhost:" + port + "/app/person/1");
          AttachmentsService attachments = new AttachmentsService();
          var png = attachments.list("person", 1).getFirst();
          var image = get(client, attachments.downloadUrl(png.id(), true).toString());

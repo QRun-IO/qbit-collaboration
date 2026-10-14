@@ -155,7 +155,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       String user = System.getProperty("collab.dev.user", "alice");
       session(user);
       int port = Integer.parseInt(System.getProperty("collab.dev.port", "8098"));
-      QInstance instance = buildInstance();
+      QInstance instance = buildInstance(port);
       seed(instance);
       QApplicationJavalinServer server = server(instance, port, true);
       server.start();
@@ -195,6 +195,16 @@ public class CollaborationDevServer extends AbstractQQQApplication
     *******************************************************************************/
    static QInstance buildInstance() throws Exception
    {
+      return (buildInstance(Integer.parseInt(System.getProperty("collab.dev.port", "8098"))));
+   }
+
+
+
+   /*******************************************************************************
+    ** The port is part of the configuration: shared links are absolute URLs to this server.
+    *******************************************************************************/
+   static QInstance buildInstance(int port) throws Exception
+   {
       QInstance instance = new QInstance().withInstanceDefaultAuthentication(new QAuthenticationMetaData()
          .withName("mock").withType(QAuthenticationType.MOCK).withCustomizer(new QCodeReference(DemoSessions.class)));
       instance.setEnforcePermissionsInCoreActions(true);
@@ -232,7 +242,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       new AuditsMetaDataProvider().withRecordIdType(QFieldType.STRING).withDefineRecordScreens(true)
          .defineAll(instance, "memory", table -> table.withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.READ_WRITE_PERMISSIONS)));
       new CollaborationQBitProducer().withQBitConfig(new CollaborationQBitConfig().withBackendName("memory")
-         .withAdminApp(true).withParentAppName("admin").withUiApi(true)
+         .withAdminApp(true).withParentAppName("admin").withUiApi(true).withFrontendBaseUrl("http://localhost:" + port)
          .withTableFeatures("person", RecordFeature.values()).withTableFeatures("sales_order", RecordFeature.values())
          .withAttachmentStorage(new QCodeReference(MemoryStorage.class))
          .withUserSessionProvider(new QCodeReference(DemoSessions.class))
