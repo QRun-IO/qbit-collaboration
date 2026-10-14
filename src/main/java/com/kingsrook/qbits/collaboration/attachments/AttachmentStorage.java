@@ -45,11 +45,14 @@ public class AttachmentStorage
    }
 
    /*******************************************************************************
-    ** Enforce the bucket's cap as well as collaboration's configured cap.
+    ** The bucket's own upload cap, when object storage exposes it through its api
+    ** package.  It does not yet (requested from qbit-object-storage), so this
+    ** returns Long.MAX_VALUE: collaboration enforces its configured per-table cap,
+    ** and object storage still enforces the bucket's cap when the object is put.
     *******************************************************************************/
    public long maxBytes(String name)
    {
-      return (bucket(name).config().getMaxUploadBytes());
+      return (Long.MAX_VALUE);
    }
 
    /*******************************************************************************
