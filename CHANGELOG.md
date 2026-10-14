@@ -4,6 +4,10 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+### Changed
+
+- Email through qbit-email: new optional dependency and `EmailCollaborationNotifier` (templates `collaboration_mention`, `collaboration_share`, `collaboration_task_reminder`), the default notifier when qbit-email is produced in the instance and no `notifier` is configured; `NoOpNotifier` otherwise. One NOTIFICATION message per recipient, no comment bodies, record labels only when field access allows. New `recipientEmailResolver` config hook; `CollaborationNotification` gains optional `sourceId` and `actorUserId`.
+
 - Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
 
 ### Added

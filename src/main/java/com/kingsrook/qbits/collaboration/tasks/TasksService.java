@@ -266,7 +266,8 @@ public class TasksService
          if(!user.equals(PersonalRecords.currentUserId()))
          {
             Notifications.send(new CollaborationNotification(user, "Task assigned: " + row.getValueString("title"), row.getValueString("notes"),
-               CollaborationNotification.Category.TASK, table, id, Notifications.link(table, id)));
+               CollaborationNotification.Category.TASK, table, id, Notifications.link(table, id))
+               .withEvent(row.getValue("id"), PersonalRecords.currentUserId()));
          }
       }
    }

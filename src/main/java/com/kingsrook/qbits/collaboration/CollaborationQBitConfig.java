@@ -23,7 +23,7 @@ package com.kingsrook.qbits.collaboration;
 
 
 import java.util.List;
-import com.kingsrook.qbits.collaboration.notify.NoOpNotifier;
+import java.util.function.Function;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitConfig;
@@ -38,7 +38,8 @@ public class CollaborationQBitConfig implements QBitConfig
    public static final String TABLE_NAME_PREFIX = "collaboration_";
    public static final String PERMISSION_BASE_NAME = "collaboration";
 
-   private QCodeReference notifier = new QCodeReference(NoOpNotifier.class);
+   private QCodeReference notifier = null;
+   private Function<String, String> recipientEmailResolver = null;
    private QCodeReference userSessionSupplier = null;
    private String defaultTagMode = "FREE";
    private List<String> tagActionTables = List.of();
@@ -256,7 +257,6 @@ public class CollaborationQBitConfig implements QBitConfig
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
       }
       assertCondition(List.of("FREE", "APPROVED_ONLY").contains(defaultTagMode == null ? "" : defaultTagMode), "defaultTagMode must be FREE or APPROVED_ONLY", errors);
-      assertCondition(notifier != null, "notifier is required", errors);
       for(List<String> tables : List.of(followActionTables, followChangeTables, tagActionTables, assignActionTables))
       {
          for(String table : tables)
@@ -379,11 +379,30 @@ public class CollaborationQBitConfig implements QBitConfig
    }
 
    /*******************************************************************************
-    ** Get notifier.
+    ** Get notifier. Null (the default) means: email through qbit-email when it is
+    ** produced in the instance, otherwise no delivery transport.
     *******************************************************************************/
    public QCodeReference getNotifier()
    {
       return (notifier);
+   }
+
+   /*******************************************************************************
+    ** Get the user id to email address lookup used by the email notifier.
+    *******************************************************************************/
+   public Function<String, String> getRecipientEmailResolver()
+   {
+      return (recipientEmailResolver);
+   }
+
+   /*******************************************************************************
+    ** Configure how the email notifier finds a recipient address from a user id.
+    ** Null (the default) uses the email stored in the collaboration people directory.
+    *******************************************************************************/
+   public CollaborationQBitConfig withRecipientEmailResolver(Function<String, String> recipientEmailResolver)
+   {
+      this.recipientEmailResolver = recipientEmailResolver;
+      return (this);
    }
 
    /*******************************************************************************
