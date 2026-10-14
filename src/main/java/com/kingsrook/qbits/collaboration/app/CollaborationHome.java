@@ -83,7 +83,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(List.of(HOME_WIDGET))
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -142,6 +142,15 @@ public final class CollaborationHome
       personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
       attachmentSummary(html);
       tagSummary(html);
+      html.append("<section><h3>Open access requests</h3><p>").append(count(CollaborationTables.ACCESS_REQUEST,
+         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"))).append("</p></section>");
+      html.append("<section><h3>Open tasks</h3><p>").append(count(CollaborationTables.TASK,
+         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"))).append("</p></section>");
+      html.append("<section><h3>Overdue tasks</h3><p>").append(count(CollaborationTables.TASK,
+         new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN").withCriteria("dueAt", QCriteriaOperator.LESS_THAN, now))).append("</p></section>");
+      html.append("<section><h3>Shares this week</h3><p>").append(count(CollaborationTables.SHARE,
+         new QQueryFilter().withCriteria("sentAt", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
+            .withCriteria("sentAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, now))).append("</p></section>");
       html.append("<section><h3>Comments this week</h3><p>").append(count(CollaborationTables.COMMENT, new QQueryFilter()
          .withCriteria("createDate", QCriteriaOperator.GREATER_THAN_OR_EQUALS, now.minus(7, ChronoUnit.DAYS))
          .withCriteria("createDate", QCriteriaOperator.LESS_THAN_OR_EQUALS, now).withCriteria("deletedAt", QCriteriaOperator.IS_BLANK))).append("</p></section>");

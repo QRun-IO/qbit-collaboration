@@ -58,6 +58,10 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public final class CollaborationTables
 {
+   public static final String SHARE = "collaboration_share";
+   public static final String ACCESS_REQUEST = "collaboration_access_request";
+   public static final String TASK = "collaboration_task";
+   public static final String RECORD_ASSIGNMENT = "collaboration_record_assignment";
    public static final String TAG = "collaboration_tag";
    public static final String RECORD_TAG = "collaboration_record_tag";
    public static final String COMMENT = "collaboration_comment";
@@ -93,6 +97,10 @@ public final class CollaborationTables
    public static List<QPossibleValueSource> possibleValueSources()
    {
       return (List.of(
+         QPossibleValueSource.newForTable(SHARE), QPossibleValueSource.newForTable(ACCESS_REQUEST),
+         QPossibleValueSource.newForTable(TASK), QPossibleValueSource.newForTable(RECORD_ASSIGNMENT),
+         enumSource("collaboration_access_request_status", "OPEN", "GRANTED", "DECLINED", "WITHDRAWN"),
+         enumSource("collaboration_task_status", "OPEN", "DONE", "CANCELLED"),
          QPossibleValueSource.newForTable(TAG), QPossibleValueSource.newForTable(RECORD_TAG),
          QPossibleValueSource.newForTable(COMMENT), QPossibleValueSource.newForTable(COMMENT_REVISION), QPossibleValueSource.newForTable(MENTION), QPossibleValueSource.newForTable(FOLLOW), QPossibleValueSource.newForTable(ACTIVITY), QPossibleValueSource.newForTable(FOLLOW_DIGEST),
          enumSource(TARGET_TYPE, "TABLE", "APP", "RECORD", "PROCESS", "REPORT", "SAVED_VIEW"),
@@ -165,6 +173,7 @@ public final class CollaborationTables
       List<QTableMetaData> tables = new ArrayList<>(List.of(settings, people, favorites, recents, attachment(config)));
       tables.addAll(conversationTables(config));
       tables.addAll(tagTables(config));
+      tables.addAll(workTables(config));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
@@ -294,6 +303,7 @@ public final class CollaborationTables
          .withField(new QFieldMetaData("commentId", QFieldType.INTEGER).withIsRequired(true).withPossibleValueSourceName(COMMENT))
          .withField(string("mentionedUserId", "Mentioned User", 255).withIsRequired(true))
          .withField(new QFieldMetaData("visible", QFieldType.BOOLEAN).withIsRequired(true))
+         .withField(new QFieldMetaData("readAt", QFieldType.DATE_TIME))
          .withField(new QFieldMetaData("notifiedAt", QFieldType.DATE_TIME))
          .withUniqueKey(new UniqueKey("commentId", "mentionedUserId"));
       QTableMetaData follows = referenced(config, FOLLOW, "Followers", "notifications")
@@ -381,5 +391,61 @@ public final class CollaborationTables
          table.getFields().values().forEach(field -> field.setIsEditable(false));
       }
       return (List.of(tags, links));
+   }
+
+   /*******************************************************************************
+    ** Sharing and work tables remain visible, audited and service-managed.
+    *******************************************************************************/
+   private static List<QTableMetaData> workTables(CollaborationQBitConfig config)
+   {
+      QTableMetaData shares = referenced(config, SHARE, "Shares", "share")
+         .withField(string("fromUserId", "From", 255).withIsRequired(true))
+         .withField(string("toUserId", "To", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("message", QFieldType.TEXT).withMaxLength(2000))
+         .withField(new QFieldMetaData("recipientCouldRead", QFieldType.BOOLEAN))
+         .withField(new QFieldMetaData("sentAt", QFieldType.DATE_TIME).withIsRequired(true))
+         .withField(new QFieldMetaData("openedAt", QFieldType.DATE_TIME));
+      QTableMetaData requests = base(config, ACCESS_REQUEST, "Access Requests", "lock_open")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.sharing.AccessRequestSecurity.class)))
+         .withRecordSecurityLock(CollaborationSecurity.ownerLock("requesterUserId"))
+         .withCustomizer(TableCustomizers.POST_QUERY_RECORD, new QCodeReference(com.kingsrook.qbits.collaboration.sharing.AccessRequestSecurity.class))
+         .withRecordLabelFormatAndFields("Access request %s", "id")
+         .withField(string("tableName", "Table", 128).withIsRequired(true))
+         .withField(string("recordId", "Record ID", 64).withIsRequired(true))
+         .withField(string("requesterUserId", "Requester", 255).withIsRequired(true))
+         .withField(new QFieldMetaData("shareId", QFieldType.INTEGER))
+         .withField(new QFieldMetaData("message", QFieldType.TEXT).withMaxLength(2000))
+         .withField(string("status", "Status", 20).withIsRequired(true).withPossibleValueSourceName("collaboration_access_request_status"))
+         .withField(string("handledByUserId", "Handled By", 255))
+         .withField(new QFieldMetaData("handledAt", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("note", QFieldType.TEXT).withMaxLength(2000));
+      QTableMetaData tasks = referenced(config, TASK, "Tasks", "task_alt")
+         .withRecordLabelFormatAndFields("%s", "title").withSearchFields(List.of("title"))
+         .withField(string("title", "Title", 200).withIsRequired(true))
+         .withField(new QFieldMetaData("notes", QFieldType.TEXT))
+         .withField(string("assigneeUserId", "Assignee", 255))
+         .withField(new QFieldMetaData("dueAt", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("remindAt", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("remindedAt", QFieldType.DATE_TIME))
+         .withField(new QFieldMetaData("overdueNotifiedAt", QFieldType.DATE_TIME))
+         .withField(string("status", "Status", 20).withIsRequired(true).withPossibleValueSourceName("collaboration_task_status"))
+         .withField(new QFieldMetaData("completedAt", QFieldType.DATE_TIME))
+         .withField(string("completedByUserId", "Completed By", 255))
+         .withField(string("createdByUserId", "Created By", 255).withIsRequired(true));
+      QTableMetaData assignments = referenced(config, RECORD_ASSIGNMENT, "Record Owners", "assignment_ind")
+         .withField(string("ownerUserId", "Owner", 255))
+         .withField(string("assigneeUserId", "Assignee", 255))
+         .withUniqueKey(new UniqueKey("tableName", "recordId"));
+      List<QTableMetaData> tables = List.of(shares, requests, tasks, assignments);
+      for(QTableMetaData table : tables)
+      {
+         table.withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+            .withSection(new QFieldSection("details", new QIcon("info"), Tier.T1,
+               table.getFields().keySet().stream().filter(name -> !List.of("createDate", "modifyDate", "parentDeleted").contains(name)
+                  && (table.getName().equals(ACCESS_REQUEST) || !List.of("tableName", "recordId").contains(name))).toList()).withLabel("Details"));
+         table.getFields().values().forEach(field -> field.setIsEditable(false));
+      }
+      return (tables);
    }
 }

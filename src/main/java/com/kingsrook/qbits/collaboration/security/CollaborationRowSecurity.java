@@ -52,7 +52,7 @@ public class CollaborationRowSecurity implements CustomPermissionChecker
       }
       new CollaborationPermissionChecker().checkPermissionsThrowing(input, metadata);
       if(metadata instanceof QTableMetaData table
-         && (table.getName().equals(CollaborationTables.FOLLOW) || table.getName().equals(CollaborationTables.ACTIVITY) || table.getName().equals(CollaborationTables.FOLLOW_DIGEST))
+         && (table.getName().equals(CollaborationTables.RECORD_ASSIGNMENT) || table.getName().equals(CollaborationTables.FOLLOW) || table.getName().equals(CollaborationTables.ACTIVITY) || table.getName().equals(CollaborationTables.FOLLOW_DIGEST))
          && !QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN))
       {
          throw (new QPermissionDeniedException("This needs collaboration.admin."));

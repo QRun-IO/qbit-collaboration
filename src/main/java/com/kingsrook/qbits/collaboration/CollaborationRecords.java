@@ -36,6 +36,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 /*******************************************************************************
  ** Internal persistence for trusted services. Callers must authorize the parent
@@ -74,7 +75,7 @@ public final class CollaborationRecords
    public static List<QRecord> query(String table, QQueryFilter filter) throws QException
    {
       QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(QContext.getQBackendTransaction());
-      input.setTableMetaData(QContext.getQInstance().getTable(table).clone().withCustomizers(null));
+      input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service performs parent/ownership authorization.");
       return (new QueryAction().execute(input).getRecords().stream().map(QRecord::new).toList());
    }
@@ -85,6 +86,7 @@ public final class CollaborationRecords
    public static QRecord insert(String table, QRecord row) throws QException
    {
       InsertInput input = new InsertInput(table).withRecords(List.of(row)).withTransaction(QContext.getQBackendTransaction());
+      input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service authorized this write.");
       List<QRecord> result = new InsertAction().execute(input).getRecords();
       check(result);
@@ -97,7 +99,7 @@ public final class CollaborationRecords
    public static void update(String table, QRecord row) throws QException
    {
       UpdateInput input = new UpdateInput(table).withRecords(List.of(row)).withTransaction(QContext.getQBackendTransaction());
-      input.setTableMetaData(QContext.getQInstance().getTable(table).clone().withCustomizers(null));
+      input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service authorized this write.");
       check(new UpdateAction().execute(input).getRecords());
    }
@@ -108,9 +110,24 @@ public final class CollaborationRecords
    public static void delete(String table, Serializable id) throws QException
    {
       DeleteInput input = new DeleteInput(table).withPrimaryKeys(List.of(id)).withTransaction(QContext.getQBackendTransaction());
-      input.setTableMetaData(QContext.getQInstance().getTable(table).clone().withCustomizers(null));
+      input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service authorized this deletion.");
       check(new DeleteAction().execute(input).getRecordsWithErrors());
+   }
+
+   /*******************************************************************************
+    ** Access-request services enforce requester/approver authority explicitly.
+    ** Bypass only that owner lock on a private metadata clone, retaining the caller
+    ** for audit attribution. Standard actions always retain the installed lock.
+    *******************************************************************************/
+   private static QTableMetaData serviceMetadata(String table)
+   {
+      QTableMetaData metadata = QContext.getQInstance().getTable(table).clone().withCustomizers(null);
+      if(table.equals(com.kingsrook.qbits.collaboration.model.CollaborationTables.ACCESS_REQUEST))
+      {
+         metadata.setRecordSecurityLocks(null);
+      }
+      return (metadata);
    }
 
    /*******************************************************************************

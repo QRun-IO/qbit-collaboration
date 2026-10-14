@@ -128,6 +128,13 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();
       CollaborationSecurity.buildSecurityKeyTypes().forEach(output::add);
       output.add(TrimRecentsProcess.metadata(qBitConfig));
+      output.add(com.kingsrook.qbits.collaboration.tasks.SendTaskRemindersProcess.metadata(qBitConfig));
+      WorkProcesses.management().forEach(output::add);
+      for(String table : qBitConfig.getAssignActionTables())
+      {
+         WorkProcesses.assignments(table).forEach(output::add);
+      }
+      instance.withRecordChangeListener(new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(WorkCleanup.class));
       output.add(com.kingsrook.qbits.collaboration.follow.SendFollowDigestsProcess.metadata(qBitConfig));
       for(String table : qBitConfig.getFollowActionTables())
       {

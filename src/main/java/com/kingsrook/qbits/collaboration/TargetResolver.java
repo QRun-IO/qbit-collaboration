@@ -297,6 +297,15 @@ public final class TargetResolver
 
 
    /*******************************************************************************
+    ** Shared canonical record href, with optional configured frontend origin.
+    *******************************************************************************/
+   public static String recordHref(String table, String id)
+   {
+      String base = CollaborationRecords.config().getFrontendBaseUrl();
+      return ((base == null ? "" : base.replaceAll("/+$", "")) + path(table) + encode(id));
+   }
+
+   /*******************************************************************************
     ** Flat Next router path; trailing slash also supports dotted process names.
     *******************************************************************************/
    private static String path(String name)
@@ -309,7 +318,7 @@ public final class TargetResolver
    /*******************************************************************************
     ** Encode a single route segment, including slash, hash and spaces in ids.
     *******************************************************************************/
-   private static String encode(String value)
+   public static String encode(String value)
    {
       return (URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20"));
    }

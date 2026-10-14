@@ -6,6 +6,12 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
+- Phase-h links, share previews, recipient-safe notifications and SHARED followers; access requests with requester/admin locks, duplicate OPEN handling, optional permission-holder directory and streamed Mark granted/Decline outcomes.
+- Phase-i tasks with assignee validation, injectable-clock reminder/overdue receipts, complete/reopen/cancel, due-date cursor paging and streamed task actions.
+- Qbit owner/assignee services, configured Assign to/Take ownership bulk actions, My work summaries and mention read receipts.
+- Four audited tables, task-title search metadata, work/share home cards, committed parent-delete cleanup, PostgreSQL tables/indexes and a mention readAt migration.
+- Acceptance tests for security, notifications, request existence neutrality, actual streamed actions, reminders, summaries, cleanup and schema. Existing JaCoCo gates retained; UI API endpoints remain separate.
+
 - Phase-d tag vocabulary and record assignments on QQQ 4.1.0-RC.5; normalized names, FREE/APPROVED_ONLY policy resolved from system-read scoped feature settings, explicit global/manage permissions, parent-checked idempotent assignment, usage counts and TAGGED/UNTAGGED activity without follower notifications.
 - Tags navigation, secured Record Tags child list, FIELD audit, label search, approved/scoped table PVS, streamed Approve/Merge/Delete and configured host Add/Remove actions, parent cleanup and real Tags home metrics. Bulk multi-select intent is exposed in picker metadata for the separate Next UI implementation.
 - Standalone `TagFilterTranslator` for IN/CONTAINS_ALL/NOT_IN/IS_BLANK/IS_NOT_BLANK with a 10,000 matching-ID cap. Filter/quick-search integration lands after QRun-IO/qqq#1140 is released.
