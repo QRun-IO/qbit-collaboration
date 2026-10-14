@@ -149,7 +149,7 @@ public final class Notifications
    {
       try
       {
-         Class.forName("com.kingsrook.qbits.email.outbox.EmailService");
+         Class.forName("com.kingsrook.qbits.email.api.EmailApi");
          return (EmailCollaborationNotifier.isAvailable(QContext.getQInstance()));
       }
       catch(ClassNotFoundException | LinkageError e)

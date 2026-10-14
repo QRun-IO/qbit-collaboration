@@ -23,17 +23,13 @@
       <maven.compiler.target>21</maven.compiler.target>
       <jacoco.version>0.8.15</jacoco.version>
       <!-- qbit-email from Maven Central -->
-      <qbit-email.version>0.1.0-RC.1</qbit-email.version>
-      <!-- Optional email integration: only EmailCollaborationNotifier links to its API. -->
-      <!-- EmailRuntime is in the root package; retain the parent's existing allowances. -->
-      <qbit.guardrails.allowedQbitArtifacts>com.kingsrook.qbits:qbit-object-storage,com.kingsrook.qbits:*-api,com.kingsrook.qbits:qbit-email</qbit.guardrails.allowedQbitArtifacts>
-      <qbit.guardrails.allowedApiPackages>com.kingsrook.qbits.objectstorage.api,com.kingsrook.qbits.email</qbit.guardrails.allowedApiPackages>
+      <qbit-email.version>0.1.0-RC.2</qbit-email.version>
    </properties>
 
    <parent>
       <groupId>com.kingsrook</groupId>
       <artifactId>qbit-build-parent</artifactId>
-      <version>2.0.0</version>
+      <version>2.1.1</version>
    </parent>
 
    <groupId>com.kingsrook.qbits</groupId>
