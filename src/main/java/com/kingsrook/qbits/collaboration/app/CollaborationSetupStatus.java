@@ -35,6 +35,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.Capability;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 
@@ -85,7 +86,8 @@ public final class CollaborationSetupStatus
          : new Item("Feature settings", "Set up", rows.size() + " row" + (rows.size() == 1 ? "" : "s"), "Feature Settings", null));
 
       List<QTableMetaData> hostTables = CollectionUtils.nonNullMap(instance.getTables()).values().stream()
-         .filter(table -> !table.getName().startsWith("collaboration_") && !Boolean.TRUE.equals(table.getIsHidden()) && table.getPrimaryKeyField() != null)
+         .filter(table -> !table.getName().startsWith("collaboration_") && !Boolean.TRUE.equals(table.getIsHidden()) && table.getPrimaryKeyField() != null
+            && (table.isCapabilityEnabled(instance.getBackend(table.getBackendName()), Capability.TABLE_GET) || table.isCapabilityEnabled(instance.getBackend(table.getBackendName()), Capability.TABLE_QUERY)))
          .sorted((a, b) -> a.getName().compareTo(b.getName())).toList();
       for(RecordFeature feature : RecordFeature.values())
       {

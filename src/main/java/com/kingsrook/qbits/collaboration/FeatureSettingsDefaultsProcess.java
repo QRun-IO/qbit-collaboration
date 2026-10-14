@@ -27,8 +27,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
+import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.permissions.CustomPermissionChecker;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -173,7 +175,7 @@ public final class FeatureSettingsDefaultsProcess
          {
             String scope = record.getValueString("scopeType");
             byScope.computeIfAbsent(scope, s -> line(Status.OK, scope + " setting will be created", scope + " settings will be created",
-               scope + " setting was created", scope + " settings were created")).incrementCountAndAddPrimaryKey(record.getValueString("feature"));
+               scope + " setting was created", scope + " settings were created")).incrementCount();
             output.getRecords().add(record);
          }
       }
@@ -208,19 +210,34 @@ public final class FeatureSettingsDefaultsProcess
 
 
       /*******************************************************************************
+       ** One transaction for the whole load: the override refresh waits for the
+       ** commit, so a failure on a later page can never leave some rows (for
+       ** example Instance rows without the App and Table rows that restate the
+       ** code) in effect.
+       *******************************************************************************/
+      @Override
+      public Optional<QBackendTransaction> openTransaction(RunBackendStepInput input) throws QException
+      {
+         return (Optional.of(QBackendTransaction.openFor(new InsertInput(CollaborationTables.FEATURE_SETTING))));
+      }
+
+
+
+      /*******************************************************************************
        **
        *******************************************************************************/
       @Override
       public void runOnePage(RunBackendStepInput input, RunBackendStepOutput output) throws QException
       {
-         List<QRecord> inserted = new InsertAction().execute(new InsertInput(CollaborationTables.FEATURE_SETTING).withRecords(input.getRecords())).getRecords();
+         List<QRecord> inserted = new InsertAction().execute(new InsertInput(CollaborationTables.FEATURE_SETTING).withRecords(input.getRecords())
+            .withTransaction(getTransaction().orElse(null))).getRecords();
          for(QRecord record : inserted)
          {
             if(record.getErrors() != null && !record.getErrors().isEmpty())
             {
                throw (new QException("Could not create feature settings: " + record.getErrors()));
             }
-            created.incrementCountAndAddPrimaryKey(record.getValue("id"));
+            created.incrementCount();
             output.getRecords().add(record);
          }
       }

@@ -356,6 +356,38 @@ class FeatureSettingsDefaultsTest
 
 
    /*******************************************************************************
+    ** The load is one transaction: while it is open (and after it fails and is
+    ** rolled back) the override overlay never sees any of its rows, so a failure
+    ** on a later page cannot leave Instance rows without the rows that restate
+    ** the code.
+    *******************************************************************************/
+   @Test
+   void laterPageFailureNeverReachesTheOverlay() throws Exception
+   {
+      scenario(1);
+      long generation = RuntimeMetaDataOverlay.getGeneration(instance);
+      FeatureSettingsDefaultsProcess.Load load = new FeatureSettingsDefaultsProcess.Load();
+      assertThat(load.openTransaction(new com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput())).isPresent();
+      com.kingsrook.qqq.backend.core.actions.QBackendTransaction tx = new com.kingsrook.qqq.backend.core.actions.QBackendTransaction();
+      load.setTransaction(java.util.Optional.of(tx));
+
+      List<QRecord> all = FeatureSettingsDefaults.missingRows(instance, config);
+      var page1 = new com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput();
+      page1.setRecords(new ArrayList<>(all.subList(0, 3)));
+      load.runOnePage(page1, new com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepOutput());
+      assertThat(RuntimeMetaDataOverlay.getGeneration(instance)).as("no refresh before commit").isEqualTo(generation);
+
+      var page2 = new com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput();
+      page2.setRecords(new ArrayList<>(List.of(new QRecord().withValue("scopeType", "INSTANCE"))));
+      assertThatThrownBy(() -> load.runOnePage(page2, new com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepOutput()))
+         .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QException.class);
+      tx.rollback();
+      assertThat(RuntimeMetaDataOverlay.getGeneration(instance)).as("rolled back: the overlay never changed").isEqualTo(generation);
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    private static CollaborationSetupStatus.Item item(List<CollaborationSetupStatus.Item> items, String feature)

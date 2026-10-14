@@ -15,7 +15,7 @@ entries:
   - key: table:collaboration_feature_setting;slot:help
     summary: "Turns a record feature on or off for the whole instance, an app or one table, with its permission mode."
     content: |
-      **How rows get created:** run the table action Create rows from configuration once. It writes the settings the code configuration already applies (one Instance row per feature, plus an App or Table row wherever the code declares one), so nothing changes until you edit a row. After that an administrator adds or edits rows: pick a scope (Instance, App or Table), a feature, and turn it on. The most specific scope wins. Tags also take `{"mode":"FREE"}` or `{"mode":"APPROVED_ONLY"}` in Settings. Rows only fill in when the table is empty, so the action never overwrites an edit.
+      **How rows get created:** run the table action Create rows from configuration once. It writes the settings the code configuration already applies (one Instance row per feature, plus an App or Table row wherever the code declares one), so nothing changes until you edit a row. After that an administrator adds or edits rows: pick a scope (Instance, App or Table), a feature, and turn it on. Rows are applied after all code configuration. An Instance row overrides what code declares on any app or table that has no row of its own, so once rows exist, change features in the rows, not in code. Tags also take `{"mode":"FREE"}` or `{"mode":"APPROVED_ONLY"}` in Settings. Rows only fill in when the table is empty, so the action never overwrites an edit.
 
   - key: table:collaboration_user;slot:help
     summary: "The people directory used for mentions, sharing and assignment, kept up to date automatically."

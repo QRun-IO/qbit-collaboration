@@ -138,7 +138,7 @@ Omit `withParentAppName` for a top-level app. Run normal QQQ instance validation
 Collaboration ships no SQL seed. The one configuration table, `collaboration_feature_setting`, depends on the host's configuration (`withDefaultFeatures`, `withTableFeatures`, the default tag mode, features declared on apps and tables), so its rows are computed at run time:
 
 - Open Feature Settings and run the table action **Create rows from configuration** (collaboration administrators). It writes one Instance row per feature, plus an App or Table row wherever the code declares something at that scope. The rows say exactly what the code already says, so nothing changes; `FeatureSettingsDefaultsTest` proves every table resolves identically with and without them.
-- It only creates rows when the table is empty, so it never touches an administrator's rows. After that, edit the rows: they win over the code defaults for the scopes they name.
+- It only creates rows when the table is empty, so it never touches an administrator's rows. Rows are applied after all code configuration. An Instance row overrides what code declares on any app or table that has no row of its own, so once rows exist, change features in the rows, not in code.
 - The **Setup** card on the Collaboration home shows each feature, whether it is on, for which tables, and whether that comes from Feature Settings rows or the configuration.
 - Every collaboration table has help (shown when it is empty) that says how its rows get created. The other tables hold user content or runtime data and start empty by design.
 
