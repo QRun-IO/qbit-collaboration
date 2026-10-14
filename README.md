@@ -51,9 +51,14 @@ of `;` between classpath entries.
 Open [the demo](http://localhost:8098/?createMockSession=true), then **Sales → People**
 or **Sales orders**. [Person 1](http://localhost:8098/app/person/1) and
 [order 1](http://localhost:8098/app/sales_order/1) have the richest collaboration panels.
-Select a user with `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list)
-and restart the server to switch. The MOCK session customizer supplies stable identities
-and real permissions, also used by recipient access checks:
+Pick the user per browser: add `user=` to the page load, for example
+`http://localhost:8098/?createMockSession=true&user=bob`. The server remembers the choice in a
+`collab_dev_user` cookie, so **open a second browser with `?user=bob` to see presence** (your
+first browser keeps its own user; browsers on the same profile share the cookie). Without a
+choice, `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list) is the default.
+The MOCK session customizer supplies stable identities, display names (the sidebar shows
+Alice Morgan, not Anonymous) and real permissions, also used by recipient access checks.
+Shared record links are absolute (`frontendBaseUrl` is `http://localhost:<port>`):
 
 | User | Permissions |
 | --- | --- |

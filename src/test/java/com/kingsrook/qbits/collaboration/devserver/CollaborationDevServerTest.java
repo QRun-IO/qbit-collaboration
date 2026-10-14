@@ -144,6 +144,8 @@ class CollaborationDevServerTest
             QSession mock = new MockAuthenticationModule().createSession(instance, Map.of("sessionUUID", UUID.randomUUID().toString()));
             assertThat(mock.getUser().getIdReference()).isEqualTo(user);
             assertThat(mock.getPermissions()).isEqualTo(CollaborationDevServer.session(user).getPermissions());
+            assertThat(mock.getUser().getFullName()).isEqualTo(CollaborationDevServer.session(user).getUser().getFullName()).isNotEqualTo("Anonymous").isNotEqualTo("John Smith");
+            assertThat(mock.getValuesForFrontend()).containsEntry("user", CollaborationDevServer.session(user).getValuesForFrontend().get("user"));
          }
          assertThatThrownBy(() -> CollaborationDevServer.session("unknown")).isInstanceOf(IllegalArgumentException.class);
          System.setProperty("collab.dev.user", "alice");
@@ -190,6 +192,80 @@ class CollaborationDevServerTest
          restore("collab.dev.user", oldUser);
          restore("collab.dev.port", oldPort);
       }
+   }
+
+
+
+   /*******************************************************************************
+    ** Two browsers see two users: ?user= is remembered in a cookie, the session carries
+    ** the person's real name, and without a choice the JVM default still applies.
+    *******************************************************************************/
+   @Test
+   void eachBrowserSessionChoosesItsOwnUser() throws Exception
+   {
+      String oldUser = System.getProperty("collab.dev.user");
+      MemoryRecordStore.getInstance().reset();
+      CollaborationDevServer.MemoryStorage.clear();
+      QInstance instance = null;
+      QApplicationJavalinServer server = null;
+      try(HttpClient client = HttpClient.newHttpClient())
+      {
+         System.setProperty("collab.dev.user", "admin");
+         int port;
+         try(ServerSocket socket = new ServerSocket(0))
+         {
+            port = socket.getLocalPort();
+         }
+         instance = CollaborationDevServer.buildInstance(port);
+         CollaborationDevServer.seed(instance);
+         server = CollaborationDevServer.server(instance, port, false);
+         server.start();
+         String base = "http://localhost:" + port;
+
+         var chosen = get(client, base + "/qqq/v1/version?createMockSession=true&user=bob");
+         assertThat(chosen.headers().allValues("Set-Cookie")).anySatisfy(cookie -> assertThat(cookie).startsWith("collab_dev_user=bob"));
+         assertThat(get(client, base + "/qqq/v1/version?user=nobody").headers().allValues("Set-Cookie")).noneMatch(cookie -> cookie.startsWith("collab_dev_user"));
+
+         var manage = client.send(HttpRequest.newBuilder(URI.create(base + "/qqq/v1/manageSession")).timeout(Duration.ofSeconds(20))
+            .header("Cookie", "collab_dev_user=bob").header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString("{\"accessToken\":\"anonymous\"}")).build(), HttpResponse.BodyHandlers.ofString());
+         assertThat(new ObjectMapper().readTree(manage.body()).at("/values/user/name").asText()).as(manage.body()).isEqualTo("Bob Chen");
+         assertThat(commenter(client, base, "bob")).containsExactly("bob", "Bob Chen");
+         assertThat(commenter(client, base, "alice")).containsExactly("alice", "Alice Morgan");
+         assertThat(commenter(client, base, "admin")).containsExactly("admin", "Demo Administrator");
+         assertThat(commenter(client, base, null)).as("no choice falls back to the collab.dev.user default").containsExactly("admin", "Demo Administrator");
+         assertThat(commenter(client, base, "nobody")).as("an unknown cookie falls back to the default").containsExactly("admin", "Demo Administrator");
+         assertThat(CollaborationDevServer.selectedUser()).isEqualTo("admin");
+      }
+      finally
+      {
+         if(server != null)
+         {
+            server.stop();
+         }
+         if(instance != null)
+         {
+            PresenceRegistry.close(instance);
+            RealtimeBus.close(instance);
+         }
+         QContext.clear();
+         QJavalinImplementation.setSessionCookieHttpOnly(false);
+         MemoryRecordStore.getInstance().reset();
+         CollaborationDevServer.MemoryStorage.clear();
+         restore("collab.dev.user", oldUser);
+      }
+   }
+
+   /*******************************************************************************
+    ** Post a comment as the browser holding the given user cookie; return who the server says wrote it.
+    *******************************************************************************/
+   private static List<String> commenter(HttpClient client, String base, String cookieUser) throws Exception
+   {
+      String cookie = "sessionUUID=" + UUID.randomUUID() + (cookieUser == null ? "" : "; collab_dev_user=" + cookieUser);
+      var response = client.send(HttpRequest.newBuilder(URI.create(base + "/qqq/v1/qbit/collaboration/records/person/1/comments")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", cookie).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString("{\"body\":\"Who am I?\"}")).build(), HttpResponse.BodyHandlers.ofString());
+      assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+      var json = new ObjectMapper().readTree(response.body());
+      return (List.of(json.get("authorUserId").asText(), json.get("authorDisplayName").asText()));
    }
 
 
