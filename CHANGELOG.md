@@ -8,7 +8,11 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
-- Collaboration UI API extension `1.0.0`: 42 typed operations for favorites, recents, attachments, tags, comments, mentions, follow, timeline, people, sharing, access requests, tasks, assignment and My work under `/qqq/v1/qbit/collaboration`, enabled by default and disabled with `withUiApi(false)`.
+- Phase f custom-field designer: audited definitions, secured EAV children, runtime JSON-path fields, classification, validation, lifecycle actions, PostgreSQL probes/index jobs and migration DDL. Read-only EAV filters and scalar multi-select limitations are documented.
+- Phase g presence: typed POST/DELETE/GET endpoints, 45-second leases, tab merging, a 50,000-entry cap, internal bus replication, record/table events, summaries and the admin-only Who's here card.
+- Designer, HTTP, two-pod, clock and JDBC-boundary tests; regenerated contract and existing Checkstyle/JaCoCo gates retained.
+
+- Collaboration UI API extension `1.0.0`: 45 typed operations for favorites, recents, attachments, tags, comments, mentions, follow, timeline, people, sharing, access requests, tasks, assignment, My work and presence under `/qqq/v1/qbit/collaboration`, enabled by default and disabled with `withUiApi(false)`.
 - Real multipart uploads; download/preview return five-minute `{url}` responses (clients follow url) because the framework cannot describe a redirect Location header. Configurable attachment storage adapter supports in-memory HTTP tests.
 - Versioned `ToSchema` wire types, enum values, semantic parameter descriptions, generated OpenAPI fragment and drift check; real HTTP tests cover all operations, paging, parent visibility, permissions, validation and storage failures.
 - Shared HTTP page bounds of 1-100 (default 20); comments/timeline keyset cursors and offset cursors for complete-list services. People/vocabulary remain bounded searches, while recents/mention candidates retain their 50-item service windows.

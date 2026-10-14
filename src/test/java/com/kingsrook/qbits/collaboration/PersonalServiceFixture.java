@@ -119,6 +119,8 @@ public abstract class PersonalServiceFixture
    @AfterEach
    public void tearDown()
    {
+      com.kingsrook.qbits.collaboration.presence.PresenceRegistry.close(instance);
+      com.kingsrook.qqq.backend.core.realtime.RealtimeBus.close(instance);
       QContext.clear();
       MemoryRecordStore.getInstance().reset();
    }

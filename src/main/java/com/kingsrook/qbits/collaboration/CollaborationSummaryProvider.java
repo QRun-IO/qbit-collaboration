@@ -47,6 +47,18 @@ public class CollaborationSummaryProvider implements RecordFeatureSummaryProvide
       var features = RecordFeaturesResolver.resolve(QContext.getQInstance(), QContext.getQInstance().getTable(ref.tableName()));
       String id = parent.getValueString(QContext.getQInstance().getTable(ref.tableName()).getPrimaryKeyField());
       String user = PersonalRecords.currentUserId();
+      if(features.isEnabled(RecordFeature.PRESENCE))
+      {
+         summary.setPresence(com.kingsrook.qbits.collaboration.presence.PresenceRegistry.get(QContext.getQInstance()).snapshot(ref.tableName(), id).stream().map(viewer ->
+         {
+            java.util.Map<String, java.io.Serializable> entry = new java.util.LinkedHashMap<>();
+            entry.put("userId", viewer.userId());
+            entry.put("displayName", viewer.displayName());
+            entry.put("mode", viewer.mode());
+            entry.put("fieldName", viewer.fieldName());
+            return (entry);
+         }).toList());
+      }
       if(features.isEnabled(RecordFeature.FAVORITES))
       {
          summary.setIsFavorite(!CollaborationRecords.query(CollaborationTables.FAVORITE, new QQueryFilter()

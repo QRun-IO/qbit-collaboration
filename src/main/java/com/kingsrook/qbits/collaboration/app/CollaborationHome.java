@@ -83,7 +83,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(List.of(HOME_WIDGET))
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }
@@ -142,6 +142,7 @@ public final class CollaborationHome
       personalSummary(html, CollaborationTables.RECENT, "Recently viewed");
       attachmentSummary(html);
       tagSummary(html);
+      fieldSummary(html);
       html.append("<section><h3>Open access requests</h3><p>").append(count(CollaborationTables.ACCESS_REQUEST,
          new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"))).append("</p></section>");
       html.append("<section><h3>Open tasks</h3><p>").append(count(CollaborationTables.TASK,
@@ -237,6 +238,35 @@ public final class CollaborationHome
       CountInput input = new CountInput(table).withFilter(filter);
       input.setPermissionEnforcement(PermissionEnforcement.ENFORCE);
       return (new CountAction().execute(input).getCount());
+   }
+
+
+
+   /*******************************************************************************
+    ** Real definition status and index totals, plus ephemeral admin-only counts.
+    *******************************************************************************/
+   private static void fieldSummary(StringBuilder html) throws QException
+   {
+      html.append("<section><h3>Custom fields</h3><ul>");
+      for(String status : List.of("DRAFT", "ACTIVE", "ARCHIVED"))
+      {
+         html.append("<li>").append(status).append(": ").append(count(CollaborationTables.FIELD_DEFINITION,
+            new QQueryFilter().withCriteria("status", QCriteriaOperator.EQUALS, status))).append("</li>");
+      }
+      for(String state : List.of("NONE", "BUILDING", "READY", "FAILED"))
+      {
+         html.append("<li>Index ").append(state).append(": ").append(count(CollaborationTables.FIELD_DEFINITION,
+            new QQueryFilter().withCriteria("indexState", QCriteriaOperator.EQUALS, state))).append("</li>");
+      }
+      html.append("</ul><p>Definitions with storage or index messages: ").append(count(CollaborationTables.FIELD_DEFINITION,
+         new QQueryFilter().withCriteria("statusMessage", QCriteriaOperator.IS_NOT_BLANK))).append(". See Custom Fields for details.</p></section>");
+      if(QContext.getQSession().hasPermission(CollaborationPermissions.ADMIN))
+      {
+         html.append("<section><h3>Who's here</h3><ul>");
+         com.kingsrook.qbits.collaboration.presence.PresenceRegistry.get(QContext.getQInstance()).counts().forEach((table, count) ->
+            html.append("<li>").append(table.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")).append(": ").append(count).append("</li>"));
+         html.append("</ul></section>");
+      }
    }
 
 

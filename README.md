@@ -1,6 +1,6 @@
 # QBit Collaboration
 
-Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and core-integrated tag filtering/search. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g remain planned. Runtime overrides and TAGS mode settings resolve through core.
+Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and core-integrated tag filtering/search. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g add the custom-field designer and ephemeral replicated presence. Runtime overrides and TAGS mode settings resolve through core.
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
@@ -510,3 +510,105 @@ New routes, all under `/qqq/v1/qbit/collaboration`:
 Typed `CollaborationWorkSchemas` describe requests and results. Task PATCH preserves omitted fields, accepts OPEN/DONE/CANCELLED transitions, and permits explicit null for optional fields; null `remindAt` selects the service's due-date default. Assignment PUT replaces owner and assignee; null clears. Invalid input is 400, denied visible-record operations are 403, and missing/invisible parents are 404. Access requests deliberately never inspect parent existence. The extension stays at unreleased **1.0.0**; contract tooling accepts these additions without a bump.
 
 `CollaborationRealtime` publishes `comment.added/updated/deleted`, `attachment.changed`, `tags.changed` and `task.changed` on `record:{table}:{pk}` after commit. Successful notification delivery publishes `notification.created` on `user:{userId}`. Payloads contain identifiers only. The optional followers provider is skipped because `RecordFollowersProviderInterface` is absent from the installed jar. Selectable Tags values remain unavailable because the overlay has no output hook.
+
+
+## Custom fields (phase f)
+
+Enable `RecordFeature.CUSTOM_FIELDS` on each host table. **Custom Fields** is the standard,
+FIELD-audited `collaboration_field_definition` table. Reads require `collaboration.view` (or
+admin); writes/actions require `collaboration.fields.manage` (or admin). Definitions have a
+unique `(tableName, name)` key. The CUSTOM table picker lists enabled host tables; this core
+snapshot has no generic table-name provider. EAV values are a secured child list, not a nav item.
+
+Create a DRAFT named `[a-z][a-z0-9_]{0,40}`, then run **Publish field**. ACTIVE definitions appear
+as ordinary `cf_<name>` fields through the overlay. **Archive field** counts records with values
+in Review and hides the field, retaining its values. This version publishes DRAFT definitions
+only. **Rebuild index** reruns the index job. Types can change only in DRAFT; table/name identity
+is immutable. Lifecycle/index fields are server-managed; published definitions cannot be deleted.
+
+Types: STRING, TEXT, INTEGER, DECIMAL, BOOLEAN, DATE, DATE_TIME, SELECT, MULTI_SELECT, USER and
+RECORD_LINK. Select options use stable ids, for example:
+
+```json
+[{"id":"normal","label":"Normal"},{"id":"urgent","label":"Urgent"}]
+```
+
+Active options may be added or relabeled. PostgreSQL containment counts refuse removal of an id
+still in use; other backends skip this check with a visible warning. USER uses `collaboration_user`
+PVS; RECORD_LINK requires the linked table's PVS. MULTI_SELECT is a JSON-array **STRING** with a
+PVS: native array membership operators and multi-select editing await core support. Numeric
+bounds use `ValueRangeBehavior`; required, maxLength, defaultValue and plain-text help use normal
+metadata. Optional PUBLIC/CONFIDENTIAL/PII/PHI classification is carried by `AiFieldMetaData`.
+Sections follow `sectionName`, defaulting to Custom fields. `sortOrder` controls contribution
+order; searchable definitions join the normal search-field list.
+
+Definition writes refresh metadata after commit; rollbacks do not. Perform the initial
+`RuntimeMetaDataOverlay.refresh(instance)` after metadata and database initialization. Other pods
+must refresh their overlays when definitions change; presence replication does not replicate
+metadata.
+
+Memory uses core `JsonPathStorage`. PostgreSQL uses it after a cached
+`SELECT qqq_custom_fields FROM <backend table> LIMIT 0` probe succeeds. Missing columns and
+unsupported backends get read-only EAV virtual filters over `collaboration_field_value`, with
+typed `QSubQuery` criteria. These fields are not query-selectable; EAV value writes and projection
+are outside this version. `statusMessage` records the fallback reason. After adding a missing
+column, call `CustomFieldStorage.invalidate(instance, tableName)` and refresh the overlay.
+
+### PostgreSQL setup and indexes
+
+Apply the one-time migration with your normal migration tool:
+
+```sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS qqq_custom_fields JSONB NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS orders_custom_fields_gin ON orders
+   USING gin (qqq_custom_fields jsonb_path_ops);
+```
+
+`CollaborationSchema.customFieldsDdl("orders")` generates equivalent SQL with quoted identifiers
+and a deterministic index name. `postgresScript(config)` includes the two new collaboration
+tables. Neither helper executes SQL. Do not declare the backing column as a regular QQQ field.
+
+The hidden `collaborationBuildFieldIndexes` job runs every 60 seconds when `schedulerName` is
+set, and through Publish/Rebuild/Archive. Definitions show BUILDING/READY/FAILED, SQL and errors.
+Range fields get typed expression indexes; searchable text uses `gin_trgm_ops` when `pg_trgm`
+is installed, otherwise a normal expression index. Concurrent DDL uses a fresh backend
+connection with autocommit, outside the record transaction. PostgreSQL can reject temporal text
+casts as non-immutable; that failure is recorded. A host migration can supply its chosen
+immutable expression. Rebuild uses `IF NOT EXISTS`, preserving existing index definitions.
+Archive drops the index concurrently while retaining values.
+
+`withManagedIndexes(false)` records `indexDdl` only, with indexState NONE, for host migrations.
+There is no automatic migration receipt. The home shows definition/index status totals and the
+number of definitions with diagnostic messages.
+
+## Presence (phase g)
+
+Enable `RecordFeature.PRESENCE` on the table. The typed endpoints below
+`/qqq/v1/qbit/collaboration` are:
+
+| Operation | Input |
+| --- | --- |
+| `POST /presence` | `{connectionId, table, pk?, mode: "VIEWING"|"EDITING", fieldName?}` |
+| `DELETE /presence` | `{connectionId, table, pk?}` |
+| `GET /presence?table=...&pk=...` | Omit pk for a table snapshot |
+
+Session identity supplies userId and displayName. Every call rechecks table READ and record
+GetAction visibility. Disabled features and denied/missing parents return the same 404. A
+refused renewal removes the caller's previous lease. Connection ids are namespaced by user;
+they need not be active SSE connections, allowing polling clients to participate.
+
+Renew on open/focus change and every 20 seconds. Leases expire after 45 seconds, with a one-second
+sweep and expiry checks on reads. The cap is 50,000 leases per pod: new targets are refused with
+a warning while existing leases can renew. Tabs merge per user; EDITING wins and the latest
+editor supplies focus. Nothing is persisted, including directory rows.
+
+Every heartbeat/leave replicates over core's bus on `instance:presence`, a channel refused by
+core client subscriptions. `presence.changed` is emitted to record and table channels. Table
+snapshots aggregate users without record ids or focused field names; those stay on record
+channels. Configure core's ESB bus for multiple pods. Delivery is best effort; clients renew and
+refetch after reconnecting.
+
+The initial overlay refresh starts the registry on every pod, including those without local
+viewers. Endpoints also initialize it lazily. At shutdown call `PresenceRegistry.close(instance)`
+before `RealtimeBus.close(instance)`. The admin-only **Who's here** home card shows user counts
+per table, and core record-feature summaries include the presence snapshot.

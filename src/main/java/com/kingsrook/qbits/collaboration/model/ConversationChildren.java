@@ -48,6 +48,12 @@ public final class ConversationChildren
     *******************************************************************************/
    public static void install(QInstance instance)
    {
+      QJoinMetaData fieldJoin = new QJoinMetaData().withLeftTable(CollaborationTables.FIELD_DEFINITION).withRightTable(CollaborationTables.FIELD_VALUE)
+         .withInferredName().withType(JoinType.ONE_TO_MANY).withJoinOns(List.of(new JoinOn("tableName", "tableName"), new JoinOn("name", "fieldName")));
+      instance.addJoin(fieldJoin);
+      instance.addWidget(ChildRecordListRenderer.widgetMetaDataBuilder(fieldJoin).withLabel("Custom Field Values").withCanAddChildRecord(false).getWidgetMetaData());
+      instance.getTable(CollaborationTables.FIELD_DEFINITION).withSection(new QFieldSection("values", new QIcon("list"), Tier.T2)
+         .withLabel("Custom Field Values").withWidgetName(fieldJoin.getName()));
       QJoinMetaData tagJoin = new QJoinMetaData().withLeftTable(CollaborationTables.TAG).withRightTable(CollaborationTables.RECORD_TAG)
          .withInferredName().withType(JoinType.ONE_TO_MANY).withJoinOns(List.of(new JoinOn("id", "tagId")));
       instance.addJoin(tagJoin);

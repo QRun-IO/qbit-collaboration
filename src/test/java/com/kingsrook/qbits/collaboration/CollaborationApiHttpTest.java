@@ -167,6 +167,24 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** Presence endpoints share parent checks and return typed merged snapshots.
+    *******************************************************************************/
+   @Test
+   void presenceHttp() throws Exception
+   {
+      String body = "{\"connectionId\":\"tab-one\",\"table\":\"document\",\"pk\":\"1\",\"mode\":\"EDITING\",\"fieldName\":\"title\"}";
+      assertThat(ok("POST", "/presence", body).get("viewers")).hasSize(1);
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).at("/viewers/0/mode").asText()).isEqualTo("EDITING");
+      assertThat(ok("GET", "/presence?table=document", null).at("/viewers/0/fieldName").isNull()).isTrue();
+      assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
+      assertError(404, "POST", "/presence", body, "outsider");
+      assertError(400, "POST", "/presence", "{\"connectionId\":\"x\",\"table\":\"document\",\"mode\":\"BAD\"}", "alice");
+      assertError(400, "GET", "/presence", null, "alice");
+      assertThat(ok("DELETE", "/presence", "{\"connectionId\":\"tab-one\",\"table\":\"document\",\"pk\":\"1\"}").get("success").asBoolean()).isTrue();
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
+   }
+
+   /*******************************************************************************
     ** Every personal operation and offset cursor runs through the HTTP boundary.
     *******************************************************************************/
    @Test

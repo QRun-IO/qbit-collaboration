@@ -1046,11 +1046,151 @@ info:
   contact:
     email: "contact@kingsrook.com"
   description: "Record collaboration: favorites, recents, attachments, tags, conversations,\
-    \ following, timeline and people"
+    \ following, timeline, people and presence"
   title: "QQQ Middleware API extension: collaboration"
   version: "1.0.0"
 openapi: "3.0.3"
 paths:
+  /qqq/v1/qbit/collaboration/presence:
+    delete:
+      description: "Leave presence. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationPresenceLeaveV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationMutationResultV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Leave presence"
+    get:
+      description: "Get presence snapshot. Uses the signed-in caller's permissions\
+        \ and record visibility."
+      parameters:
+      - description: "Parent table metadata name."
+        in: "query"
+        name: "table"
+        required: true
+        schema:
+          type: "string"
+      - description: "Parent record primary key."
+        in: "query"
+        name: "pk"
+        required: false
+        schema:
+          type: "string"
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationPresenceSnapshotV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Get presence snapshot"
+    post:
+      description: "Renew presence. Uses the signed-in caller's permissions and record\
+        \ visibility."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollaborationPresenceRequestV1"
+        required: true
+      responses:
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Invalid input"
+        401:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Sign in required"
+        403:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Permission denied"
+        404:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationErrorV1"
+          description: "Not found (including invisible parents)"
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationPresenceSnapshotV1"
+          description: "Successful Response"
+      security:
+      - sessionUuidCookie:
+        - "N/A"
+      summary: "Renew presence"
   /qqq/v1/qbit/collaboration/favorites:
     delete:
       description: "Unstar a target. Uses the signed-in caller's permissions and record\
