@@ -144,7 +144,7 @@ public class CustomFieldsProvider implements RuntimeMetaDataProviderInterface
          case "SELECT", "MULTI_SELECT" ->
          {
             String source = "collaboration_field_options_" + definition.getValueInteger("id");
-            instance.addPossibleValueSource(new QPossibleValueSource().withName(source).withType(QPossibleValueSourceType.ENUM)
+            instance.getPossibleValueSources().put(source, new QPossibleValueSource().withName(source).withType(QPossibleValueSourceType.ENUM)
                .withEnumValues(new ArrayList<>(FieldDefinitions.options(definition).values())));
             field.withPossibleValueSourceName(source);
             if("MULTI_SELECT".equals(definition.getValueString("type")))

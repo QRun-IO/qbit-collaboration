@@ -16,6 +16,74 @@ Comment parents list the selected thread's root and replies. Feature-setting sco
 - Attachments require `qbit-object-storage:0.1.0-RC.2` (a pinned dependency), installed with a PRIVATE bucket alias matching `attachmentsBucketName`. Configure its connection and credentials in the host; this qbit does not provision buckets.
 - Core feature resolution, permissions, reference security, summaries, query expansion and realtime use QQQ `4.1.0-SNAPSHOT`, targeting RC.6.
 
+## Demo server
+
+`CollaborationDevServer` is a disposable, memory-backed Sales CRM for trying the
+Next dashboard and taking screenshots. It needs Java 21 and the locally installed
+QQQ `4.1.0-SNAPSHOT` from develop. No database, Docker or MinIO is needed. It binds
+to `127.0.0.1`; stopping the JVM discards edits and uploaded attachments.
+
+Build the Next static export in `qqq-frontend-next`:
+
+```bash
+QQQ_NEXT_OUTPUT=export pnpm build
+```
+
+In PowerShell, use `$env:QQQ_NEXT_OUTPUT = 'export'; pnpm build` for that command.
+Then, from this repository, prepare the test classpath and place the export under
+a classpath directory named `next-dashboard`, following StorageDevServer's layout:
+
+```powershell
+.\mvnw.cmd -o -q test-compile dependency:build-classpath '-Dmdep.includeScope=test' '-Dmdep.outputFile=target/demo-classpath.txt'
+New-Item -ItemType Directory -Force target/demo-frontend/next-dashboard | Out-Null
+Copy-Item -Path ../qqq-frontend-next/out/* -Destination target/demo-frontend/next-dashboard -Recurse -Force
+$demoDeps = (Get-Content target/demo-classpath.txt -Raw).Trim()
+$demoClasspath = "target/test-classes;target/classes;$demoDeps;target/demo-frontend"
+java '-Dqqq.javalin.frontend=next' '-Dcollab.dev.port=8098' '-Dcollab.dev.user=alice' -cp $demoClasspath com.kingsrook.qbits.collaboration.devserver.CollaborationDevServer
+```
+
+The equivalent Java command is
+`java -Dqqq.javalin.frontend=next -Dcollab.dev.port=8098 -Dcollab.dev.user=alice -cp "target/test-classes;target/classes;DEPS;EXPORT" com.kingsrook.qbits.collaboration.devserver.CollaborationDevServer`.
+`DEPS` is the generated classpath file's contents; `EXPORT` is the folder **containing**
+`next-dashboard/`, not the export itself. On macOS/Linux use `./mvnw` and `:` instead
+of `;` between classpath entries.
+
+Open [the demo](http://localhost:8098/?createMockSession=true), then **Sales → People**
+or **Sales orders**. [Person 1](http://localhost:8098/app/person/1) and
+[order 1](http://localhost:8098/app/sales_order/1) have the richest collaboration panels.
+Select a user with `-Dcollab.dev.user=alice|bob|admin` (one value, not the literal list)
+and restart the server to switch. The MOCK session customizer supplies stable identities
+and real permissions, also used by recipient access checks:
+
+| User | Permissions |
+| --- | --- |
+| `alice` — Alice Morgan (default) | Full Sales access and comment, attach, tag, share, task and assign permissions |
+| `bob` — Bob Chen | People read/comment; no Sales order access |
+| `admin` — Demo Administrator | Full Sales access plus `collaboration.admin`, vocabulary/field management and Admin → Collaboration |
+
+Both tables enable every record feature. People use FREE tags and host owner/assignee
+fields; orders use APPROVED_ONLY tags. The seed contains 25 fictional contacts at
+10 companies, 40 orders with deterministic amounts/dates, eight approved tags,
+two ACTIVE custom fields (Preferred contact; searchable Purchase order no.), six
+comments with three mentions and a resolved thread, three generated PNG/PDF attachments,
+follows, four tasks (one overdue and one completed), two order assignments, two shares, Bob's open order-access
+request, and six favorites/recents for Alice. Ordinary record updates create FIELD
+audit history. Task deadlines are relative to startup so the overdue example stays useful.
+
+Attachment previews/downloads use real in-memory bytes and expiring local URLs.
+Notifications are recorded in memory; they do not send email. Presence is live and
+ephemeral: the current browser supplies its heartbeat; there are no fake persistent viewers.
+Two current permission edge cases remain visible in this snapshot: Bob can start a
+comment thread, but replying to another author's thread fails its activity update;
+an access request carrying a share ID for an unreadable parent returns 404. The seed
+uses Bob's own thread and a direct access request without a share ID.
+The test builds and seeds without frontend assets, validates the instance, then checks
+the version/collaboration endpoints, downloads and Bob's restricted access on a free port:
+
+```powershell
+.\mvnw.cmd -o -q verify
+```
+
 ## Install
 
 Add the dependency (the snapshot must first be published by CI, or installed locally):
