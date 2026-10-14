@@ -58,6 +58,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class CustomFieldsTest extends PersonalServiceFixture
 {
    /*******************************************************************************
+    ** Refreshing a SELECT must replace its generated vocabulary and allow later fields.
+    *******************************************************************************/
+   @Test
+   void publishedSelectSurvivesRefreshAndOptionChanges() throws Exception
+   {
+      admin();
+      QRecord choice = draft("contact", "SELECT");
+      new UpdateAction().execute(new UpdateInput(CollaborationTables.FIELD_DEFINITION).withRecords(List.of(
+         new QRecord().withValue("id", choice.getValue("id")).withValue("options", "[{\"id\":\"email\",\"label\":\"Email\"}]"))));
+      FieldDefinitions.apply(choice.getValue("id"), "Publish");
+      QRecord reference = draft("reference", "STRING");
+      FieldDefinitions.apply(reference.getValue("id"), "Publish");
+      assertThat(instance.getTable("document").getFields()).containsKeys("cf_contact", "cf_reference");
+      new UpdateAction().execute(new UpdateInput(CollaborationTables.FIELD_DEFINITION).withRecords(List.of(
+         new QRecord().withValue("id", choice.getValue("id")).withValue("options", "[{\"id\":\"email\",\"label\":\"Email\"},{\"id\":\"phone\",\"label\":\"Phone\"}]"))));
+      RuntimeMetaDataOverlay.refresh(instance);
+      String source = instance.getTable("document").getField("cf_contact").getPossibleValueSourceName();
+      assertThat(instance.getPossibleValueSource(source).getEnumValues()).hasSize(2);
+      assertThat(instance.getTable("document").getFields()).containsKeys("cf_contact", "cf_reference");
+   }
+
+
+
+   /*******************************************************************************
     ** Create a real draft through the permission and pre-insert customizers.
     *******************************************************************************/
    private QRecord draft(String name, String type) throws Exception
