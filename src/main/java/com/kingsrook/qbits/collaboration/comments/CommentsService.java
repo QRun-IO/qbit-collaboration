@@ -288,7 +288,7 @@ public class CommentsService
             new FollowService().ensureFollower(user, table, id, "MENTIONED");
             if(!user.equals(PersonalRecords.currentUserId()))
             {
-               notify(row, user, CollaborationNotification.Category.MENTION, "You were mentioned in a comment", mention.getValueInteger("id"));
+               notify(row, user, CollaborationNotification.Category.MENTION, "You were mentioned in a comment on ", mention.getValueInteger("id"));
                notified.add(user);
             }
          }
@@ -307,7 +307,7 @@ public class CommentsService
          if(!author.equals(follower.userId()) && !mentioned.contains(follower.userId()) && Boolean.TRUE.equals(follower.notifyOnComment())
             && (follower.mutedUntil() == null || !follower.mutedUntil().isAfter(Instant.now())))
          {
-            notify(row, follower.userId(), CollaborationNotification.Category.FOLLOW, "New comment on a followed record", null);
+            notify(row, follower.userId(), CollaborationNotification.Category.FOLLOW, "New comment on ", null);
          }
       }
    }
@@ -317,7 +317,8 @@ public class CommentsService
     *******************************************************************************/
    private void notify(QRecord row, String user, CollaborationNotification.Category category, String title, Integer mentionId) throws QException
    {
-      Notifications.send(new CollaborationNotification(user, title, row.getValueString("body"), category,
+      Notifications.send(new CollaborationNotification(user, title
+         + new CollaborationRecordAccessChecker().notificationLabel(user, row.getValueString("tableName"), row.getValueString("recordId")), row.getValueString("body"), category,
          row.getValueString("tableName"), row.getValueString("recordId"), Notifications.link(row.getValueString("tableName"), row.getValueString("recordId")))
          .withEvent(mentionId == null ? row.getValue("id") : mentionId, PersonalRecords.currentUserId()),
          mentionId == null ? null : () -> CollaborationRecords.update(CollaborationTables.MENTION,

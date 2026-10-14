@@ -32,6 +32,10 @@ import com.kingsrook.qbits.collaboration.timeline.TimelinePage;
 import com.kingsrook.qbits.collaboration.timeline.TimelineService;
 import com.kingsrook.qqq.backend.core.actions.metadata.personalization.TableMetaDataPersonalizerInterface;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.actions.permissions.fieldaccess.FieldMaskStyle;
+import com.kingsrook.qqq.backend.core.actions.permissions.fieldaccess.FieldValueMasker;
+import com.kingsrook.qqq.backend.core.model.metadata.security.FieldSecurityLock;
+import com.kingsrook.qqq.backend.core.model.metadata.security.QSecurityKeyType;
 import com.kingsrook.qqq.backend.core.instances.QInstanceValidator;
 import com.kingsrook.qqq.backend.core.model.actions.metadata.personalization.TableMetaDataPersonalizerInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
@@ -180,6 +184,40 @@ public class TimelineServiceTest extends PersonalServiceFixture
       assertThatThrownBy(() -> timeline.timeline("document", 1, null, 101, null)).hasMessageContaining("Limit");
       instance.getTables().remove("audit");
       assertThat(timeline.timeline("document", 1, null, 50, Set.of("AUDIT")).items()).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** RC.7 QueryAction masks audit values and removes HIDDEN detail rows as the viewer.
+    *******************************************************************************/
+   @Test
+   void fieldTiersProtectTimelineValuesAndMessages() throws Exception
+   {
+      String canary = "TIMELINE-SECRET-CANARY";
+      instance.addSecurityKeyType(new QSecurityKeyType().withName("sensitive"));
+      instance.getTable("document").getField("title").withFieldSecurityLock(new FieldSecurityLock()
+         .withSecurityKeyType("sensitive").withDefaultBehavior(FieldSecurityLock.Behavior.MASK).withMaskStyle(FieldMaskStyle.FULL));
+      instance.getTable("document").getField("tenant").withFieldSecurityLock(new FieldSecurityLock()
+         .withSecurityKeyType("sensitive").withDefaultBehavior(FieldSecurityLock.Behavior.DENY));
+      seedAudit(4, canary, 100);
+      for(String field : List.of("title", "tenant"))
+      {
+         seed("auditDetail", new QRecord().withValue("id", field.equals("title") ? 10L : 11L).withValue("auditId", 4L)
+            .withValue("fieldName", field).withValue("oldValue", canary).withValue("newValue", canary).withValue("message", canary));
+      }
+      TimelinePage page = timeline.timeline("document", 1, null, 50, Set.of("AUDIT"));
+      assertThat(page.items()).filteredOn(item -> item.id().equals(4L)).singleElement().satisfies(item ->
+      {
+         assertThat(item.summary()).isNull();
+         assertThat(item.details()).singleElement().satisfies(detail ->
+         {
+            assertThat(detail.fieldName()).isEqualTo("title");
+            assertThat(detail.oldValue()).isEqualTo(FieldValueMasker.MASK);
+            assertThat(detail.newValue()).isEqualTo(FieldValueMasker.MASK);
+            assertThat(detail.message()).isNull();
+         });
+      });
+      assertThat(page.items().stream().flatMap(item -> item.details().stream())).noneMatch(detail -> "tenant".equals(detail.fieldName()));
+      assertThat(page.toString()).doesNotContain(canary, "Old", "New", "sensitive old", "sensitive new");
    }
 
    /*******************************************************************************

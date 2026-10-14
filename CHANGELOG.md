@@ -6,6 +6,11 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Changed
 
+- Upgrade the default QQQ BOM to `4.1.0-RC.7` from Maven Central.
+- Register the core followers provider for alerts and other qbits, with event preferences, future-mute exclusion, system reads scoped to one record, and caller-owned recipient access checks.
+- Cache favorite/recent record labels only for FULL field access. Resolve comment/share notification labels per recipient with a table-label-and-id fallback. Use the typed core label-access API for email labels as well.
+- Verify RC.7 timeline audit masking and HIDDEN-field omission through enforced viewer queries, including canaries in values and messages.
+
 - Switch the optional qbit-email integration to 0.1.0-RC.2 and its published `com.kingsrook.qbits.email.api` package, preserving templates, categories, idempotency keys, linked records and enqueue-status handling. Narrow the email package allowance to the public API.
 
 - Email through qbit-email 0.1.0-RC.1: new optional dependency and `EmailCollaborationNotifier` (templates `collaboration_mention`, `collaboration_share`, `collaboration_task_reminder`), the default notifier when qbit-email is produced in the instance and no `notifier` is configured; `NoOpNotifier` otherwise. One NOTIFICATION message per recipient, no comment bodies, record labels only when field access allows. New `recipientEmailResolver` config hook; `CollaborationNotification` gains optional `sourceId` and `actorUserId`.
@@ -38,7 +43,7 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 - Adopt core feature overrides, record capabilities and implied WRITE locks, reference metadata, mirrored locks, after-commit cleanup and summaries. Core registers feature permissions in the policy editor.
 - Replace `OtherUserAccess`/`UserSessionSupplier` with `CollaborationRecordAccessChecker` and core `UserSessionProviderInterface`; configure `withUserSessionProvider`.
 - Remove `ParentTableRestriction` and `TagFilterTranslator`; runtime `collaborationTags` filtering/search uses core subqueries. Retain the unpinned visibility fallback still missing from core.
-- Publish identifier-only realtime hints after commit. Selectable Tags output and the optional followers SPI await missing core hooks.
+- Publish identifier-only realtime hints after commit. Selectable Tags output awaits a core hook; the followers SPI is adopted above.
 
 - Build against locally installed QQQ `4.1.0-SNAPSHOT` until RC.6 is released; `qqq-middleware-javalin` is a compile dependency. Object storage remains pinned to `0.1.0-RC.2`.
 
