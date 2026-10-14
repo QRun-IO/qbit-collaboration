@@ -4,6 +4,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ## [Unreleased]
 
+- Dependent possible values for comment parents (thread root/replies), feature-setting scope names (apps/eligible tables/instance), and comment field anchors (session-visible fields), with RC.5 action-level tests.
+
 ### Added
 
 - Collaboration UI API extension `1.0.0`: 42 typed operations for favorites, recents, attachments, tags, comments, mentions, follow, timeline, people, sharing, access requests, tasks, assignment and My work under `/qqq/v1/qbit/collaboration`, enabled by default and disabled with `withUiApi(false)`.

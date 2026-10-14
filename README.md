@@ -4,6 +4,10 @@ Record collaboration for QQQ: attachments, tags, custom fields, comments with me
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
+## Dependent fields
+
+Comment parents list the selected thread's root and replies. Feature-setting scope names follow `scopeType` (apps, eligible tables, or `instance`). Comment field anchors follow `tableName` and offer non-hidden fields visible to the session. These use RC.5 filter variables and custom providers receiving `otherValues`; automatic dependency refresh awaits core `dependsOn`. See [dependent-field details](docs/CONTINGENT-POSSIBLE-VALUES.md).
+
 ## Requirements
 
 - Java 21.
