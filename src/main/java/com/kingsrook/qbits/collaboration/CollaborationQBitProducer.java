@@ -22,6 +22,9 @@
 package com.kingsrook.qbits.collaboration;
 
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.attachments.DeleteAttachmentsProcess;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
@@ -44,10 +47,38 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
 {
    public static final String GROUP_ID = "com.kingsrook.qbits";
    public static final String ARTIFACT_ID = "qbit-collaboration";
-   public static final String VERSION = "0.1.0";
+   public static final String VERSION = loadVersion();
 
    private CollaborationQBitConfig qBitConfig;
    private String namespace;
+
+
+
+   /*******************************************************************************
+    ** Read the artifact version from the Maven-filtered properties resource.
+    *******************************************************************************/
+   private static String loadVersion()
+   {
+      try(InputStream inputStream = CollaborationQBitProducer.class.getClassLoader().getResourceAsStream("qbit-collaboration.properties"))
+      {
+         if(inputStream == null)
+         {
+            throw new IllegalStateException("Missing qbit-collaboration.properties; build with Maven to generate the artifact version.");
+         }
+         Properties properties = new Properties();
+         properties.load(inputStream);
+         String version = properties.getProperty("version");
+         if(version == null || version.isBlank() || version.contains("${"))
+         {
+            throw new IllegalStateException("Missing or unfiltered version in qbit-collaboration.properties; build with Maven resource filtering.");
+         }
+         return (version);
+      }
+      catch(IOException e)
+      {
+         throw new IllegalStateException("Could not read the artifact version from qbit-collaboration.properties.", e);
+      }
+   }
 
 
 

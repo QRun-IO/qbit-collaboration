@@ -52,7 +52,7 @@ public final class CollaborationApi
     *******************************************************************************/
    public static MiddlewareSpecExtension extension()
    {
-      return (new MiddlewareSpecExtension().withName("collaboration").withSemanticVersion("1.0.0")
+      return (new MiddlewareSpecExtension().withName("collaboration").withSemanticVersion("1.1.0")
          .withDescription("Record collaboration: favorites, recents, attachments, tags, conversations, following, timeline, people and presence")
          .withSpec(PostPresenceSpec.class).withSpec(DeletePresenceSpec.class).withSpec(GetPresenceSpec.class)
          .withSpec(ListFavoritesSpec.class)

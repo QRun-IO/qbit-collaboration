@@ -113,7 +113,36 @@
    </dependencies>
 
    <build>
+      <resources>
+         <!-- help bundles carry the artifact version (QQQ help bundle provenance) -->
+         <resource>
+            <directory>src/main/resources</directory>
+            <filtering>true</filtering>
+            <includes>
+               <include>help/*.yaml</include>
+               <include>qbit-collaboration.properties</include>
+            </includes>
+         </resource>
+         <resource>
+            <directory>src/main/resources</directory>
+            <filtering>false</filtering>
+            <excludes>
+               <exclude>help/*.yaml</exclude>
+               <exclude>qbit-collaboration.properties</exclude>
+            </excludes>
+         </resource>
+      </resources>
       <plugins>
+         <!-- the artifact version, for the help bundle version test -->
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+               <systemPropertyVariables combine.children="append">
+                  <qbit.artifactVersion>${project.version}</qbit.artifactVersion>
+               </systemPropertyVariables>
+            </configuration>
+         </plugin>
          <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-checkstyle-plugin</artifactId>
@@ -196,14 +225,14 @@
    <profiles>
       <!-- Built against qqq 4.1 (QBitMetaDataProducer). Until qbit-build-parent  -->
       <!-- imports the released 4.1 BOM, this profile is active by default and     -->
-      <!-- imports qqq-bom-pom 4.1.0-RC.7 ahead of the parent's 4.0.0 BOM.         -->
+      <!-- imports qqq-bom-pom 4.1.0-RC.15 ahead of the parent's 4.0.0 BOM.         -->
       <profile>
          <id>qqq-snapshot</id>
          <activation>
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-RC.7</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-RC.15</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>
