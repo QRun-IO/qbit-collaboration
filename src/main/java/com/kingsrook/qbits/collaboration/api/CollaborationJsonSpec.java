@@ -46,6 +46,7 @@ import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.middleware.javalin.specs.BasicOperation;
 import com.kingsrook.qqq.middleware.javalin.specs.BasicResponse;
 import com.kingsrook.qqq.middleware.javalin.specs.extensions.AbstractJsonEndpointSpec;
+import com.kingsrook.qqq.middleware.javalin.specs.v1.responses.BasicErrorResponseV1;
 import com.kingsrook.qqq.openapi.model.HttpMethod;
 import com.kingsrook.qqq.openapi.model.In;
 import com.kingsrook.qqq.openapi.model.Parameter;
@@ -112,10 +113,10 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
     *******************************************************************************/
    static List<BasicResponse> errors()
    {
-      return (List.of(new BasicResponse(HttpStatus.BAD_REQUEST, "Invalid input", "CollaborationErrorV1"),
-         new BasicResponse(HttpStatus.UNAUTHORIZED, "Sign in required", "CollaborationErrorV1"),
-         new BasicResponse(HttpStatus.FORBIDDEN, "Permission denied", "CollaborationErrorV1"),
-         new BasicResponse(HttpStatus.NOT_FOUND, "Not found (including invisible parents)", "CollaborationErrorV1")));
+      return (List.of(new BasicResponse(HttpStatus.BAD_REQUEST, "Invalid input", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.UNAUTHORIZED, "Sign in required", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.FORBIDDEN, "Permission denied", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.NOT_FOUND, "Not found (including invisible parents)", BasicErrorResponseV1.class.getSimpleName())));
    }
 
    /*******************************************************************************

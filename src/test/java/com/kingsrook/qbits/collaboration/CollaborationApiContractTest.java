@@ -29,6 +29,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.modules.backend.implementations.memory.MemoryBackendModule;
 import com.kingsrook.qqq.middleware.javalin.specs.extensions.MiddlewareSpecExtensionsMetaData;
 import com.kingsrook.qqq.middleware.javalin.specs.v1.MiddlewareVersionV1;
+import com.kingsrook.qqq.middleware.javalin.specs.v1.responses.BasicErrorResponseV1;
 import com.kingsrook.qqq.middleware.javalin.tools.UiApiContract;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,7 +57,7 @@ class CollaborationApiContractTest
       assertThat(UiApiContract.check(generated, Files.readString(path), null, 1,
          "mvnw.cmd -o -q -Dtest=CollaborationApiContractTest -Dcollaboration.openapi.update=true test")).isEmpty();
       var model = version.generateExtensionOpenAPIModel("qqq", extension);
-      assertThat(model.getComponents().getSchemas().keySet()).allMatch(name -> name.startsWith("Collaboration"));
+      assertThat(model.getComponents().getSchemas().keySet()).allMatch(name -> name.startsWith("Collaboration") || name.equals(BasicErrorResponseV1.class.getSimpleName()));
       assertThat(model.getPaths().keySet()).allMatch(pathName -> pathName.startsWith("/qqq/v1/qbit/collaboration/"));
       assertThat(generated).contains("multipart/form-data", "format: \"binary\"", "clients follow url", "nextCursor");
       assertThat(extension.getSpecs()).hasSize(45);

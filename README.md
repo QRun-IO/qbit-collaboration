@@ -410,13 +410,13 @@ The runtime provider adds this field and its search entry where TAGS is enabled.
 
 ## UI API
 
-The producer registers extension `collaboration` version `1.0.0` at
+The producer registers extension `collaboration` version `1.1.0` at
 `/qqq/v1/qbit/collaboration`. It uses the signed-in user's session and existing
 services. Disable registration with `new CollaborationQBitConfig().withUiApi(false)`.
-Presence, shares, tasks, my-work, direct upload and thumbnail routes are not part
-of this extension version.
+Requires QQQ `4.1.0-RC.14` and UI API `1.6.0`. Operations carry stable operationIds,
+the collaboration tag and standard error responses.
 
-All successes return HTTP 200. All bodies have named `Collaboration*V1` schemas
+All successes return HTTP 200. Success and request bodies have named `Collaboration*V1` schemas
 in [the extension contract](src/main/resources/openapi/qqq-v1/collaboration.yaml).
 The server publishes these alongside core at `/qqq/v1/openapi.yaml` and `.json`.
 
@@ -478,9 +478,11 @@ attachment filename; preview requests inline content. QQQ's current OpenAPI
 `Response` model cannot declare the `Location` header, so this contract uses the
 JSON URL alternative consistently.
 
-A missing or invisible parent returns identical `404 {"error":"Not found"}`.
-Missing write permissions return 403; invalid input returns 400 with an `error`
-message through QQQ's exception mapper. Provider/backend failures remain server
+A missing or invisible parent returns 404 with the same `Not found` error message.
+Missing write permissions return 403; invalid input returns 400 through QQQ's
+exception mapper. Errors use `BasicErrorResponseV1` with `error`, `code`, `message`,
+`traceId` and optional `fieldErrors`. `CollaborationErrorV1` remains defined but is
+deprecated since 1.1.0. Provider/backend failures remain server
 errors. Services continue to own author, record-lock and permission checks.
 Mention candidates expose `canRead` as the string enum `"true"`, `"false"`,
 `"unknown"`; unknown does not imply the recipient can read the record.
@@ -636,7 +638,7 @@ New routes, all under `/qqq/v1/qbit/collaboration`:
 | PUT | `/records/{table}/{pk}/assignment` |
 | GET | `/my-work` |
 
-Typed `CollaborationWorkSchemas` describe requests and results. Task PATCH preserves omitted fields, accepts OPEN/DONE/CANCELLED transitions, and permits explicit null for optional fields; null `remindAt` selects the service's due-date default. Assignment PUT replaces owner and assignee; null clears. Invalid input is 400, denied visible-record operations are 403, and missing/invisible parents are 404. Access requests deliberately never inspect parent existence. The extension stays at unreleased **1.0.0**; contract tooling accepts these additions without a bump.
+Typed `CollaborationWorkSchemas` describe requests and results. Task PATCH preserves omitted fields, accepts OPEN/DONE/CANCELLED transitions, and permits explicit null for optional fields; null `remindAt` selects the service's due-date default. Assignment PUT replaces owner and assignee; null clears. Invalid input is 400, denied visible-record operations are 403, and missing/invisible parents are 404. Access requests deliberately never inspect parent existence. The extension is now **1.1.0**, including the UI API 1.6.0 error contract and published presence schemas.
 
 `CollaborationRealtime` publishes `comment.added/updated/deleted`, `attachment.changed`, `tags.changed` and `task.changed` on `record:{table}:{pk}` after commit. Successful notification delivery publishes `notification.created` on `user:{userId}`. Payloads contain identifiers only. `CollaborationFollowersProvider` supplies the core followers SPI for alerts and other consumers. Selectable Tags values remain unavailable because the overlay has no output hook.
 

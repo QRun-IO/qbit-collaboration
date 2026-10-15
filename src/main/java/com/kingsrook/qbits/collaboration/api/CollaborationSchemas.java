@@ -514,7 +514,7 @@ public final class CollaborationSchemas
       @Override
       public Schema toSchema()
       {
-         return (new Schema().withType(Type.OBJECT).withDescription("Standard QQQ error response.").withProperties(new TreeMap<>(Map.ofEntries(
+         return (new Schema().withType(Type.OBJECT).withDescription("Deprecated since 1.1.0: errors use BasicErrorResponseV1.").withProperties(new TreeMap<>(Map.ofEntries(
             Map.entry("error", new Schema().withType(Type.STRING).withDescription("Human-readable reason the operation failed.").withNullable(true))))));
       }
    }
@@ -714,6 +714,10 @@ public final class CollaborationSchemas
       schemas.put("CollaborationCommentPostRequestV1", new CollaborationCommentPostRequestV1(null, null, null).toSchema());
       schemas.put("CollaborationCommentEditRequestV1", new CollaborationCommentEditRequestV1(null).toSchema());
       schemas.put("CollaborationFollowRequestV1", new CollaborationFollowRequestV1(null, null).toSchema());
+      schemas.put("CollaborationPresenceRequestV1", new CollaborationPresenceSchemas.CollaborationPresenceRequestV1(null, null, null, null, null).toSchema());
+      schemas.put("CollaborationPresenceLeaveV1", new CollaborationPresenceSchemas.CollaborationPresenceLeaveV1(null, null, null).toSchema());
+      schemas.put("CollaborationPresenceSnapshotV1", new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1(null, null, null).toSchema());
+      schemas.put("CollaborationPresenceViewerV1", new CollaborationPresenceSchemas.CollaborationPresenceViewerV1(null, null, null, null).toSchema());
       schemas.putAll(CollaborationWorkSchemas.components());
       return (schemas);
    }
