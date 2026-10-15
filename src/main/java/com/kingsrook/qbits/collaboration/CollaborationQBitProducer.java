@@ -24,12 +24,12 @@ package com.kingsrook.qbits.collaboration;
 
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qbits.collaboration.attachments.DeleteAttachmentsProcess;
-import com.kingsrook.qbits.collaboration.metadata.CollaborationHelp;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.recents.TrimRecentsProcess;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.help.bundles.HelpBundles;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSource;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaData;
@@ -180,7 +180,8 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          QAppMetaData parent = instance.getApp(qBitConfig.getParentAppName());
          parent.withChild(instance.getApp(qBitConfig.getAppName()));
       }
-      CollaborationHelp.apply(instance, qBitConfig);
+      // Registration is metadata-only; core startup sync skips hosts without helpContent.
+      HelpBundles.register(instance, "help/qbit-collaboration.yaml");
       return (new MetaDataProducerMultiOutput());
    }
 }
