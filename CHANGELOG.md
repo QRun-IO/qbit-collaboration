@@ -8,7 +8,7 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 - Feature Settings table action **Create rows from configuration**: writes the code configuration out as editable `collaboration_feature_setting` rows (insert-only, only when the table is empty, no change in behavior).
 - Setup card on the Collaboration home: each record feature, whether it is on, for which tables, and where that comes from.
-- Help bundle `help/qbit-collaboration.yaml`: every table says what it is for and how its rows get created.
+- Host-neutral QBIT help bundle covering tables, fields, sections, built-in actions, the app, widgets and possible-value sources; core registration and `HelpBundleAssertions` coverage replace the temporary help loader.
 - `CollaborationTablesGuardrailTest` and `FeatureSettingsDefaultsTest`.
 
 ### Changed

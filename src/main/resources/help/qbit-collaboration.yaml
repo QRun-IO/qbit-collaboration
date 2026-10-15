@@ -1,108 +1,748 @@
 bundle: qbit-collaboration
-version: 1
+version: 0.1.0-SNAPSHOT
 layer: QBIT
-# Help for the Collaboration app and every collaboration_* table, in the QQQ help-bundle
-# format (qqq#1198). Each table entry says what the table is for and how its rows get
-# created, so an empty table explains itself. CollaborationHelp applies it until the core
-# HelpBundles registry ships in a QQQ release (STAND-IN(core=QRun-IO/qqq#1198, removeBy=4.1.0-RC.8)).
-# Summaries stay under 120 characters (CollaborationTablesGuardrailTest).
 entries:
-  - key: app:collaboration;slot:help
-    summary: "Comments, files, tags, tasks and sharing on any record, and the switches that turn each on."
-    content: |
-      The Setup card on the home lists every record feature, whether it is on, for which tables and where that comes from. Features start from the configuration in code; open Feature Settings and run Create rows from configuration to see those settings as rows you can edit. Everything else here is content that people create while they work.
+- key: widget:collaborationKpis;slot:label
+  summary: "See counts of collaboration activity and work you can access."
+- key: widget:collaborationTags;slot:label
+  summary: "Browse tags and their usage from the Collaboration home."
+- key: widget:collaborationCustomFields;slot:label
+  summary: "Review custom fields and their status from the Collaboration home."
+- key: widget:collaborationWhosHere;slot:label
+  summary: "See who is currently present, when you have collaboration administrator access."
+- key: widget:collaboration_field_definitionJoinCollaboration_field_value;slot:label
+  summary: "Review values associated with this custom field."
+- key: widget:collaboration_tagJoinCollaboration_record_tag;slot:label
+  summary: "See records carrying this tag."
+- key: widget:collaboration_commentJoinCollaboration_comment_revision;slot:label
+  summary: "Review earlier versions of this comment."
+- key: widget:collaboration_commentJoinCollaboration_mention;slot:label
+  summary: "See people mentioned in this comment."
+- key: widget:collaboration_commentJoinCollaboration_follow;slot:label
+  summary: "See followers of the record containing this comment."
+- key: app:collaboration;slot:help
+  summary: "Work together through record comments, attachments, tags, tasks and sharing."
+  content: |
+    Use Collaboration to review discussions, files and work associated with records. Features are available where they have been enabled, and access still depends on the underlying record permissions. Open Feature Settings to review availability, People to find participants, or the content tables to review what has been created.
+    Use the Setup card to see which features are enabled and where their settings come from.
+- key: table:collaboration_feature_setting;slot:help
+  summary: "Control which record features are available across the site, in an app or on a table."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_feature_setting;slot:help
-    summary: "Turns a record feature on or off for the whole instance, an app or one table, with its permission mode."
-    content: |
-      **How rows get created:** run the table action Create rows from configuration once. It writes the settings the code configuration already applies (one Instance row per feature, plus an App or Table row wherever the code declares one), so nothing changes until you edit a row. After that an administrator adds or edits rows: pick a scope (Instance, App or Table), a feature, and turn it on. Rows are applied after all code configuration. An Instance row overrides what code declares on any app or table that has no row of its own, so once rows exist, change features in the rows, not in code. Tags also take `{"mode":"FREE"}` or `{"mode":"APPROVED_ONLY"}` in Settings. Rows only fill in when the table is empty, so the action never overwrites an edit.
+    Use Feature Settings to turn features such as Comments, Tags and Attachments on or off. Choose the Scope Type and Scope Name to identify where your setting applies, then select the Feature. Enabled controls availability, while Permission Mode controls who can use it. Settings holds additional options for that feature.
+    To start with your configured settings, run Create rows from configuration while this table is empty. Review the proposed rows before continuing. This action leaves existing rows untouched. You can then edit the rows to override the configuration.
+- key: table:collaboration_feature_setting;field:scopeType
+  summary: "Choose whether the setting applies to the whole site, an app or a table."
+- key: table:collaboration_feature_setting;field:scopeName
+  summary: "Choose the app or table the setting applies to."
+- key: table:collaboration_feature_setting;field:feature
+  summary: "Choose the record feature you want to configure."
+- key: table:collaboration_feature_setting;field:enabled
+  summary: "Whether this feature is available in the selected scope."
+- key: table:collaboration_feature_setting;field:settings
+  summary: "Additional options for the selected feature, stored as JSON."
+- key: table:collaboration_feature_setting;field:permissionMode
+  summary: "Choose whether editing permission or an explicit feature permission allows use."
+  content: |
+    Permission Mode controls which permission allows someone to use the selected feature. The edit-or-granted option accepts either table editing permission or the specific feature permission. The granted-only option requires the specific feature permission. You still need access to the record, and the feature must be enabled for its scope.
+- key: table:collaboration_user;slot:help
+  summary: "Find the people used in mentions, sharing and assignments."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_user;slot:help
-    summary: "The people directory used for mentions, sharing and assignment, kept up to date automatically."
-    content: |
-      **How rows get created:** automatically, the first time a signed-in person uses a collaboration feature (and again when their name or avatar changes). It cannot be edited by hand. Empty means nobody has used a collaboration feature yet.
+    People is the directory used when you mention someone, share a record or assign work. Entries are maintained automatically as signed-in people use collaboration features. You can review their display names, contact details and activity here, but you cannot edit these directory records by hand.
+- key: table:collaboration_user;field:userId
+  summary: "The person this entry belongs to."
+- key: table:collaboration_user;field:displayName
+  summary: "The name you see when selecting or mentioning this person."
+- key: table:collaboration_user;field:email
+  summary: "The email address recorded for this person."
+- key: table:collaboration_user;field:avatarUrl
+  summary: "The address of the image used for this person."
+- key: table:collaboration_user;field:lastSeenAt
+  summary: "When this person was last seen using collaboration features."
+- key: table:collaboration_user;field:active
+  summary: "Whether this person is marked active in the directory."
+- key: table:collaboration_favorite;slot:help
+  summary: "Keep track of the records, tables and apps you have starred."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_favorite;slot:help
-    summary: "Records, tables and apps each person has starred, in the order they chose."
-    content: |
-      **How rows get created:** a person stars a record, table or app (the star in the record header), and the row belongs to them alone. Administrators can browse them. Empty means nobody has starred anything yet, or Favorites is off in Feature Settings.
+    Star a record, table or app to keep it among your Favorites. Each entry identifies the destination and stores your chosen label, folder and sort order. Favorites belong to individual people, so your list reflects your own choices. An empty list means you have not starred anything available here.
+- key: table:collaboration_favorite;field:userId
+  summary: "The person this entry belongs to."
+- key: table:collaboration_favorite;field:targetType
+  summary: "The kind of destination, such as a record, table or app."
+- key: table:collaboration_favorite;field:targetName
+  summary: "The destination this entry opens."
+- key: table:collaboration_favorite;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_favorite;field:label
+  summary: "The name shown to you for this entry."
+- key: table:collaboration_favorite;field:sortOrder
+  summary: "The position used to order this entry."
+- key: table:collaboration_favorite;field:folder
+  summary: "The folder used to group your favorites."
+- key: table:collaboration_recent;slot:help
+  summary: "Find records you opened recently and see when you last viewed them."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_recent;slot:help
-    summary: "The records each person opened lately, newest first, trimmed daily."
-    content: |
-      **How rows get created:** automatically when a person opens a record while Recents is on. The Trim recents job keeps each person's newest rows. Empty means nobody has opened a record yet, or Recents is off in Feature Settings.
+    Recently Viewed is filled automatically when you open records with Recents enabled. Each entry keeps the destination, your latest viewing time and the number of views. You do not need to create these entries yourself. Older entries are removed by Trim recents according to the configured retention limits.
+- key: table:collaboration_recent;field:userId
+  summary: "The person this entry belongs to."
+- key: table:collaboration_recent;field:targetType
+  summary: "The kind of destination, such as a record, table or app."
+- key: table:collaboration_recent;field:targetName
+  summary: "The destination this entry opens."
+- key: table:collaboration_recent;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_recent;field:label
+  summary: "The name shown to you for this entry."
+- key: table:collaboration_recent;field:lastViewedAt
+  summary: "When you most recently opened this destination."
+- key: table:collaboration_recent;field:viewCount
+  summary: "How many times you have opened this destination."
+- key: table:collaboration_attachment;slot:help
+  summary: "Browse files attached to records, with their descriptions and storage details."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_attachment;slot:help
-    summary: "Files attached to records, with where each file is stored."
-    content: |
-      **How rows get created:** a person uploads a file on a record (the Attachments panel). The file itself goes to object storage; this row describes it. Turn Attachments on for the table in Feature Settings first.
+    Upload a file through the Attachments panel on a record to create an attachment. You can review the file name, type, size and description here, together with its parent record. The file is stored separately from this entry. Attachments must be enabled for the parent table before you can add files.
+- key: table:collaboration_attachment;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_attachment;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_attachment;field:fileName
+  summary: "The name of the attached file."
+- key: table:collaboration_attachment;field:contentType
+  summary: "The file type reported for the attachment."
+- key: table:collaboration_attachment;field:sizeBytes
+  summary: "The size of the attached file in bytes."
+- key: table:collaboration_attachment;field:sha256
+  summary: "The file fingerprint used to identify its contents."
+- key: table:collaboration_attachment;field:bucketName
+  summary: "The storage location holding the attached file."
+- key: table:collaboration_attachment;field:storageKey
+  summary: "The location of the file within its storage bucket."
+- key: table:collaboration_attachment;field:thumbnailKey
+  summary: "The location of the smaller preview image in storage."
+- key: table:collaboration_attachment;field:description
+  summary: "A description that helps you understand this entry."
+- key: table:collaboration_attachment;field:createdByUserId
+  summary: "The person who created this entry."
+- key: table:collaboration_attachment;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_comment;slot:help
+  summary: "Read record discussions, including replies, authors and resolution details."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_comment;slot:help
-    summary: "Comments and replies on records, with who wrote them and whether the thread is resolved."
-    content: |
-      **How rows get created:** a person writes a comment on a record (the Comments panel). Turn Comments on for the table in Feature Settings first. Edits are kept in Comment Revisions.
+    Write comments from the Comments panel on a record where Comments is enabled. A discussion can contain replies and can be resolved when it no longer needs attention. You can review the author, latest activity and resolution here. Earlier text from edited comments is retained in Comment History.
+- key: table:collaboration_comment;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_comment;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_comment;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_comment;field:threadId
+  summary: "The opening comment of the discussion this reply belongs to."
+- key: table:collaboration_comment;field:parentCommentId
+  summary: "The comment this reply answers."
+- key: table:collaboration_comment;field:body
+  summary: "The text of the comment."
+- key: table:collaboration_comment;field:fieldName
+  summary: "The record field this entry refers to."
+- key: table:collaboration_comment;field:authorUserId
+  summary: "The person who wrote the comment."
+- key: table:collaboration_comment;field:lastActivityAt
+  summary: "When the comment discussion was last active."
+- key: table:collaboration_comment;field:editedAt
+  summary: "When the comment was edited."
+- key: table:collaboration_comment;field:resolvedAt
+  summary: "When the discussion was marked resolved."
+- key: table:collaboration_comment;field:resolvedByUserId
+  summary: "The person who resolved the discussion."
+- key: table:collaboration_comment;field:deletedAt
+  summary: "When the comment was deleted."
+- key: table:collaboration_comment;field:deletedByUserId
+  summary: "The person who deleted the comment."
+- key: table:collaboration_comment_revision;slot:help
+  summary: "Review earlier text saved when comments were edited."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_comment_revision;slot:help
-    summary: "Earlier versions of edited comments."
-    content: |
-      **How rows get created:** automatically each time someone edits a comment. Empty means no comment has been edited.
+    Comment History is filled automatically when someone edits a comment. Each entry identifies the comment, its earlier text, and who edited it and when. Use these records to understand how a discussion changed. An empty list means there are no recorded edits available for you to review.
+- key: table:collaboration_comment_revision;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_comment_revision;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_comment_revision;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_comment_revision;field:commentId
+  summary: "The comment this entry refers to."
+- key: table:collaboration_comment_revision;field:body
+  summary: "The earlier comment text retained for this edit."
+- key: table:collaboration_comment_revision;field:editedAt
+  summary: "When the comment was edited."
+- key: table:collaboration_comment_revision;field:editedByUserId
+  summary: "The person who edited the comment."
+- key: table:collaboration_mention;slot:help
+  summary: "Track people mentioned in comments and whether their notices have been read."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_mention;slot:help
-    summary: "Each @mention of a person in a comment, and whether they were told and have read it."
-    content: |
-      **How rows get created:** automatically when a comment mentions someone. Empty means no comment has mentioned anyone yet.
+    Mention someone in a record comment to create a mention entry. You can review which comment named them, whether the mention is visible, and when they were notified or read it. These entries are maintained by the discussion features; you do not need to create them separately.
+- key: table:collaboration_mention;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_mention;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_mention;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_mention;field:commentId
+  summary: "The comment this entry refers to."
+- key: table:collaboration_mention;field:mentionedUserId
+  summary: "The person mentioned in the comment."
+- key: table:collaboration_mention;field:visible
+  summary: "Whether the mention is visible to the mentioned person."
+- key: table:collaboration_mention;field:readAt
+  summary: "When the mentioned person read the mention."
+- key: table:collaboration_mention;field:notifiedAt
+  summary: "When a notification was sent for the mention."
+- key: table:collaboration_follow;slot:help
+  summary: "See who follows a record and which changes they want to hear about."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_follow;slot:help
-    summary: "Who follows which record, and how they want to hear about changes."
-    content: |
-      **How rows get created:** a person follows a record (or is made a follower by an action), and chooses how to be notified. Turn Follow on for the table in Feature Settings first.
+    Follow a record to receive updates about it where Follow is enabled. Your follower entry stores whether you want notices about changes and comments, along with any temporary mute. You can review why a person follows a record here. Following a record does not replace the permissions needed to read it.
+- key: table:collaboration_follow;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_follow;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_follow;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_follow;field:userId
+  summary: "The person this entry belongs to."
+- key: table:collaboration_follow;field:reason
+  summary: "Why this person follows the record."
+- key: table:collaboration_follow;field:notifyOnChange
+  summary: "Whether the follower wants notifications about record changes."
+- key: table:collaboration_follow;field:notifyOnComment
+  summary: "Whether the follower wants notifications about comments."
+- key: table:collaboration_follow;field:mutedUntil
+  summary: "When the temporary pause in follower notifications ends."
+- key: table:collaboration_activity;slot:help
+  summary: "Review the history of comments, files, tags, tasks and sharing on records."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_follow_digest;slot:help
-    summary: "Batched change notices waiting to go out to followers."
-    content: |
-      **How rows get created:** automatically when a followed record changes and the follower prefers a digest. The Send follow digests job sends them and clears them. Empty means nothing is waiting.
+    Activity records what happens as you use collaboration features on a record. Each entry gives the time, the person involved, the kind of event and a short description. Turn on Timeline for the parent table to show this history on records. Activity entries are created automatically and cannot be edited here.
+- key: table:collaboration_activity;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_activity;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_activity;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_activity;field:at
+  summary: "When the activity occurred."
+- key: table:collaboration_activity;field:actorUserId
+  summary: "The person who performed the activity."
+- key: table:collaboration_activity;field:type
+  summary: "The kind of activity recorded."
+- key: table:collaboration_activity;field:summary
+  summary: "A short description of what happened."
+- key: table:collaboration_activity;field:refTableName
+  summary: "The table holding the item referenced by this activity."
+- key: table:collaboration_activity;field:refId
+  summary: "The identifier of the item referenced by this activity."
+- key: table:collaboration_follow_digest;slot:help
+  summary: "Review grouped change notices waiting to be sent to followers."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_activity;slot:help
-    summary: "The timeline of what happened on each record: comments, files, tags, tasks and sharing."
-    content: |
-      **How rows get created:** automatically by the other collaboration features as people use them. Turn Timeline on for the table in Feature Settings to show it. Empty means nothing has happened on a record yet.
+    As followed records change, entries are created automatically. You can review changes waiting to be sent together to someone following a record. Each entry identifies the recipient, the record and the time the notice is due. Send follow digests processes these pending notices. An empty list means no grouped changes are currently waiting here.
+- key: table:collaboration_follow_digest;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_follow_digest;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_follow_digest;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_follow_digest;field:userId
+  summary: "The person this entry belongs to."
+- key: table:collaboration_follow_digest;field:dueAt
+  summary: "When the grouped change notice is due to be sent."
+- key: table:collaboration_follow_digest;field:changes
+  summary: "The changes collected for the next grouped notice."
+- key: table:collaboration_tag;slot:help
+  summary: "Manage the labels people apply to records and their approval status."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_tag;slot:help
-    summary: "The tag vocabulary: global tags and tags scoped to one table, approved or waiting for approval."
-    content: |
-      **How rows get created:** a person adds a tag from a record (free mode), or suggests one that an administrator approves (approved-only mode, set in Feature Settings). Administrators can merge or delete tags with the table actions.
+    Create or suggest a tag from a record to add it to the vocabulary. Use Tags to review the vocabulary available for labeling records. A tag can apply across tables or be limited to one table. Depending on Feature Settings, people can create tags freely or suggest tags for approval. Use Approve tags, Merge tags or Delete tags to manage the vocabulary.
+- key: table:collaboration_tag;field:name
+  summary: "The stable name identifying the tag."
+- key: table:collaboration_tag;field:label
+  summary: "The name shown to you for this entry."
+- key: table:collaboration_tag;field:color
+  summary: "The color used to display the tag."
+- key: table:collaboration_tag;field:tableName
+  summary: "The table this tag is limited to; blank means it is available across tables."
+- key: table:collaboration_tag;field:approved
+  summary: "Whether the tag has been approved for use."
+- key: table:collaboration_tag;field:description
+  summary: "A description that helps you understand this entry."
+- key: table:collaboration_tag;field:createdByUserId
+  summary: "The person who created this entry."
+- key: table:collaboration_tag;field:usageCount
+  summary: "How many records use the tag."
+- key: table:collaboration_tag;field:mergedIntoTagId
+  summary: "The tag that replaced this one after a merge."
+- key: table:collaboration_record_tag;slot:help
+  summary: "See which tags have been applied to each record."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_record_tag;slot:help
-    summary: "Which tags are on which records."
-    content: |
-      **How rows get created:** a person applies a tag on a record, or a bulk Add tags action on a host table does. Turn Tags on for the table in Feature Settings first.
+    Record Tags links a tag to a record and identifies who applied it. Entries are created when you tag a record or use Add tags on selected records. Tags must be enabled for the parent table. Use the record tagging controls to change these links rather than editing them directly.
+- key: table:collaboration_record_tag;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_record_tag;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_record_tag;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_record_tag;field:tagId
+  summary: "The tag applied to this record."
+- key: table:collaboration_record_tag;field:createdByUserId
+  summary: "The person who created this entry."
+- key: table:collaboration_share;slot:help
+  summary: "Review records shared with people, including messages and opening times."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_field_definition;slot:help
-    summary: "Custom fields an administrator adds to a table without a deployment: name, type and status."
-    content: |
-      **How rows get created:** a field manager (collaboration.fields.manage) adds a definition with New: pick the table, name and type, then use the Publish field action to make it Active. Turn Custom fields on for the table in Feature Settings first. Rebuild index and Archive field are table actions too.
+    Share a record with someone from the record header to create a share entry. You can review the sender, recipient, message and the time the recipient opened it. Sharing must be enabled for that table. A share does not itself give the recipient permission to read the record.
+- key: table:collaboration_share;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_share;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_share;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_share;field:fromUserId
+  summary: "The person who shared the record."
+- key: table:collaboration_share;field:toUserId
+  summary: "The person the record was shared with."
+- key: table:collaboration_share;field:message
+  summary: "The message accompanying the share or access request."
+- key: table:collaboration_share;field:recipientCouldRead
+  summary: "Whether the recipient could read the record when it was shared."
+- key: table:collaboration_share;field:sentAt
+  summary: "When the record was shared."
+- key: table:collaboration_share;field:openedAt
+  summary: "When the recipient opened the share."
+- key: table:collaboration_access_request;slot:help
+  summary: "Review requests to open records and record how those requests were handled."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_field_value;slot:help
-    summary: "The values people entered for custom fields on records."
-    content: |
-      **How rows get created:** a person fills in a custom field on a record. Empty means no custom field has a value yet.
+    When you cannot open a shared record, you can request access. Approvers review the request and record their decision with Mark granted or Decline. Grant the required permissions separately before marking a request granted; this action only records the outcome. The request keeps the handler, time and any response note.
+- key: table:collaboration_access_request;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_access_request;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_access_request;field:requesterUserId
+  summary: "The person asking for access to the record."
+- key: table:collaboration_access_request;field:shareId
+  summary: "The share associated with this access request."
+- key: table:collaboration_access_request;field:message
+  summary: "The message accompanying the share or access request."
+- key: table:collaboration_access_request;field:status
+  summary: "Whether the request is open, granted, declined or withdrawn."
+- key: table:collaboration_access_request;field:handledByUserId
+  summary: "The person who answered the access request."
+- key: table:collaboration_access_request;field:handledAt
+  summary: "When the access request was answered."
+- key: table:collaboration_access_request;field:note
+  summary: "The response note recorded when the request was handled."
+- key: table:collaboration_task;slot:help
+  summary: "Track record tasks, assignees, due dates, reminders and completion."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_share;slot:help
-    summary: "Records shared with a person, with a note, and when they opened it."
-    content: |
-      **How rows get created:** a person shares a record with someone from the record header. Turn Sharing on for the table in Feature Settings first.
+    Add a task from the Tasks panel on a record where Tasks is enabled. Give it a title and assign it to someone, with a due date or reminder when needed. Use Mark done when the work is complete and Reopen if it needs more work. Reminder times and completion details are recorded here.
+- key: table:collaboration_task;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_task;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_task;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_task;field:title
+  summary: "A short description of the work to do."
+- key: table:collaboration_task;field:notes
+  summary: "Additional details about the task."
+- key: table:collaboration_task;field:assigneeUserId
+  summary: "The person assigned to work on the record or task."
+- key: table:collaboration_task;field:dueAt
+  summary: "When the task is due."
+- key: table:collaboration_task;field:remindAt
+  summary: "When a task reminder should be sent."
+- key: table:collaboration_task;field:remindedAt
+  summary: "When the task reminder was sent."
+- key: table:collaboration_task;field:overdueNotifiedAt
+  summary: "When an overdue task notification was sent."
+- key: table:collaboration_task;field:status
+  summary: "Whether the task is open, done or cancelled."
+- key: table:collaboration_task;field:completedAt
+  summary: "When the task was marked done."
+- key: table:collaboration_task;field:completedByUserId
+  summary: "The person who marked the task done."
+- key: table:collaboration_task;field:createdByUserId
+  summary: "The person who created this entry."
+- key: table:collaboration_record_assignment;slot:help
+  summary: "See who owns each record and who is assigned to work on it."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_access_request;slot:help
-    summary: "Requests for access to a record that someone could not open, and how each was answered."
-    content: |
-      **How rows get created:** a person who cannot open a record asks for access. Approvers answer from My work or here; who approves is the table's accessApproverPermission setting (default collaboration.admin). Turn Sharing on for the table first.
+    Record Owners keeps the owner and assignee associated with a record. You make these assignments through the record controls where Assignment is enabled. Ownership and assignment are separate roles, so you can review both here. The entry links back to the parent record and follows its access restrictions.
+- key: table:collaboration_record_assignment;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_record_assignment;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_record_assignment;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_record_assignment;field:ownerUserId
+  summary: "The person responsible for the record."
+- key: table:collaboration_record_assignment;field:assigneeUserId
+  summary: "The person assigned to work on the record or task."
+- key: table:collaboration_field_definition;slot:help
+  summary: "Define additional fields for a table and manage their publication and validation."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_task;slot:help
-    summary: "Tasks on records with an assignee, a due date and a reminder."
-    content: |
-      **How rows get created:** a person adds a task on a record (the Tasks panel). The Send task reminders job sends the reminders. Turn Tasks on for the table in Feature Settings first.
+    Create a definition in Custom Fields to add information to a table without changing its built-in fields. Choose the table, name, label and type, then set any validation or display options. Use {{label:collaborationPublishField}} to activate a draft. Rebuild index and Archive field manage existing active fields. Custom Fields must be enabled on the table.
+- key: table:collaboration_field_definition;field:tableName
+  summary: "The table you are adding the custom field to."
+- key: table:collaboration_field_definition;field:name
+  summary: "The stable name identifying the custom field."
+- key: table:collaboration_field_definition;field:label
+  summary: "The label you see beside the custom field."
+- key: table:collaboration_field_definition;field:type
+  summary: "The kind of value the custom field accepts."
+- key: table:collaboration_field_definition;field:options
+  summary: "The choices available for a selection field, stored as JSON."
+- key: table:collaboration_field_definition;field:linkTableName
+  summary: "The table you can select records from for a record link."
+- key: table:collaboration_field_definition;field:required
+  summary: "Whether you must supply a value for the custom field."
+- key: table:collaboration_field_definition;field:defaultValue
+  summary: "The initial value offered for the custom field."
+- key: table:collaboration_field_definition;field:minValue
+  summary: "The smallest allowed numeric value."
+- key: table:collaboration_field_definition;field:maxValue
+  summary: "The largest allowed numeric value."
+- key: table:collaboration_field_definition;field:maxLength
+  summary: "The maximum number of characters allowed."
+- key: table:collaboration_field_definition;field:helpText
+  summary: "The guidance shown when you fill in the custom field."
+- key: table:collaboration_field_definition;field:sectionName
+  summary: "The section where the custom field is displayed."
+- key: table:collaboration_field_definition;field:sortOrder
+  summary: "The position used to order this entry."
+- key: table:collaboration_field_definition;field:filterable
+  summary: "Whether the custom field is available for filtering."
+- key: table:collaboration_field_definition;field:searchable
+  summary: "Whether the custom field is available for searching."
+- key: table:collaboration_field_definition;field:classification
+  summary: "The sensitivity assigned to information stored in the custom field."
+- key: table:collaboration_field_definition;field:status
+  summary: "Whether the custom field is a draft, active or archived."
+  content: |
+    New custom fields start as drafts. Review the definition and use Publish field to make a draft active. Use Archive field when an active definition should no longer be active. You change this status through those actions rather than editing it directly; each action checks the current state before applying the change.
+- key: table:collaboration_field_definition;field:indexState
+  summary: "Whether preparation for filtering is absent, building, ready or failed."
+- key: table:collaboration_field_definition;field:storage
+  summary: "The storage method used for this custom field."
+- key: table:collaboration_field_definition;field:statusMessage
+  summary: "The latest explanation or warning about the custom field."
+- key: table:collaboration_field_definition;field:indexDdl
+  summary: "The database instructions used to prepare the field for filtering."
+- key: table:collaboration_field_definition;field:createdByUserId
+  summary: "The person who created this entry."
+- key: table:collaboration_field_value;slot:help
+  summary: "Review values entered into custom fields on records."
+  content: |
+    **How rows get created**
 
-  - key: table:collaboration_record_assignment;slot:help
-    summary: "Who owns and who is assigned to each record."
-    content: |
-      **How rows get created:** a person assigns a record from its header, or the Assign action on a host table does it in bulk. Turn Assignment on for the table in Feature Settings first.
+    Custom Field Values stores entries made through custom fields on records when separate value storage is used. Each entry identifies its parent record and field, with the value stored according to its type. You enter or change values on the parent record; these supporting records are read-only here.
+- key: table:collaboration_field_value;field:tableName
+  summary: "The table containing the related record."
+- key: table:collaboration_field_value;field:recordId
+  summary: "The identifier of the related record."
+- key: table:collaboration_field_value;field:parentDeleted
+  summary: "Whether the related record has been deleted."
+- key: table:collaboration_field_value;field:fieldName
+  summary: "The record field this entry refers to."
+- key: table:collaboration_field_value;field:valueText
+  summary: "The text stored for the custom field."
+- key: table:collaboration_field_value;field:valueNumber
+  summary: "The numeric value stored for the custom field."
+- key: table:collaboration_field_value;field:valueDate
+  summary: "The date stored for the custom field."
+- key: table:collaboration_field_value;field:valueDateTime
+  summary: "The date and time stored for the custom field."
+- key: table:collaboration_field_value;field:valueBoolean
+  summary: "The yes or no value stored for the custom field."
+- key: process:collaborationTrimRecents;slot:help
+  summary: "Remove older Recently Viewed entries according to the configured limits."
+  content: |
+    Trim recents maintains Recently Viewed by removing older entries according to the configured per-person count limit. It works on viewing history, so it does not delete the records you opened. Use Recently Viewed to review the retained history after cleanup has run. Automatic cleanup requires your host to configure a scheduler.
+- key: process:collaborationBuildFieldIndexes;slot:help
+  summary: "Prepare active custom fields for filtering."
+  content: |
+    Build field indexes performs the background preparation needed for filtering custom fields. You can review Index State and Status Message in Custom Fields to see whether preparation is complete or needs attention. These supporting details help you distinguish a field definition from a field that is ready for filtering.
+- key: process:collaborationPublishField;slot:help
+  summary: "Make selected draft custom fields active."
+  content: |
+    Select draft definitions in Custom Fields and use Publish field when their labels, types and validation are ready. Custom Fields must be enabled for the target table. Review the selected definitions before continuing, then read the results for each field; a failed field does not prevent the others from being processed.
+- key: process:collaborationArchiveField;slot:help
+  summary: "Archive selected active custom fields."
+  content: |
+    Select active definitions in Custom Fields and use Archive field when they should no longer be active. Review the affected values before continuing. The action checks each selected definition and reports its outcome separately. Read the result for each field so you can distinguish archived definitions from those that could not be changed.
+- key: process:collaborationRebuildField;slot:help
+  summary: "Rebuild filtering support for selected active custom fields."
+  content: |
+    Use Rebuild index on active custom fields when their filtering support needs to be prepared again. Review the selected definitions before continuing. After the action, check Index State and Status Message for progress or problems. The result reports each selected field separately, so review any failures before retrying.
+- key: process:collaborationSendTaskReminders;slot:help
+  summary: "Send due task reminders and overdue notifications."
+  content: |
+    Send task reminders checks tasks for reminders that are due and work that has become overdue. You choose Due At and Remind At on the task; Reminded At and Overdue Notified At record notices already sent. Review those times when checking why a task has or has not produced a notification.
+- key: process:collaborationGrant_collaboration_access_request;slot:help
+  summary: "Record that selected access requests have been granted."
+  content: |
+    Grant the person the required access in your permission system first, then use Mark granted to record the outcome of the request. You can add a Note for the requester. Review the selected requests before continuing. This action records the decision, handler and time; it does not change record permissions.
+- key: process:collaborationDecline_collaboration_access_request;slot:help
+  summary: "Decline selected access requests and record your response."
+  content: |
+    Use Decline when an access request should not be approved. You can add a Note explaining the decision before reviewing the selected requests. Only requests you are permitted to handle can be processed. Read the results to confirm which decisions were recorded and which requests were skipped.
+- key: process:collaborationDone_collaboration_task;slot:help
+  summary: "Mark selected tasks done and record their completion."
+  content: |
+    Use Mark done after the work described by a task is finished. Review the selected tasks before continuing, then check the results for any tasks you could not change. Completion records who finished the task and when. If more work is needed later, use Reopen on the task.
+- key: process:collaborationReopen_collaboration_task;slot:help
+  summary: "Return selected tasks to open status."
+  content: |
+    Use Reopen when a completed task needs more work. Select the tasks and review them before continuing. The action checks whether you can manage each task and reports skipped records separately. Afterward, review the task status and its existing assignment and timing details before continuing the work.
+- key: process:collaborationSendFollowDigests;slot:help
+  summary: "Send grouped change notices that are due for followers."
+  content: |
+    Send follow digests processes pending groups of record changes for followers. Each Follow Digests entry identifies the record, recipient and due time. Use that list to review notices waiting to be sent. An empty list means no grouped notices are waiting there; it does not mean the record has no followers.
+- key: process:collaborationApproveTags;slot:help
+  summary: "Approve selected tags for use on records."
+  content: |
+    Use Approve tags to make suggested tags available in an approval-based vocabulary. Select the tags you want to approve and review the selection before continuing. You need permission to manage tags. Check the result for skipped or unchanged tags, then review Approved in the Tags list.
+- key: process:collaborationMergeTags;slot:help
+  summary: "Combine selected tags into a chosen target tag."
+  content: |
+    Use Merge tags when several tags should be represented by one approved tag. Choose the Target tag and review the selected source tags before continuing. The action moves their record assignments to the target. Review the results and the remaining vocabulary before applying the target tag to more records.
+- key: process:collaborationDeleteTags;slot:help
+  summary: "Delete selected tags and remove their record assignments."
+  content: |
+    Use Delete tags when tags should be removed from the vocabulary. Review the selected tags and the records that will lose tag assignments before continuing. You need permission to manage tags. This removes tag assignments from the affected records; it does not delete the records themselves.
+- key: process:collaborationDeleteAttachments;slot:help
+  summary: "Delete selected attachments from their records."
+  content: |
+    Select the attachments you want to remove and use Delete attachments. Review the selection before continuing, especially the parent records and file names. The action checks whether you can remove each attachment. Read the results afterward to see which attachments were deleted and which could not be processed.
+- key: table:collaboration_feature_setting;section:identity
+  summary: "The identifying details for this entry."
+- key: table:collaboration_feature_setting;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_feature_setting;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_user;section:identity
+  summary: "The identifying details for this entry."
+- key: table:collaboration_user;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_user;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_favorite;section:identity
+  summary: "The identifying details for this entry."
+- key: table:collaboration_favorite;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_favorite;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_recent;section:identity
+  summary: "The identifying details for this entry."
+- key: table:collaboration_recent;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_recent;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_attachment;section:file
+  summary: "The attached file and its description."
+- key: table:collaboration_attachment;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_attachment;section:storage
+  summary: "The storage details and preparation status for this entry."
+- key: table:collaboration_attachment;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_comment;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_comment;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_comment;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_comment_revision;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_comment_revision;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_comment_revision;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_mention;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_mention;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_mention;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_follow;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_follow;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_follow;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_activity;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_activity;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_activity;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_follow_digest;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_follow_digest;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_follow_digest;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_tag;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_tag;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_record_tag;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_record_tag;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_record_tag;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_share;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_share;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_share;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_access_request;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_access_request;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_task;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_task;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_task;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_record_assignment;section:details
+  summary: "The settings and details associated with this entry."
+- key: table:collaboration_record_assignment;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_record_assignment;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_field_definition;section:definition
+  summary: "The custom field identity, type and publication status."
+- key: table:collaboration_field_definition;section:settings
+  summary: "The custom field choices, validation and display settings."
+- key: table:collaboration_field_definition;section:storage
+  summary: "The storage details and preparation status for this entry."
+- key: table:collaboration_field_definition;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_field_value;section:value
+  summary: "The value entered for the custom field."
+- key: table:collaboration_field_value;section:parent
+  summary: "The record this entry belongs to and whether that record was deleted."
+- key: table:collaboration_field_value;section:dates
+  summary: "When this entry was created and last changed."
+- key: table:collaboration_field_definition;section:values
+  summary: "Review stored values associated with this custom field."
+- key: table:collaboration_tag;section:recordTags
+  summary: "See which records carry this tag."
+- key: table:collaboration_comment;section:collaboration_comment_revision
+  summary: "Review earlier versions of this comment."
+- key: table:collaboration_comment;section:collaboration_mention
+  summary: "See people mentioned in this comment."
+- key: table:collaboration_comment;section:collaboration_follow
+  summary: "See who follows the record containing this comment."
+- key: widget:collaborationSetup;slot:label
+  summary: "See which record features are enabled and where their settings come from."
+- key: process:collaborationCreateFeatureSettings;slot:help
+  summary: "Create editable feature settings from your current configuration."
+  content: |
+    Run Create rows from configuration in {{label:collaboration_feature_setting}} when the table is empty. Review the proposed settings before continuing. You need collaboration administrator access.
+
+    The action creates the settings already declared by your configuration. It does not overwrite existing rows. After creating rows, edit them to change feature availability; saved settings override the code configuration.
+- key: possibleValueSource:collaboration_feature_setting;slot:help
+  summary: "Control which record features are available across the site, in an app or on a table."
+- key: possibleValueSource:collaboration_user;slot:help
+  summary: "Find the people used in mentions, sharing and assignments."
+- key: possibleValueSource:collaboration_favorite;slot:help
+  summary: "Keep track of the records, tables and apps you have starred."
+- key: possibleValueSource:collaboration_recent;slot:help
+  summary: "Find records you opened recently and see when you last viewed them."
+- key: possibleValueSource:collaboration_attachment;slot:help
+  summary: "Browse files attached to records, with their descriptions and storage details."
+- key: possibleValueSource:collaboration_comment;slot:help
+  summary: "Read record discussions, including replies, authors and resolution details."
+- key: possibleValueSource:collaboration_comment_revision;slot:help
+  summary: "Review earlier text saved when comments were edited."
+- key: possibleValueSource:collaboration_mention;slot:help
+  summary: "Track people mentioned in comments and whether their notices have been read."
+- key: possibleValueSource:collaboration_follow;slot:help
+  summary: "See who follows a record and which changes they want to hear about."
+- key: possibleValueSource:collaboration_activity;slot:help
+  summary: "Review the history of comments, files, tags, tasks and sharing on records."
+- key: possibleValueSource:collaboration_follow_digest;slot:help
+  summary: "Review grouped change notices waiting to be sent to followers."
+- key: possibleValueSource:collaboration_tag;slot:help
+  summary: "Manage the labels people apply to records and their approval status."
+- key: possibleValueSource:collaboration_record_tag;slot:help
+  summary: "See which tags have been applied to each record."
+- key: possibleValueSource:collaboration_share;slot:help
+  summary: "Review records shared with people, including messages and opening times."
+- key: possibleValueSource:collaboration_access_request;slot:help
+  summary: "Review requests to open records and record how those requests were handled."
+- key: possibleValueSource:collaboration_task;slot:help
+  summary: "Track record tasks, assignees, due dates, reminders and completion."
+- key: possibleValueSource:collaboration_record_assignment;slot:help
+  summary: "See who owns each record and who is assigned to work on it."
+- key: possibleValueSource:collaboration_field_definition;slot:help
+  summary: "Define additional fields for a table and manage their publication and validation."
+- key: possibleValueSource:collaboration_field_value;slot:help
+  summary: "Review values entered into custom fields on records."
+- key: possibleValueSource:collaboration_field_type;slot:help
+  summary: "Choose the kind of value your custom field accepts."
+- key: possibleValueSource:collaboration_field_status;slot:help
+  summary: "Choose whether a custom field is a draft, active or archived."
+- key: possibleValueSource:collaboration_field_index_state;slot:help
+  summary: "Review whether filtering support is absent, building, ready or failed."
+- key: possibleValueSource:collaboration_field_classification;slot:help
+  summary: "Choose the sensitivity of information stored in the custom field."
+- key: possibleValueSource:collaboration_custom_field_tables;slot:help
+  summary: "Choose a table configured to support custom fields."
+- key: possibleValueSource:collaboration_scope_name;slot:help
+  summary: "Choose an app or table for the selected scope, or the whole instance."
+- key: possibleValueSource:collaboration_record_field_name;slot:help
+  summary: "Choose a visible field from the selected table."
+- key: possibleValueSource:collaboration_access_request_status;slot:help
+  summary: "Review whether an access request is open, granted, declined or withdrawn."
+- key: possibleValueSource:collaboration_task_status;slot:help
+  summary: "Review whether a task is open, done or cancelled."
+- key: possibleValueSource:collaboration_target_type;slot:help
+  summary: "Choose the kind of destination you want to save."
+- key: possibleValueSource:collaboration_scope_type;slot:help
+  summary: "Choose whether a setting applies to the whole instance, an app or a table."
+- key: possibleValueSource:collaboration_feature;slot:help
+  summary: "Choose the record feature you want to configure."
+- key: possibleValueSource:collaboration_permission_mode;slot:help
+  summary: "Choose whether a feature accepts editing permission or requires an explicit feature permission."

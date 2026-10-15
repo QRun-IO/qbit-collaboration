@@ -4,6 +4,23 @@ Record collaboration for QQQ: attachments, tags, custom fields, comments with me
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
+## In-app help
+
+The qbit registers [help/qbit-collaboration.yaml](src/main/resources/help/qbit-collaboration.yaml)
+with QQQ's help-bundle registry. Core startup sync applies it when the host has the
+`helpContent` table; registration is safe without that table. Update the bundle's
+literal version alongside the POM version when releasing.
+
+To customize text, register a separate bundle with `layer: HOST` and the same entry
+key and role using `HelpBundles.register(instance, "help/my-host.yaml")`. HOST text
+takes precedence over QBIT text; startup sync preserves user edits. Hosts should
+supply help for their configured table-specific follow, tag and assignment actions,
+and for a renamed Collaboration app.
+
+`CollaborationHelpBundleTest` runs `HelpBundleAssertions` against the produced
+metadata and checks widget and possible-value-source coverage. The table guardrail
+also checks that every table explains how its rows are created. Run `./mvnw -q verify`.
+
 ## Dependent fields
 
 Comment parents list the selected thread's root and replies. Feature-setting scope names follow `scopeType` (apps, eligible tables, or `instance`). Comment field anchors follow `tableName` and offer non-hidden fields visible to the session. These use RC.5 filter variables and custom providers receiving `otherValues`; automatic dependency refresh awaits core `dependsOn`. See [dependent-field details](docs/CONTINGENT-POSSIBLE-VALUES.md).
