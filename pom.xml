@@ -120,6 +120,7 @@
             <filtering>true</filtering>
             <includes>
                <include>help/*.yaml</include>
+               <include>qbit-collaboration.properties</include>
             </includes>
          </resource>
          <resource>
@@ -127,6 +128,7 @@
             <filtering>false</filtering>
             <excludes>
                <exclude>help/*.yaml</exclude>
+               <exclude>qbit-collaboration.properties</exclude>
             </excludes>
          </resource>
       </resources>
