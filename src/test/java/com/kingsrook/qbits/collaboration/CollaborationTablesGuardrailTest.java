@@ -31,8 +31,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import com.kingsrook.qbits.collaboration.metadata.CollaborationHelp;
-import com.kingsrook.qqq.backend.core.model.metadata.help.QHelpContent;
+import com.kingsrook.qqq.backend.core.model.metadata.help.bundles.HelpBundleEntry;
+import com.kingsrook.qqq.backend.core.model.metadata.help.bundles.HelpBundles;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,7 +128,7 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
       ///////////////////////////////////////////////////////////////////////////////////////
       assertThat(instance.getProcess(FeatureSettingsDefaultsProcess.NAME).getTableName()).isEqualTo("collaboration_feature_setting");
       assertThat(FeatureSettingsDefaults.configuredRows(instance, config)).isNotEmpty();
-      assertThat(help("collaboration_feature_setting").getFirst().getContent()).contains(instance.getProcess(FeatureSettingsDefaultsProcess.NAME).getLabel());
+      assertThat(help("collaboration_feature_setting").getContent()).contains(instance.getProcess(FeatureSettingsDefaultsProcess.NAME).getLabel());
    }
 
 
@@ -139,29 +139,29 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
    @Test
    void everyTableHasEmptyStateHelp() throws Exception
    {
-      assertThat(CollaborationHelp.entries()).allSatisfy((key, entry) -> assertThat(entry.path("summary").asText().length()).as(key).isLessThanOrEqualTo(120));
       for(String table : collaborationTables())
       {
-         List<QHelpContent> help = help(table);
-         assertThat(help).as(table + " table help").isNotEmpty();
-         assertThat(help.getFirst().getContent()).as(table + " help says how rows get created").contains("How rows get created");
+         assertThat(help(table).getContent()).as(table + " help says how rows get created").contains("How rows get created");
       }
-      assertThat(instance.getApp(config.getAppName()).getHelpContent()).containsKey(CollaborationHelp.SLOT);
-      assertThat(CollaborationHelp.entries().keySet()).allMatch(key -> !key.startsWith("table:") || instance.getTable(key.substring(6, key.indexOf(';'))) != null,
-         "help names only real tables");
+      assertThat(HelpBundles.of(instance).getBundles()).singleElement().satisfies(bundle ->
+      {
+         assertThat(bundle.getId()).isEqualTo("qbit-collaboration");
+         assertThat(bundle.getVersion()).isEqualTo("0.1.0-SNAPSHOT");
+         assertThat(bundle.getEntries()).anyMatch(entry -> entry.getKey().equals("app:collaboration;slot:help"));
+      });
    }
 
 
 
    /*******************************************************************************
-    ** A host's own help on a table is kept.
+    ** Registration works without a help table; core owns the guarded startup sync.
     *******************************************************************************/
    @Test
-   void hostHelpIsNotOverridden() throws Exception
+   void registrationWithoutHelpTable()
    {
-      instance.getTable("collaboration_tag").getHelpContent().put(CollaborationHelp.SLOT, List.of(new QHelpContent().withContentAsMarkdown("host text")));
-      CollaborationHelp.apply(instance, config);
-      assertThat(help("collaboration_tag").getFirst().getContent()).isEqualTo("host text");
+      assertThat(instance.getTable("helpContent")).isNull();
+      HelpBundles.syncOnStartup(instance);
+      assertThat(HelpBundles.of(instance).getBundles()).hasSize(1);
    }
 
 
@@ -169,9 +169,10 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
    /*******************************************************************************
     **
     *******************************************************************************/
-   private List<QHelpContent> help(String table)
+   private HelpBundleEntry help(String table)
    {
-      return (instance.getTable(table).getHelpContent() == null ? null : instance.getTable(table).getHelpContent().get(CollaborationHelp.SLOT));
+      return (HelpBundles.of(instance).getBundles().getFirst().getEntries().stream()
+         .filter(entry -> entry.getKey().equals("table:" + table + ";slot:help")).findFirst().orElseThrow());
    }
 
 
