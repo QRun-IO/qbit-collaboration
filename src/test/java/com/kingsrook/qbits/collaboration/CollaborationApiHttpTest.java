@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentStorage;
 import com.kingsrook.qbits.objectstorage.api.PresignGet;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
@@ -431,8 +432,16 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
          HttpResponse<String> hidden = request("GET", "/records/document/3/" + feature, null, "alice");
          HttpResponse<String> absent = request("GET", "/records/document/999/" + feature, null, "alice");
          assertThat(hidden.statusCode()).isEqualTo(404);
-         assertThat(hidden.body()).isEqualTo(absent.body());
-         assertThat(json(hidden, 404).get("error").asText()).isEqualTo("Not found");
+         ObjectNode hiddenError = (ObjectNode) json(hidden, 404);
+         ObjectNode absentError = (ObjectNode) json(absent, 404);
+         assertThat(hiddenError.path("traceId").asText()).isNotBlank();
+         assertThat(absentError.path("traceId").asText()).isNotBlank();
+         hiddenError.remove("traceId");
+         absentError.remove("traceId");
+         assertThat(hiddenError).isEqualTo(absentError);
+         assertThat(hiddenError.path("error").asText()).isEqualTo("Not found");
+         assertThat(hiddenError.path("code").asText()).isEqualTo("NOT_FOUND");
+         assertThat(hiddenError.path("message").asText()).isEqualTo("Not found");
       }
       assertError(404, "POST", "/records/document/3/comments", "not json", "alice");
       assertError(404, "GET", "/mentions/candidates?table=document&pk=3", null, "alice");
@@ -500,15 +509,19 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode version = json(client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/qqq/v1/version")).GET().build(),
          HttpResponse.BodyHandlers.ofString()), 200);
       assertThat(version.at("/extensions/0/name").asText()).isEqualTo("collaboration");
-      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.0.0");
+      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.1.0");
    }
 
    /*******************************************************************************
-    ** Framework errors always contain a human-readable error property.
+    ** Framework errors include the standard message, code and request trace.
     *******************************************************************************/
    private void assertError(int status, String method, String path, String body, String caller) throws Exception
    {
-      assertThat(json(request(method, path, body, caller), status).get("error").asText()).isNotBlank();
+      var error = json(request(method, path, body, caller), status);
+      assertThat(error.path("error").asText()).isNotBlank();
+      assertThat(error.path("code").asText()).isNotBlank();
+      assertThat(error.path("message").asText()).isNotBlank();
+      assertThat(error.path("traceId").asText()).isNotBlank();
    }
 
    /*******************************************************************************

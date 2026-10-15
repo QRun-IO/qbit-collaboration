@@ -1,5 +1,44 @@
 components:
   schemas:
+    BasicErrorResponseV1:
+      description: "The error body of every UI API operation (core and extensions)."
+      properties:
+        error:
+          description: "The error message (the same as message; kept for clients of\
+            \ UI API 1.0 to 1.5)."
+          type: "string"
+        code:
+          description: "A stable, machine-readable code. Well-known values: BAD_REQUEST\
+            \ (400), UNAUTHENTICATED (401),\nPERMISSION_DENIED (403), NOT_FOUND (404),\
+            \ CONFLICT (409), RATE_LIMITED (429), INTERNAL_ERROR (500),\nERROR (other).\
+            \ Extensions may add codes; treat an unknown code by the HTTP status.\
+            \ Since 1.6.0."
+          type: "string"
+        message:
+          description: "A message to show the user. Since 1.6.0."
+          type: "string"
+        fieldErrors:
+          description: "Errors about particular request fields, when known. Since\
+            \ 1.6.0."
+          items:
+            properties:
+              field:
+                description: "The field (or parameter) name."
+                type: "string"
+              message:
+                description: "The error about that field."
+                type: "string"
+              code:
+                description: "An optional machine-readable code, e.g. REQUIRED, TOO_LONG,\
+                  \ PATTERN."
+                type: "string"
+            type: "object"
+          type: "array"
+        traceId:
+          description: "Identifies this request in the server logs (also the X-QQQ-Trace-Id\
+            \ response header); quote it when reporting a problem. Since 1.6.0."
+          type: "string"
+      type: "object"
     CollaborationAccessRequestCreateRequestV1:
       properties:
         message:
@@ -372,7 +411,7 @@ components:
           type: "string"
       type: "object"
     CollaborationErrorV1:
-      description: "Standard QQQ error response."
+      description: "Deprecated since 1.1.0: errors use BasicErrorResponseV1."
       properties:
         error:
           description: "Human-readable reason the operation failed."
@@ -662,6 +701,88 @@ components:
         userId:
           description: "Stable user identity."
           nullable: true
+          type: "string"
+      type: "object"
+    CollaborationPresenceLeaveV1:
+      description: "Remove the caller's lease on this connection and target."
+      properties:
+        connectionId:
+          description: "Client connection identity."
+          nullable: false
+          type: "string"
+        pk:
+          description: "Optional parent key."
+          nullable: true
+          type: "string"
+        table:
+          description: "Parent table name."
+          nullable: false
+          type: "string"
+      type: "object"
+    CollaborationPresenceRequestV1:
+      description: "Renew a 45-second presence lease; send every 20 seconds."
+      properties:
+        connectionId:
+          description: "Client connection identity."
+          nullable: false
+          type: "string"
+        fieldName:
+          description: "Optional focused field on a record."
+          nullable: true
+          type: "string"
+        mode:
+          description: "VIEWING or EDITING."
+          enum:
+          - "VIEWING"
+          - "EDITING"
+          nullable: false
+          type: "string"
+        pk:
+          description: "Optional parent key; omit for a table view."
+          nullable: true
+          type: "string"
+        table:
+          description: "Parent table name."
+          nullable: false
+          type: "string"
+      type: "object"
+    CollaborationPresenceSnapshotV1:
+      description: "Live viewers, merged across tabs; presence.changed uses this payload."
+      properties:
+        pk:
+          description: "Record key; absent for table events."
+          nullable: true
+          type: "string"
+        table:
+          description: "Parent table name."
+          nullable: false
+          type: "string"
+        viewers:
+          items:
+            $ref: "#/components/schemas/CollaborationPresenceViewerV1"
+          type: "array"
+      type: "object"
+    CollaborationPresenceViewerV1:
+      description: "One user merged across live tabs; EDITING takes precedence."
+      properties:
+        displayName:
+          description: "Session display name."
+          nullable: false
+          type: "string"
+        fieldName:
+          description: "Focused field; null on table snapshots."
+          nullable: true
+          type: "string"
+        mode:
+          description: "VIEWING or EDITING."
+          enum:
+          - "VIEWING"
+          - "EDITING"
+          nullable: false
+          type: "string"
+        userId:
+          description: "Stable user identity."
+          nullable: false
           type: "string"
       type: "object"
     CollaborationRecentListV1:
@@ -1087,22 +1208,56 @@ components:
       type: "object"
   securitySchemes:
     sessionUuidCookie:
+      description: "The session cookie set by POST /qqq/v1/manageSession (web clients)."
       in: "cookie"
       name: "sessionUUID"
       type: "apiKey"
+    bearerAuth:
+      bearerFormat: "JWT or session UUID"
+      description: "`Authorization: Bearer <token>`, where the token is either\n-\
+        \ an OAuth2 access token (a signed JWT) issued by the app's identity provider\
+        \ to the app's client,\n  or to its native client (`values.nativeClientId`\
+        \ in GET /qqq/v1/metaData/authentication), for\n  example from the device-authorization\
+        \ grant or auth-code + PKCE. It is verified against the\n  provider's keys\
+        \ (issuer, audience, expiry, signature) and gives the same user and permissions\n\
+        \  as signing in on the web. When it expires (401), refresh it at the provider\
+        \ and retry; or\n- a session UUID returned by POST /qqq/v1/manageSession,\
+        \ which the server keeps refreshed."
+      scheme: "bearer"
+      type: "http"
+    oauth2:
+      description: "The app's OAuth2 / OpenID Connect provider. The real endpoints\
+        \ come from the provider's discovery\ndocument: `{values.baseUrl}.well-known/openid-configuration`,\
+        \ with values from\nGET /qqq/v1/metaData/authentication. Native clients use\
+        \ `values.nativeClientId` (a public client)\nwith auth-code + PKCE (loopback\
+        \ or custom-scheme redirect URI registered at the provider) or the\ndevice-authorization\
+        \ grant (`device_authorization_endpoint`, RFC 8628), then send the access\
+        \ token\nas `Authorization: Bearer`."
+      flows:
+        authorizationCode:
+          authorizationUrl: "/authorize"
+          scopes:
+            email: "Email address"
+            offline_access: "A refresh token, to renew the access token without signing\
+              \ in again"
+            openid: "OpenID Connect sign-in"
+            profile: "Name, username and groups (permissions come from the groups)"
+          tokenUrl: "/token"
+      type: "oauth2"
 info:
   contact:
     email: "contact@kingsrook.com"
   description: "Record collaboration: favorites, recents, attachments, tags, conversations,\
     \ following, timeline, people and presence"
   title: "QQQ Middleware API extension: collaboration"
-  version: "1.0.0"
+  version: "1.1.0"
 openapi: "3.0.3"
 paths:
   /qqq/v1/qbit/collaboration/presence:
     delete:
       description: "Leave presence. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "deleteQbitCollaborationPresence"
       requestBody:
         content:
           application/json:
@@ -1114,25 +1269,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1140,13 +1295,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Leave presence"
+      tags:
+      - "collaboration"
     get:
       description: "Get presence snapshot. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationPresence"
       parameters:
       - description: "Parent table metadata name."
         in: "query"
@@ -1165,25 +1342,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1191,13 +1368,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationPresenceSnapshotV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get presence snapshot"
+      tags:
+      - "collaboration"
     post:
       description: "Renew presence. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "postQbitCollaborationPresence"
       requestBody:
         content:
           application/json:
@@ -1209,25 +1408,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1235,14 +1434,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationPresenceSnapshotV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Renew presence"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/favorites:
     delete:
       description: "Unstar a target. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "deleteQbitCollaborationFavorites"
       requestBody:
         content:
           application/json:
@@ -1254,25 +1475,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1280,13 +1501,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Unstar a target"
+      tags:
+      - "collaboration"
     get:
       description: "List personal favorites. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationFavorites"
       parameters:
       - description: "Maximum items to return, from 1 to 100; default 20."
         in: "query"
@@ -1306,25 +1549,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1332,13 +1575,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationFavoriteListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List personal favorites"
+      tags:
+      - "collaboration"
     put:
       description: "Star a target. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "putQbitCollaborationFavorites"
       requestBody:
         content:
           application/json:
@@ -1350,25 +1615,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1376,14 +1641,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Star a target"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/recents:
     get:
       description: "List recent targets. Uses the signed-in caller's permissions and\
         \ record visibility."
+      operationId: "getQbitCollaborationRecents"
       parameters:
       - description: "Maximum items to return, from 1 to 100; default 20."
         in: "query"
@@ -1403,25 +1690,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1429,13 +1716,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationRecentListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List recent targets"
+      tags:
+      - "collaboration"
     post:
       description: "Record a recent view. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationRecents"
       requestBody:
         content:
           application/json:
@@ -1447,25 +1756,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1473,14 +1782,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Record a recent view"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/favorites/order:
     patch:
       description: "Reorder personal favorites. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "patchQbitCollaborationFavoritesOrder"
       requestBody:
         content:
           application/json:
@@ -1492,25 +1823,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1518,14 +1849,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Reorder personal favorites"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/attachments:
     get:
       description: "List record attachments. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkAttachments"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -1557,25 +1910,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1583,13 +1936,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAttachmentListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List record attachments"
+      tags:
+      - "collaboration"
     post:
       description: "Upload an attachment. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationRecordsByTableByPkAttachments"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -1614,25 +1989,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1640,14 +2015,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAttachmentV1"
           description: "Uploaded attachment"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Upload an attachment"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/attachments/{id}/download:
     get:
       description: "Get a temporary download URL; clients follow url. Uses the signed-in\
         \ caller's permissions and record visibility."
+      operationId: "getQbitCollaborationAttachmentsByIdDownload"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -1660,25 +2057,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1686,14 +2083,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationDownloadV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get a temporary download URL; clients follow url"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/attachments/{id}/preview:
     get:
       description: "Get a temporary preview URL; clients follow url. Uses the signed-in\
         \ caller's permissions and record visibility."
+      operationId: "getQbitCollaborationAttachmentsByIdPreview"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -1706,25 +2125,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1732,14 +2151,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationDownloadV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get a temporary preview URL; clients follow url"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/attachments/{id}:
     delete:
       description: "Delete an attachment. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "deleteQbitCollaborationAttachmentsById"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -1752,25 +2193,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1778,13 +2219,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Delete an attachment"
+      tags:
+      - "collaboration"
     patch:
       description: "Rename or describe an attachment. Uses the signed-in caller's\
         \ permissions and record visibility."
+      operationId: "patchQbitCollaborationAttachmentsById"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -1803,25 +2266,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1829,14 +2292,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAttachmentV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Rename or describe an attachment"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/tags:
     get:
       description: "Search table tag vocabulary. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationTags"
       parameters:
       - description: "Parent table metadata name."
         in: "query"
@@ -1861,25 +2346,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1887,13 +2372,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTagListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Search table tag vocabulary"
+      tags:
+      - "collaboration"
     post:
       description: "Create or suggest a tag. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationTags"
       requestBody:
         content:
           application/json:
@@ -1905,25 +2412,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1931,14 +2438,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTagV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Create or suggest a tag"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/tags:
     get:
       description: "List applied record tags. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkTags"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -1970,25 +2499,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -1996,13 +2525,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTagListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List applied record tags"
+      tags:
+      - "collaboration"
     put:
       description: "Add and remove record tags. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "putQbitCollaborationRecordsByTableByPkTags"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2027,25 +2578,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2053,14 +2604,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTagListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Add and remove record tags"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/comments:
     get:
       description: "Page record comment threads. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkComments"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2092,25 +2665,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2118,13 +2691,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationCommentPageV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Page record comment threads"
+      tags:
+      - "collaboration"
     post:
       description: "Post a comment or reply. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationRecordsByTableByPkComments"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2149,25 +2744,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2175,14 +2770,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationCommentV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Post a comment or reply"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/comments/{id}:
     delete:
       description: "Delete a comment thread. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "deleteQbitCollaborationCommentsById"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -2195,25 +2812,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2221,13 +2838,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Delete a comment thread"
+      tags:
+      - "collaboration"
     patch:
       description: "Edit the caller's comment. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "patchQbitCollaborationCommentsById"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -2246,25 +2885,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2272,14 +2911,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationCommentV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Edit the caller's comment"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/comments/{id}/resolve:
     post:
       description: "Resolve a comment thread. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationCommentsByIdResolve"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -2292,25 +2953,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2318,14 +2979,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Resolve a comment thread"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/comments/{id}/reopen:
     post:
       description: "Reopen a comment thread. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationCommentsByIdReopen"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -2338,25 +3021,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2364,14 +3047,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMutationResultV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Reopen a comment thread"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/comments/{id}/history:
     get:
       description: "Read comment edit history. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationCommentsByIdHistory"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -2397,25 +3102,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2423,14 +3128,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationCommentHistoryV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Read comment edit history"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/mentions/candidates:
     get:
       description: "Find people to mention on a record. Uses the signed-in caller's\
         \ permissions and record visibility."
+      operationId: "getQbitCollaborationMentionsCandidates"
       parameters:
       - description: "Parent table metadata name."
         in: "query"
@@ -2468,25 +3195,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2494,14 +3221,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMentionCandidateListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Find people to mention on a record"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/follow:
     delete:
       description: "Unfollow a record. Uses the signed-in caller's permissions and\
         \ record visibility."
+      operationId: "deleteQbitCollaborationRecordsByTableByPkFollow"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2520,25 +3269,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2546,13 +3295,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationFollowStateV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Unfollow a record"
+      tags:
+      - "collaboration"
     get:
       description: "Get the caller's follow state. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkFollow"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2571,25 +3342,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2597,13 +3368,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationFollowStateV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get the caller's follow state"
+      tags:
+      - "collaboration"
     put:
       description: "Follow a record and configure notifications. Uses the signed-in\
         \ caller's permissions and record visibility."
+      operationId: "putQbitCollaborationRecordsByTableByPkFollow"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2628,25 +3421,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2654,14 +3447,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationFollowStateV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Follow a record and configure notifications"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/followers:
     get:
       description: "List record followers. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkFollowers"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2693,25 +3508,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2719,14 +3534,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationFollowerListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List record followers"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/timeline:
     get:
       description: "Page the merged record timeline. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkTimeline"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2771,25 +3608,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2797,14 +3634,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTimelinePageV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Page the merged record timeline"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/people:
     get:
       description: "Search the active people directory. Uses the signed-in caller's\
         \ permissions and record visibility."
+      operationId: "getQbitCollaborationPeople"
       parameters:
       - description: "Text to search in display names or vocabulary."
         in: "query"
@@ -2823,25 +3682,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2849,14 +3708,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationPersonListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Search the active people directory"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/people/{userId}:
     get:
       description: "Get an active directory person. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationPeopleByUserId"
       parameters:
       - description: "Stable directory user identity."
         in: "path"
@@ -2869,25 +3750,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2895,14 +3776,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationPersonV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get an active directory person"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/link:
     get:
       description: "Get a record link. Uses the signed-in caller's permissions and\
         \ record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkLink"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2921,25 +3824,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -2947,14 +3850,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationLinkV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get a record link"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/shares/preview:
     post:
       description: "Preview share recipients. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationRecordsByTableByPkSharesPreview"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -2979,25 +3904,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3005,14 +3930,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationSharePreviewV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Preview share recipients"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/shares:
     post:
       description: "Share a record. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "postQbitCollaborationRecordsByTableByPkShares"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -3037,25 +3984,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3063,14 +4010,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationShareListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Share a record"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/access-requests:
     post:
       description: "Request access to a record. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "postQbitCollaborationAccessRequests"
       requestBody:
         content:
           application/json:
@@ -3082,25 +4051,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3108,14 +4077,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAccessRequestV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Request access to a record"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/access-requests/mine:
     get:
       description: "List my access requests. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "getQbitCollaborationAccessRequestsMine"
       parameters:
       - description: "Maximum items to return, from 1 to 100; default 20."
         in: "query"
@@ -3135,25 +4126,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3161,14 +4152,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAccessRequestListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List my access requests"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/tasks:
     get:
       description: "List record tasks. Uses the signed-in caller's permissions and\
         \ record visibility."
+      operationId: "getQbitCollaborationRecordsByTableByPkTasks"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -3206,25 +4219,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3232,13 +4245,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTaskListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List record tasks"
+      tags:
+      - "collaboration"
     post:
       description: "Create a task. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "postQbitCollaborationRecordsByTableByPkTasks"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -3263,25 +4298,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3289,14 +4324,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTaskV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Create a task"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/tasks/{id}:
     patch:
       description: "Update a task. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "patchQbitCollaborationTasksById"
       parameters:
       - description: "Collaboration object identifier."
         in: "path"
@@ -3315,25 +4372,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3341,14 +4398,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTaskV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Update a task"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/tasks/mine:
     get:
       description: "List my tasks. Uses the signed-in caller's permissions and record\
         \ visibility."
+      operationId: "getQbitCollaborationTasksMine"
       parameters:
       - description: "Task status: OPEN (default), DONE or CANCELLED."
         in: "query"
@@ -3374,25 +4453,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3400,14 +4479,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationTaskListV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "List my tasks"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/records/{table}/{pk}/assignment:
     put:
       description: "Set record owner and assignee. Uses the signed-in caller's permissions\
         \ and record visibility."
+      operationId: "putQbitCollaborationRecordsByTableByPkAssignment"
       parameters:
       - description: "Parent table metadata name."
         in: "path"
@@ -3432,25 +4533,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3458,38 +4559,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationAssignmentV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Set record owner and assignee"
+      tags:
+      - "collaboration"
   /qqq/v1/qbit/collaboration/my-work:
     get:
       description: "Get my work summary. Uses the signed-in caller's permissions and\
         \ record visibility."
+      operationId: "getQbitCollaborationMyWork"
       responses:
         400:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Invalid input"
         401:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Sign in required"
         403:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Permission denied"
         404:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CollaborationErrorV1"
+                $ref: "#/components/schemas/BasicErrorResponseV1"
           description: "Not found (including invisible parents)"
         200:
           content:
@@ -3497,7 +4620,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollaborationMyWorkV1"
           description: "Successful Response"
+        409:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Conflict with the current state, e.g. an edit conflict or\
+            \ an invalid transition (code CONFLICT)."
+        429:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicErrorResponseV1"
+          description: "Too many requests (code RATE_LIMITED); retry later."
       security:
       - sessionUuidCookie:
         - "N/A"
+      - bearerAuth:
+        - "N/A"
+      - oauth2:
+        - "openid"
+        - "profile"
+        - "email"
       summary: "Get my work summary"
+      tags:
+      - "collaboration"
+servers:
+- description: "The QQQ server that serves this document (paths include /qqq/v1)."
+  url: "/"
+tags:
+- description: "Operations of the collaboration extension."
+  name: "collaboration"
