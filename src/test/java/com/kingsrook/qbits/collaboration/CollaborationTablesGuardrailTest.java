@@ -146,7 +146,7 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
       assertThat(HelpBundles.of(instance).getBundles()).singleElement().satisfies(bundle ->
       {
          assertThat(bundle.getId()).isEqualTo("qbit-collaboration");
-         assertThat(bundle.getVersion()).isEqualTo("0.1.0-SNAPSHOT");
+         assertThat(bundle.getVersion()).as("the help bundle carries the artifact version").isEqualTo(System.getProperty("qbit.artifactVersion"));
          assertThat(bundle.getEntries()).anyMatch(entry -> entry.getKey().equals("app:collaboration;slot:help"));
       });
    }
