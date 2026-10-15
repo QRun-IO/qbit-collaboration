@@ -13,7 +13,7 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Changed
 
-- UI API extension collaboration 1.1.0 (requires QQQ 4.1.0-RC.14, UI API 1.6.0): operationIds, standard error responses with BasicErrorResponseV1, extension tags and published presence request/snapshot/viewer schemas to resolve dangling references. Retain CollaborationErrorV1 as deprecated.
+- UI API extension collaboration 1.1.0 (requires QQQ 4.1.0-RC.15, UI API 1.6.0): operationIds, standard error responses with BasicErrorResponseV1, extension tags and published presence request/snapshot/viewer schemas to resolve dangling references. Retain CollaborationErrorV1 as deprecated.
 
 - Upgrade the default QQQ BOM to `4.1.0-RC.7` from Maven Central.
 - Register the core followers provider for alerts and other qbits, with event preferences, future-mute exclusion, system reads scoped to one record, and caller-owned recipient access checks.

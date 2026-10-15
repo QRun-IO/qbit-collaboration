@@ -413,7 +413,7 @@ The runtime provider adds this field and its search entry where TAGS is enabled.
 The producer registers extension `collaboration` version `1.1.0` at
 `/qqq/v1/qbit/collaboration`. It uses the signed-in user's session and existing
 services. Disable registration with `new CollaborationQBitConfig().withUiApi(false)`.
-Requires QQQ `4.1.0-RC.14` and UI API `1.6.0`. Operations carry stable operationIds,
+Requires QQQ `4.1.0-RC.15` and UI API `1.6.0`. Operations carry stable operationIds,
 the collaboration tag and standard error responses.
 
 All successes return HTTP 200. Success and request bodies have named `Collaboration*V1` schemas
