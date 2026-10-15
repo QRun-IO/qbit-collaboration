@@ -24,6 +24,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Fixed
 
+- QBit metadata reports the Maven artifact version from a filtered resource, including release versions.
+
 - Timeline audit summaries read "Edited by Alice Morgan: Title, Total" or "Created by Alice Morgan" instead of "Record was Edited"; detail rows are unchanged.
 - The demo server chooses its user per browser session (`?user=bob`, remembered in a cookie) instead of once per JVM, and sends the person's name to the frontend so it no longer shows Anonymous.
 - The share recipient search and mention candidates no longer offer the caller to themself.

@@ -146,7 +146,7 @@ class CollaborationTest
       assertThat(producer.isEnabled()).isTrue();
       assertThat(producer.getQBitConfig()).isSameAs(config);
       assertThat(producer.getNamespace()).isEqualTo("collaboration");
-      assertThat(producer.getQBitMetaData().getVersion()).isEqualTo("0.1.0");
+      assertThat(producer.getQBitMetaData().getVersion()).isEqualTo(System.getProperty("qbit.artifactVersion")).isEqualTo(CollaborationQBitProducer.VERSION);
       assertThat(producer.getQBitMetaData().getArtifactId()).isEqualTo("qbit-collaboration");
       assertThat(config.getDefaultBackendNameForTables()).isEqualTo("memory");
       assertThat(config.getAdminApp()).isTrue();
