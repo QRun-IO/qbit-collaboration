@@ -52,9 +52,10 @@ public final class CollaborationApi
     *******************************************************************************/
    public static MiddlewareSpecExtension extension()
    {
-      return (new MiddlewareSpecExtension().withName("collaboration").withSemanticVersion("1.1.0")
+      return (new MiddlewareSpecExtension().withName("collaboration").withSemanticVersion("1.3.0")
          .withDescription("Record collaboration: favorites, recents, attachments, tags, conversations, following, timeline, people and presence")
          .withSpec(PostPresenceSpec.class).withSpec(DeletePresenceSpec.class).withSpec(GetPresenceSpec.class)
+         .withSpec(OpenPresenceLeaseSpec.class).withSpec(RenewPresenceLeaseSpec.class)
          .withSpec(ListFavoritesSpec.class)
          .withSpec(StarFavoriteSpec.class)
          .withSpec(UnstarFavoriteSpec.class)
@@ -96,6 +97,7 @@ public final class CollaborationApi
          .withSpec(ListMyTasksSpec.class)
          .withSpec(PutAssignmentSpec.class)
          .withSpec(GetMyWorkSpec.class)
+         .withSpec(MarkMentionsReadSpec.class)
          .withSpec(UploadAttachmentSpec.class));
    }
 }

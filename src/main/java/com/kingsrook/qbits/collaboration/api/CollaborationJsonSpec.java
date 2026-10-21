@@ -116,7 +116,8 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
       return (List.of(new BasicResponse(HttpStatus.BAD_REQUEST, "Invalid input", BasicErrorResponseV1.class.getSimpleName()),
          new BasicResponse(HttpStatus.UNAUTHORIZED, "Sign in required", BasicErrorResponseV1.class.getSimpleName()),
          new BasicResponse(HttpStatus.FORBIDDEN, "Permission denied", BasicErrorResponseV1.class.getSimpleName()),
-         new BasicResponse(HttpStatus.NOT_FOUND, "Not found (including invisible parents)", BasicErrorResponseV1.class.getSimpleName())));
+         new BasicResponse(HttpStatus.NOT_FOUND, "Not found (including invisible parents)", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.SERVICE_UNAVAILABLE, "Service temporarily unavailable", BasicErrorResponseV1.class.getSimpleName())));
    }
 
    /*******************************************************************************

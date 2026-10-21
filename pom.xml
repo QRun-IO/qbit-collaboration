@@ -18,6 +18,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
    <properties>
+      <!-- Only the published Redis API package is a permitted cross-qbit boundary. -->
+      <qbit.guardrails.allowedApiPackages>com.kingsrook.qbits.objectstorage.api,com.kingsrook.qbits.email.api,com.kingsrook.qbits.redis.api</qbit.guardrails.allowedApiPackages>
+      <qbit.guardrails.allowedQbitArtifacts>com.kingsrook.qbits:qbit-object-storage,com.kingsrook.qbits:qbit-email,com.kingsrook.qbits:*-api,com.kingsrook.qbits:qbit-redis</qbit.guardrails.allowedQbitArtifacts>
       <revision>0.1.0-SNAPSHOT</revision>
       <maven.compiler.source>21</maven.compiler.source>
       <maven.compiler.target>21</maven.compiler.target>
@@ -69,6 +72,18 @@
    </scm>
 
    <dependencies>
+      <dependency>
+         <groupId>com.kingsrook.qbits</groupId>
+         <artifactId>qbit-redis</artifactId>
+         <version>0.1.0-SNAPSHOT</version>
+         <optional>true</optional>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>testcontainers</artifactId>
+         <version>2.0.3</version>
+         <scope>test</scope>
+      </dependency>
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
          <artifactId>qqq-backend-module-rdbms</artifactId>
@@ -225,14 +240,14 @@
    <profiles>
       <!-- Built against qqq 4.1 (QBitMetaDataProducer). Until qbit-build-parent  -->
       <!-- imports the released 4.1 BOM, this profile is active by default and     -->
-      <!-- imports qqq-bom-pom 4.1.0-RC.15 ahead of the parent's 4.0.0 BOM.         -->
+      <!-- Candidate requires core changes in the coordinated 4.1.0 SNAPSHOT.    -->
       <profile>
          <id>qqq-snapshot</id>
          <activation>
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-RC.15</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-SNAPSHOT</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>

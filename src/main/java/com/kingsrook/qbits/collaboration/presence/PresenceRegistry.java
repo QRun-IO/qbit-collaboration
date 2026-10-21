@@ -43,7 +43,7 @@ import com.kingsrook.qqq.backend.core.realtime.RealtimeMessage;
  ** Ephemeral per-pod presence replicated over a channel core refuses to clients.
  ** Publish outside the monitor: the in-memory bus waits for listener threads.
  *******************************************************************************/
-public final class PresenceRegistry implements AutoCloseable
+public final class PresenceRegistry implements PresenceBackend, AutoCloseable
 {
    public static final String INTERNAL_CHANNEL = "instance:presence";
    public static final long TTL_MILLIS = 45000;
@@ -119,7 +119,7 @@ public final class PresenceRegistry implements AutoCloseable
    /*******************************************************************************
     ** Each tab has its own lease; user views merge the live leases.
     *******************************************************************************/
-   private record Entry(String displayName, String mode, String fieldName, long at)
+   private record Entry(String displayName, String mode, String fieldName, long at, Long sequence)
    {
    }
 
@@ -135,9 +135,21 @@ public final class PresenceRegistry implements AutoCloseable
     *******************************************************************************/
    public boolean heartbeat(String user, String displayName, String connection, String table, String pk, String mode, String fieldName)
    {
+      return (heartbeat(user, displayName, connection, table, pk, mode, fieldName, null));
+   }
+
+   /*******************************************************************************
+    ** Client sequence orders delayed HTTP requests independently of arrival time.
+    *******************************************************************************/
+   public boolean heartbeat(String user, String displayName, String connection, String table, String pk, String mode, String fieldName, Long sequence)
+   {
+      if(connection != null && connection.startsWith("lease:"))
+      {
+         throw (new PresenceLeaseExpiredException());
+      }
       expire();
       var key = new Key(user, connection, table, pk);
-      var entry = new Entry(displayName, mode, fieldName, clock.millis());
+      var entry = new Entry(displayName, mode, fieldName, clock.millis(), sequence);
       if(!apply(key, entry, false))
       {
          return (false);
@@ -146,13 +158,47 @@ public final class PresenceRegistry implements AutoCloseable
       return (true);
    }
 
+   /***************************************************************************
+    ** Local mode issues local authority; HA applications must use shared Redis.
+    ***************************************************************************/
+   @Override
+   public String openLease(String user, String displayName, String table, String pk)
+   {
+      expire();
+      String connection = "lease:" + java.util.UUID.randomUUID();
+      return (apply(new Key(user, connection, table, pk), new Entry(displayName, "PENDING", null, clock.millis(), 0L), false) ? connection : null);
+   }
+
+   /***************************************************************************
+    ** Check renewal and update under one monitor; no late request creates a lease.
+    ***************************************************************************/
+   @Override
+   public boolean renewLease(String user, String displayName, String connection, String table, String pk, String mode, String fieldName, Long sequence)
+   {
+      if(connection == null || !connection.startsWith("lease:") || sequence == null || sequence < 1 || sequence > 9007199254740991L
+         || !List.of("VIEWING", "EDITING").contains(mode == null ? "" : mode))
+      {
+         throw (new IllegalArgumentException("A server-issued lease, positive safe sequence and valid mode are required"));
+      }
+      expire();
+      return (apply(new Key(user, connection, table, pk), new Entry(displayName, mode, fieldName, clock.millis(), sequence), false, true));
+   }
+
    /*******************************************************************************
     ** Leaves use the same internal channel so every pod removes the lease.
     *******************************************************************************/
    public void leave(String user, String connection, String table, String pk)
    {
+      leave(user, connection, table, pk, null);
+   }
+
+   /*******************************************************************************
+    ** Departure participates in the same ordered client lease.
+    *******************************************************************************/
+   public void leave(String user, String connection, String table, String pk, Long sequence)
+   {
       var key = new Key(user, connection, table, pk);
-      var entry = new Entry(null, null, null, clock.millis());
+      var entry = new Entry(null, null, null, clock.millis(), sequence);
       apply(key, entry, true);
       publish(key, entry, true);
    }
@@ -162,6 +208,10 @@ public final class PresenceRegistry implements AutoCloseable
     *******************************************************************************/
    private void publish(Key key, Entry entry, boolean leave)
    {
+      if(key.connection().startsWith("lease:"))
+      {
+         return;
+      }
       Map<String, Serializable> data = new LinkedHashMap<>();
       data.put("userId", key.user());
       data.put("connectionId", key.connection());
@@ -172,6 +222,7 @@ public final class PresenceRegistry implements AutoCloseable
       data.put("fieldName", entry.fieldName());
       data.put("at", entry.at());
       data.put("leave", leave);
+      data.put("sequence", entry.sequence());
       bus.publish(new RealtimeMessage().withChannel(INTERNAL_CHANNEL).withEvent("presence.heartbeat").withData(data));
    }
 
@@ -192,12 +243,18 @@ public final class PresenceRegistry implements AutoCloseable
       }
       expire();
       long receivedAt = Math.min(at.longValue(), clock.millis());
+      // Best-effort replication cannot grant or restore issued renewal authority.
+      if(connection.startsWith("lease:"))
+      {
+         return;
+      }
       if(receivedAt + TTL_MILLIS <= clock.millis())
       {
          return;
       }
       apply(new Key(user, connection, table, (String) data.get("pk")),
-         new Entry((String) data.get("displayName"), (String) data.get("mode"), (String) data.get("fieldName"), receivedAt), Boolean.TRUE.equals(data.get("leave")));
+         new Entry((String) data.get("displayName"), (String) data.get("mode"), (String) data.get("fieldName"), receivedAt,
+            data.get("sequence") instanceof Number sequence ? sequence.longValue() : null), Boolean.TRUE.equals(data.get("leave")));
    }
 
    /*******************************************************************************
@@ -205,28 +262,41 @@ public final class PresenceRegistry implements AutoCloseable
     *******************************************************************************/
    private boolean apply(Key key, Entry entry, boolean leave)
    {
+      return (apply(key, entry, leave, false));
+   }
+
+   /*******************************************************************************
+    ** Local issued authority is checked atomically with the mutation.
+    *******************************************************************************/
+   private boolean apply(Key key, Entry entry, boolean leave, boolean requireLive)
+   {
       boolean changed;
       synchronized(this)
       {
          Entry old = entries.get(key);
-         if(old != null && old.at() > entry.at())
+         if(requireLive && (old == null || old.mode() == null || old.at() + TTL_MILLIS <= clock.millis()))
+         {
+            throw (new PresenceLeaseExpiredException());
+         }
+         if(old != null && old.sequence() != null
+            && (entry.sequence() == null || entry.sequence() < old.sequence()
+               || (entry.sequence().equals(old.sequence()) && (!leave || old.mode() == null))))
          {
             return (true);
          }
-         if(!leave && old == null && entries.size() >= capacity)
+         if(old != null && old.sequence() == null && entry.sequence() == null
+            && (old.at() > entry.at() || (old.at() == entry.at() && old.mode() == null && !leave)))
+         {
+            return (true);
+         }
+         if(old == null && entries.size() >= capacity)
          {
             LOG.warn("Presence capacity reached; refusing a new target");
             return (false);
          }
          List<Viewer> before = snapshotInternal(key.table(), key.pk());
-         if(leave)
-         {
-            entries.remove(key);
-         }
-         else
-         {
-            entries.put(key, entry);
-         }
+         // Keep a bounded departure marker until old messages can no longer be fresh.
+         entries.put(key, entry);
          changed = !before.equals(snapshotInternal(key.table(), key.pk()));
       }
       if(changed)
@@ -277,7 +347,7 @@ public final class PresenceRegistry implements AutoCloseable
       Map<String, Entry> users = new java.util.TreeMap<>();
       for(var row : entries.entrySet())
       {
-         if(row.getKey().table().equals(table) && (pk == null || Objects.equals(row.getKey().pk(), pk)) && row.getValue().at() + TTL_MILLIS > clock.millis())
+         if(row.getValue().mode() != null && !"PENDING".equals(row.getValue().mode()) && row.getKey().table().equals(table) && (pk == null || Objects.equals(row.getKey().pk(), pk)) && row.getValue().at() + TTL_MILLIS > clock.millis())
          {
             users.merge(row.getKey().user(), row.getValue(), (old, next) ->
                (!Objects.equals(old.mode(), next.mode()) ? "EDITING".equals(next.mode()) : next.at() >= old.at()) ? next : old);

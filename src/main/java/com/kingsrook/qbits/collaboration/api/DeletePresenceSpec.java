@@ -76,7 +76,7 @@ public class DeletePresenceSpec extends CollaborationJsonSpec
    protected Object handle(JsonInput input) throws Exception
    {
       var body = body(input, CollaborationPresenceSchemas.CollaborationPresenceLeaveV1.class);
-      new PresenceService().leave(body.connectionId(), required(body.table(), "table"), body.pk());
+      new PresenceService().leave(body.connectionId(), required(body.table(), "table"), body.pk(), body.sequence());
       return (success());
    }
 }

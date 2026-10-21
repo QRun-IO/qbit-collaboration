@@ -46,6 +46,163 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PresenceTest extends PersonalServiceFixture
 {
    /*******************************************************************************
+    ** Issued service operations retain identity, authorization and cleanup rules.
+    *******************************************************************************/
+   @Test
+   void issuedServiceRechecksAccessAndDepartureOrder() throws Exception
+   {
+      var service = new PresenceService();
+      String lease = service.openLease("document", "01");
+      assertThat(service.snapshot("document", "1")).isEmpty();
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "missing", 1L))
+         .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      assertThat(service.renewLease(lease, "document", "1", "EDITING", "title", 1L)).hasSize(1);
+      assertThatThrownBy(() -> service.leave(lease, "document", "1", null))
+         .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      login("bob");
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 2L))
+         .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+      login("alice");
+      QContext.getQSession().getPermissions().remove("document.read");
+      assertThatThrownBy(() -> service.openLease("document", "1")).isInstanceOf(QNotFoundException.class);
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 3L))
+         .isInstanceOf(QNotFoundException.class);
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).isEmpty();
+      login("alice");
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 4L))
+         .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+   }
+
+   /*******************************************************************************
+    ** Local issued authority is bounded and cannot be recreated by late requests.
+    *******************************************************************************/
+   @Test
+   void localIssuedLeasesRequireExistingAuthority() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var local = new PresenceRegistry(bus, clock, 1); var other = new PresenceRegistry(bus, clock, 1))
+      {
+         String lease = local.openLease("alice", "Alice", "document", "1");
+         assertThat(lease).startsWith("lease:");
+         assertThat(local.snapshot("document", "1")).isEmpty();
+         assertThat(local.openLease("bob", "Bob", "document", "2")).isNull();
+         assertThatThrownBy(() -> other.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 1L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThatThrownBy(() -> local.renewLease("bob", "Bob", lease, "document", "1", "EDITING", "title", 1L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         local.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 1L);
+         clock.advance(1000);
+         local.renewLease("alice", "Alice", lease, "document", "1", "VIEWING", null, 1L);
+         assertThat(local.snapshot("document", "1").getFirst().mode()).isEqualTo("EDITING");
+         clock.advance(PresenceRegistry.TTL_MILLIS - 1000);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 2L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThat(local.snapshot("document", "1")).isEmpty();
+         String replacement = local.openLease("alice", "Alice", "document", "1");
+         local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 1L);
+         local.leave("alice", replacement, "document", "1", 3L);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 4L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         clock.advance(PresenceRegistry.TTL_MILLIS);
+         assertThatThrownBy(() -> local.heartbeat("alice", "Alice", replacement, "document", "1", "EDITING", "title", 5L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 5L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThat(local.snapshot("document", "1")).isEmpty();
+      }
+   }
+
+   /*******************************************************************************
+    ** Delayed HTTP renewals and departures retain client order across replicas.
+    *******************************************************************************/
+   @Test
+   void clientSequenceOrdersDelayedRequests() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, 10); var second = new PresenceRegistry(bus, clock, 10))
+      {
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "title", 2L);
+         clock.advance(10);
+         second.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "old", 1L);
+         assertThat(first.snapshot("document", "1").getFirst().fieldName()).isEqualTo("title");
+         second.leave("alice", "tab", "document", "1", 3L);
+         clock.advance(10);
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "title", 2L);
+         assertThat(first.snapshot("document", "1")).isEmpty();
+         assertThat(second.snapshot("document", "1")).isEmpty();
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "VIEWING", null, 4L);
+         second.leave("alice", "tab", "document", "1", 3L);
+         assertThat(second.snapshot("document", "1")).hasSize(1);
+      }
+   }
+
+   /*******************************************************************************
+    ** Departure keeps unknown-target errors without preventing revoked cleanup.
+    *******************************************************************************/
+   @Test
+   void departureRejectsUnknownTable() throws Exception
+   {
+      var service = new PresenceService();
+      assertThatThrownBy(() -> service.leave("valid-connection", "nonexistent", null))
+         .isInstanceOf(QNotFoundException.class).hasMessage("Not found");
+      service.heartbeat("valid-connection", "document", "1", "VIEWING", null);
+      QContext.getQSession().getPermissions().remove("document.read");
+      service.leave("valid-connection", "document", "1");
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** A departure wins over delayed and same-timestamp renewals on every pod.
+    *******************************************************************************/
+   @Test
+   void departedLeaseCannotBeResurrectedByOldHeartbeat() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, 2))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         registry.heartbeat("alice", "Alice", "one", "document", "1", "EDITING", "title");
+         var old = events.stream().filter(event -> event.getEvent().equals("presence.heartbeat")).findFirst().orElseThrow();
+         registry.leave("alice", "one", "document", "1");
+         bus.publish(old);
+         assertThat(registry.snapshot("document", "1")).isEmpty();
+         clock.advance(1);
+         registry.heartbeat("alice", "Alice", "one", "document", "1", "VIEWING", null);
+         assertThat(registry.snapshot("document", "1")).hasSize(1);
+         clock.advance(PresenceRegistry.TTL_MILLIS);
+         assertThat(registry.snapshot("document", "1")).isEmpty();
+      }
+   }
+
+   /*******************************************************************************
+    ** Focus is validated for the sender and projected again for each recipient.
+    *******************************************************************************/
+   @Test
+   void focusedFieldsRespectVisibilityOnEveryResponse() throws Exception
+   {
+      var table = instance.getTable("document");
+      table.withField(new com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData("hidden", com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType.STRING).withIsHidden(true));
+      table.withField(new com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData("password", com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType.PASSWORD));
+      var service = new PresenceService();
+      for(String field : List.of("hidden", "password", "missing"))
+      {
+         assertThatThrownBy(() -> service.heartbeat("alice-tab", "document", "1", "EDITING", field))
+            .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      }
+      service.heartbeat("alice-tab", "document", "1", "EDITING", "title");
+      login("bob");
+      assertThat(service.snapshot("document", "1").getFirst().fieldName()).isEqualTo("title");
+      table.getField("title").setIsHidden(true);
+      assertThat(service.snapshot("document", "1").getFirst().fieldName()).isNull();
+      assertThat(service.heartbeat("bob-tab", "document", "1", "VIEWING", null))
+         .allSatisfy(viewer -> assertThat(viewer.fieldName()).isNull());
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).anySatisfy(viewer -> assertThat(viewer.fieldName()).isEqualTo("title"));
+      table.getField("title").setIsHidden(false);
+      assertThat(service.snapshot("document", "1")).anySatisfy(viewer -> assertThat(viewer.fieldName()).isEqualTo("title"));
+   }
+
+   /*******************************************************************************
     ** Renewals replicate even without a visible change; tabs merge until all expire.
     *******************************************************************************/
    @Test

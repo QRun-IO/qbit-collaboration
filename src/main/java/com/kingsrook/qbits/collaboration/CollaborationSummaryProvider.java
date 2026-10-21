@@ -49,7 +49,7 @@ public class CollaborationSummaryProvider implements RecordFeatureSummaryProvide
       String user = PersonalRecords.currentUserId();
       if(features.isEnabled(RecordFeature.PRESENCE))
       {
-         summary.setPresence(com.kingsrook.qbits.collaboration.presence.PresenceRegistry.get(QContext.getQInstance()).snapshot(ref.tableName(), id).stream().map(viewer ->
+         summary.setPresence(new com.kingsrook.qbits.collaboration.presence.PresenceService().snapshot(ref.tableName(), id).stream().map(viewer ->
          {
             java.util.Map<String, java.io.Serializable> entry = new java.util.LinkedHashMap<>();
             entry.put("userId", viewer.userId());

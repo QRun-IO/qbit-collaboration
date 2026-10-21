@@ -58,7 +58,10 @@ public class CustomFieldsProvider implements RuntimeMetaDataProviderInterface
    @Override
    public RuntimeMetaDataContribution getContribution(QInstance instance) throws QException
    {
-      com.kingsrook.qbits.collaboration.presence.PresenceRegistry.get(instance);
+      if(com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig.forInstance(instance) == null)
+      {
+         com.kingsrook.qbits.collaboration.presence.PresenceRegistry.get(instance);
+      }
       var result = new RuntimeMetaDataContribution();
       var overrides = new FeatureSettingsProvider().getOverrides(instance);
       List<QRecord> definitions = CollaborationRecords.query(CollaborationTables.FIELD_DEFINITION,

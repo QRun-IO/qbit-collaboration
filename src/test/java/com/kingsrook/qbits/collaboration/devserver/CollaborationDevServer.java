@@ -310,6 +310,9 @@ public class CollaborationDevServer extends AbstractQQQApplication
    {
       return (new QTableMetaData().withName(name).withLabel(label).withIcon(new QIcon(icon)).withBackendName("memory")
          .withPrimaryKeyField("id").withField(new QFieldMetaData("id", QFieldType.INTEGER))
+         .withField(new QFieldMetaData("modifyDate", QFieldType.DATE_TIME)
+            .withBehavior(com.kingsrook.qqq.backend.core.model.metadata.fields.DynamicDefaultValueBehavior.MODIFY_DATE))
+         .withSection(new QFieldSection("audit", new QIcon("history"), Tier.T3, List.of("modifyDate")).withLabel("Updated"))
          .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.READ_WRITE_PERMISSIONS))
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD)));
    }

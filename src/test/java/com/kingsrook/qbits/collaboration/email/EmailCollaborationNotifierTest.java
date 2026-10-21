@@ -200,7 +200,7 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
 
    /*******************************************************************************
     ** Each recipient gets their own message; the share and task kinds use their
-    ** own templates and key kinds; follow digests send no email.
+    ** own templates and key kinds, including follow digests.
     *******************************************************************************/
    @Test
    void oneMessagePerRecipientAndKinds() throws Exception
@@ -211,7 +211,7 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
       Notifications.send(notification("bob", CollaborationNotification.Category.TASK, "9:remindAt"));
       Notifications.send(notification("bob", CollaborationNotification.Category.FOLLOW, "1"));
       assertThat(messages()).extracting(m -> m.getValueString("idempotencyKey"))
-         .containsExactlyInAnyOrder("collaboration:share:3:bob", "collaboration:share:3:eve", "collaboration:task:9:remindAt:bob");
+         .containsExactlyInAnyOrder("collaboration:share:3:bob", "collaboration:share:3:eve", "collaboration:task:9:remindAt:bob", "collaboration:follow:1:bob");
       assertThat(messages()).allSatisfy(m -> assertThat(m.getValueString("toAddresses")).doesNotContain(","));
       assertThat(EmailApi.findMessagesByIdempotencyKeyPrefix("collaboration:", 10)).extracting(EmailApiMessage::templateName)
          .contains("collaboration_share", "collaboration_task_reminder");
@@ -228,7 +228,11 @@ class EmailCollaborationNotifierTest extends PersonalServiceFixture
       withEmail();
       config.withRecipientEmailResolver(user -> "eve".equals(user) ? "other@example.org" : null);
       Notifications.send(notification("eve", CollaborationNotification.Category.MENTION, "1"));
-      Notifications.send(notification("bob", CollaborationNotification.Category.MENTION, "2"));
+      boolean[] receipt = {false};
+      Notifications.send(notification("bob", CollaborationNotification.Category.MENTION, "2"), () -> receipt[0] = true);
+      assertThat(receipt[0]).isFalse();
+      Notifications.send(notification("eve", CollaborationNotification.Category.MENTION, "1"), () -> receipt[0] = true);
+      assertThat(receipt[0]).isTrue();
       assertThat(messages()).singleElement().satisfies(m -> assertThat(m.getValueString("toAddresses")).contains("other@example.org"));
    }
 

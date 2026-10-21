@@ -90,10 +90,19 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
    @Override
    public void notify(CollaborationNotification n)
    {
+      deliver(n);
+   }
+
+   /*******************************************************************************
+    ** A receipt means the queue accepted this event, including an existing duplicate.
+    *******************************************************************************/
+   @Override
+   public boolean deliver(CollaborationNotification n)
+   {
       EmailApiTemplate template = templateFor(n.category());
       if(template == null)
       {
-         return;
+         return (false);
       }
       try
       {
@@ -101,7 +110,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
          if(!StringUtils.hasContent(address))
          {
             LOG.info("Collaboration email skipped: no address for recipient", logPair("userId", n.recipientUserId()));
-            return;
+            return (false);
          }
          EmailApi.ensureTemplate(template);
          String eventId = n.sourceId() != null ? n.sourceId() : n.sourceRecordId();
@@ -123,10 +132,12 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
             LOG.info("Collaboration email not queued", logPair("userId", n.recipientUserId()), logPair("status", result.status()),
                logPair("messageId", result.messageId()));
          }
+         return (result.status() == EmailApiStatus.QUEUED || result.status() == EmailApiStatus.DUPLICATE);
       }
       catch(QException | RuntimeException e)
       {
          LOG.warn("Collaboration email failed", e, logPair("userId", n.recipientUserId()), logPair("category", n.category()));
+         return (false);
       }
    }
 
@@ -183,6 +194,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
       {
          case MENTION -> "mention";
          case SHARE -> "share";
+         case FOLLOW -> "follow";
          default -> "task";
       });
    }
@@ -199,6 +211,7 @@ public final class EmailCollaborationNotifier implements CollaborationNotifier
          case MENTION -> mentionTemplate();
          case SHARE -> shareTemplate();
          case TASK -> taskReminderTemplate();
+         case FOLLOW -> definition("collaboration_follow", "Followed record changed", "Changes to {{recordLabel}}", "A record you follow has changed.\n\n[View record]({{link}})");
          default -> null;
       });
    }

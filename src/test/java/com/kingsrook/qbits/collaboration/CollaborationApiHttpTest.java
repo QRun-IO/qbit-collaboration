@@ -63,6 +63,23 @@ import static org.assertj.core.api.Assertions.assertThat;
  *******************************************************************************/
 class CollaborationApiHttpTest extends PersonalServiceFixture
 {
+   /***************************************************************************
+    ** Shared presence has an explicit unavailable response, never a local fallback.
+    ***************************************************************************/
+   @Test
+   void unavailablePresenceHttp() throws Exception
+   {
+      config.withRedisPresence(new com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig()
+         .withConnectionName("not-started").withDeployment("test").withApplication("fixture")
+         .withScopeProvider(new QCodeReference(RedisPresenceServiceTest.TenantScope.class)));
+      assertError(503, "GET", "/presence?table=document&pk=1", null, "alice");
+      assertError(503, "POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}", "alice");
+      assertError(503, "POST", "/presence/leases/renew", "{\"connectionId\":\"lease:missing\",\"table\":\"document\",\"pk\":\"1\",\"mode\":\"VIEWING\",\"sequence\":1}", "alice");
+      assertError(400, "POST", "/presence", "{\"connectionId\":\"tab\",\"table\":\"document\",\"pk\":\"1\",\"mode\":\"VIEWING\"}", "alice");
+      assertError(503, "DELETE", "/presence", "{\"connectionId\":\"tab\",\"table\":\"document\",\"pk\":\"1\"}", "alice");
+      assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
+   }
+
    private static final ObjectMapper JSON = new ObjectMapper();
    private final HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
    private QApplicationJavalinServer server;
@@ -228,6 +245,27 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertError(400, "POST", "/presence", "{\"connectionId\":\"x\",\"table\":\"document\",\"mode\":\"BAD\"}", "alice");
       assertError(400, "GET", "/presence", null, "alice");
       assertThat(ok("DELETE", "/presence", "{\"connectionId\":\"tab-one\",\"table\":\"document\",\"pk\":\"1\"}").get("success").asBoolean()).isTrue();
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** HTTP-issued leases are invisible until activated and expire explicitly.
+    *******************************************************************************/
+   @Test
+   void issuedPresenceHttp() throws Exception
+   {
+      String lease = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"01\"}").get("connectionId").asText();
+      assertThat(lease).startsWith("lease:");
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
+      String body = new ObjectMapper().writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "mode", "EDITING", "fieldName", "title", "sequence", 1));
+      assertThat(ok("POST", "/presence/leases/renew", body).get("viewers")).hasSize(1);
+      assertError(404, "POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"3\"}", "alice");
+      assertError(404, "POST", "/presence/leases/renew", body, "outsider");
+      assertError(400, "POST", "/presence/leases/renew", body.replace("\"sequence\":1", "\"sequence\":0"), "alice");
+      String leave = new ObjectMapper().writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "sequence", 2));
+      ok("DELETE", "/presence", leave);
+      var expired = json(request("POST", "/presence/leases/renew", body, "alice"), 409);
+      assertThat(expired.get("code").asText()).isEqualTo("PRESENCE_LEASE_EXPIRED");
       assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
    }
 
@@ -402,6 +440,21 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode candidate = ok("GET", "/mentions/candidates?table=document&pk=1&q=carol", null).at("/items/0");
       assertThat(candidate.at("/person/userId").asText()).isEqualTo("carol");
       assertThat(candidate.get("canRead").asText()).isEqualTo("true");
+      json(request("POST", "/records/document/1/comments", "{\"body\":\"Review @[Alice](user:alice)\"}", "carol"), 200);
+      ok("POST", "/records/document/1/comments", "{\"body\":\"Review @[Carol](user:carol)\"}");
+      // Delivery is external to this HTTP fixture; persist its receipt before testing read state.
+      for(var mention : CollaborationRecords.query(com.kingsrook.qbits.collaboration.model.CollaborationTables.MENTION,
+         new com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter()))
+      {
+         CollaborationRecords.update(com.kingsrook.qbits.collaboration.model.CollaborationTables.MENTION,
+            new com.kingsrook.qqq.backend.core.model.data.QRecord().withValue("id", mention.getValue("id")).withValue("notifiedAt", java.time.Instant.now()));
+      }
+      assertThat(ok("GET", "/my-work", null).get("unreadMentionCount").asLong()).isPositive();
+      assertThat(json(request("GET", "/my-work", null, "carol"), 200).get("unreadMentionCount").asLong()).isEqualTo(1);
+      ok("POST", "/my-work/mentions/read", null);
+      assertThat(ok("GET", "/my-work", null).get("unreadMentionCount").asLong()).isZero();
+      assertThat(json(request("GET", "/my-work", null, "carol"), 200).get("unreadMentionCount").asLong()).isEqualTo(1);
+      ok("POST", "/my-work/mentions/read", null);
       assertThat(ok("GET", "/records/document/1/follow", null).at("/follow/reason").asText()).isEqualTo("COMMENTED");
       JsonNode state = ok("PUT", "/records/document/1/follow", "{\"notifyOnChange\":false,\"notifyOnComment\":true}");
       assertThat(state.at("/follow/notifyOnChange").asBoolean()).isFalse();
@@ -509,7 +562,7 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode version = json(client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/qqq/v1/version")).GET().build(),
          HttpResponse.BodyHandlers.ofString()), 200);
       assertThat(version.at("/extensions/0/name").asText()).isEqualTo("collaboration");
-      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.1.0");
+      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.3.0");
    }
 
    /*******************************************************************************

@@ -47,6 +47,7 @@ public class CollaborationQBitConfig implements QBitConfig
    private List<String> mirroredSecurityKeyTypes = List.of();
 
    private QCodeReference notifier = null;
+   private com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig redisPresence;
    private Function<String, String> recipientEmailResolver = null;
    private QCodeReference userSessionProvider = null;
    private String defaultTagMode = "FREE";
@@ -297,6 +298,10 @@ public class CollaborationQBitConfig implements QBitConfig
    @Override
    public void validate(QInstance instance, List<String> errors)
    {
+      if(redisPresence != null)
+      {
+         redisPresence.validate(errors);
+      }
       if(assertCondition(StringUtils.hasContent(backendName), "backendName is required for Collaboration", errors))
       {
          assertCondition(instance.getBackend(backendName) != null, "Unknown Collaboration backend: " + backendName, errors);
@@ -673,5 +678,22 @@ public class CollaborationQBitConfig implements QBitConfig
    public void setManagedIndexes(Boolean managedIndexes)
    {
       this.managedIndexes = managedIndexes;
+   }
+
+   /***************************************************************************
+    ** Optional shared Redis presence; absent retains the existing memory provider.
+    ***************************************************************************/
+   public com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig getRedisPresence()
+   {
+      return (redisPresence);
+   }
+
+   /***************************************************************************
+    ** Select shared presence with explicit host-derived tenant scope.
+    ***************************************************************************/
+   public CollaborationQBitConfig withRedisPresence(com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig value)
+   {
+      redisPresence = value;
+      return (this);
    }
 }

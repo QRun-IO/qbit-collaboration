@@ -129,9 +129,19 @@ public class AttachmentsService
             }
          }
          String type = contentType == null || contentType.isBlank() ? "application/octet-stream" : contentType;
+         var transaction = QContext.getQBackendTransaction();
+         if(transaction != null && !transaction.supportsRollbackCallbacks())
+         {
+            throw (new QException("Attachment uploads require a transaction with confirmed rollback support."));
+         }
          try(InputStream upload = Files.newInputStream(temporary))
          {
             storage.put(bucket, PutRequest.of(key, upload).withContentLength(size).withContentType(type).withContentDisposition("inline"));
+         }
+         if(transaction != null)
+         {
+            var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
+            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context, () -> storage.delete(bucket, key)));
          }
          boolean rowSaved = false;
          try
@@ -303,6 +313,22 @@ public class AttachmentsService
     *******************************************************************************/
    void deleteStoredRow(QRecord row, boolean cleanup) throws QException
    {
+      if(QContext.getQBackendTransaction() != null)
+      {
+         var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
+         QContext.getQBackendTransaction().addAfterCommitCallback(() ->
+         {
+            try
+            {
+               QContext.withTemporaryContext(context, () -> deleteStoredRow(row, cleanup));
+            }
+            catch(QException e)
+            {
+               throw (new IllegalStateException("Attachment deletion requires retry", e));
+            }
+         });
+         return;
+      }
       storage.delete(row.getValueString("bucketName"), row.getValueString("storageKey"));
       DeleteInput input = new DeleteInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withPrimaryKeys(List.of(row.getValue("id")));
       input.setTableMetaData(cleanup ? com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupMetadata(CollaborationTables.ATTACHMENT) : AttachmentRecords.storageTable());

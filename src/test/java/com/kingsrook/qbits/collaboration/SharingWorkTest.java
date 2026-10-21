@@ -389,11 +389,16 @@ public class SharingWorkTest extends PersonalServiceFixture
    @Test
    void assignmentsUpsertAndMyRecordsRespectParentLocks() throws Exception
    {
+      assertThatThrownBy(() -> assignments.assignRoles("document", 1, null, null, java.util.Set.of())).hasMessageContaining("Supply ownerUserId");
       assertThatThrownBy(() -> assignments.assign("document", 1, "eve", null)).hasMessageContaining("can't open");
       QRecord first = assignments.assign("document", 1, "alice", "bob");
       QRecord again = assignments.assign("document", "01", "alice", "bob");
       assertThat(again.getValue("id")).isEqualTo(first.getValue("id"));
       assertThat(recorder.notifications()).hasSize(1);
+      QRecord ownerOnly = assignments.assignRoles("document", 1, null, null, java.util.Set.of("ownerUserId"));
+      assertThat(ownerOnly.getValueString("ownerUserId")).isNull();
+      assertThat(ownerOnly.getValueString("assigneeUserId")).isEqualTo("bob");
+      assignments.assignRoles("document", 1, "alice", null, java.util.Set.of("ownerUserId"));
       assignments.assign("document", 2, null, "alice");
       assertThat(assignments.myRecords(null, 1).get("document").count()).isEqualTo(2);
       assertThat(assignments.myRecords("document", 1).get("document").records()).hasSize(1);
@@ -402,6 +407,21 @@ public class SharingWorkTest extends PersonalServiceFixture
       QContext.getQSession().getSecurityKeyValues().put("tenant", new ArrayList<>(List.of("b")));
       assertThat(assignments.myRecords(null, 10)).isEmpty();
       assertThat(instance.getTable(CollaborationTables.RECORD_ASSIGNMENT).getPermissionRules().getDenyBehavior()).isEqualTo(DenyBehavior.HIDDEN);
+   }
+
+   /*******************************************************************************
+    ** The fallback API cannot create a competing owner for native ownership metadata.
+    *******************************************************************************/
+   @Test
+   void fallbackAssignmentsRejectNativeOwnership() throws Exception
+   {
+      var metadata = com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData.ofOrWithNew(instance.getTable("document"));
+      metadata.withOwnership(new com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordOwnership().withOwnerFieldName("title"));
+      com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay.refresh(instance);
+      assertThatThrownBy(() -> assignments.assignRoles("document", 1, "alice", null, java.util.Set.of("ownerUserId")))
+         .hasMessageContaining("native ownership");
+      assertThat(assignments.get("document", 1)).isEmpty();
+      assertThat(assignments.assignRoles("document", 1, null, "bob", java.util.Set.of("assigneeUserId")).getValueString("assigneeUserId")).isEqualTo("bob");
    }
 
    /*******************************************************************************

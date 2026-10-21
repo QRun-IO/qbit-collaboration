@@ -42,10 +42,66 @@ public final class CollaborationPresenceSchemas
    }
 
    /*******************************************************************************
+    ** Target for invisible server-issued renewal authority.
+    *******************************************************************************/
+   public record CollaborationPresenceOpenV1(String table, String pk) implements ToSchema
+   {
+      /***************************************************************************
+       ** Opening alone never advertises a viewer.
+       ***************************************************************************/
+      @Override
+      public Schema toSchema()
+      {
+         return (new Schema().withType(Type.OBJECT).withProperties(new TreeMap<>(Map.of(
+            "table", text("Parent table name.", false), "pk", text("Optional record key.", true)))));
+      }
+   }
+
+   /*******************************************************************************
+    ** Opaque handle bound to the authenticated caller and target.
+    *******************************************************************************/
+   public record CollaborationPresenceLeaseV1(String connectionId) implements ToSchema
+   {
+      /***************************************************************************
+       ** Activate with a positive sequence; acquire a new handle after expiry.
+       ***************************************************************************/
+      @Override
+      public Schema toSchema()
+      {
+         return (new Schema().withType(Type.OBJECT).withProperties(Map.of(
+            "connectionId", text("Server-issued handle. Renew before 45 seconds; departure is terminal.", false))));
+      }
+   }
+
+   /*******************************************************************************
+    ** Stable machine-readable response for missing renewal authority.
+    *******************************************************************************/
+   public record CollaborationPresenceExpiredV1(String code) implements ToSchema
+   {
+      /***************************************************************************
+       ** Clients rejoin only if their surface is still active and visible.
+       ***************************************************************************/
+      @Override
+      public Schema toSchema()
+      {
+         return (new Schema().withType(Type.OBJECT).withProperties(Map.of(
+            "code", text("Open a fresh lease before retrying renewal.", false).withEnumValues(List.of("PRESENCE_LEASE_EXPIRED")))));
+      }
+   }
+
+   /*******************************************************************************
     ** All identity information is derived from the authenticated session.
     *******************************************************************************/
-   public record CollaborationPresenceRequestV1(String connectionId, String table, String pk, String mode, String fieldName) implements ToSchema
+   public record CollaborationPresenceRequestV1(String connectionId, String table, String pk, String mode, String fieldName, Long sequence) implements ToSchema
    {
+      /*******************************************************************************
+       ** Preserve source callers that do not yet send sequence numbers.
+       *******************************************************************************/
+      public CollaborationPresenceRequestV1(String connectionId, String table, String pk, String mode, String fieldName)
+      {
+         this(connectionId, table, pk, mode, fieldName, null);
+      }
+
       /*******************************************************************************
        ** Clients renew every twenty seconds; the lease expires after forty-five.
        *******************************************************************************/
@@ -57,15 +113,24 @@ public final class CollaborationPresenceSchemas
                "connectionId", text("Client connection identity.", false), "table", text("Parent table name.", false),
                "pk", text("Optional parent key; omit for a table view.", true),
                "mode", text("VIEWING or EDITING.", false).withEnumValues(List.of("VIEWING", "EDITING")),
-               "fieldName", text("Optional focused field on a record.", true)))));
+               "fieldName", text("Optional focused field on a record.", true),
+               "sequence", sequenceSchema()))));
       }
    }
 
    /*******************************************************************************
     ** Leave removes only this authenticated user's connection and target.
     *******************************************************************************/
-   public record CollaborationPresenceLeaveV1(String connectionId, String table, String pk) implements ToSchema
+   public record CollaborationPresenceLeaveV1(String connectionId, String table, String pk, Long sequence) implements ToSchema
    {
+      /*******************************************************************************
+       ** Preserve source callers that do not yet send sequence numbers.
+       *******************************************************************************/
+      public CollaborationPresenceLeaveV1(String connectionId, String table, String pk)
+      {
+         this(connectionId, table, pk, null);
+      }
+
       /*******************************************************************************
        ** Leave does not need a mode or a field.
        *******************************************************************************/
@@ -75,7 +140,7 @@ public final class CollaborationPresenceSchemas
          return (new Schema().withType(Type.OBJECT).withDescription("Remove the caller's lease on this connection and target.")
             .withProperties(new TreeMap<>(Map.of(
                "connectionId", text("Client connection identity.", false), "table", text("Parent table name.", false),
-               "pk", text("Optional parent key.", true)))));
+               "pk", text("Optional parent key.", true), "sequence", sequenceSchema()))));
       }
    }
 
@@ -121,5 +186,14 @@ public final class CollaborationPresenceSchemas
    private static Schema text(String description, boolean nullable)
    {
       return (new Schema().withType(Type.STRING).withDescription(description).withNullable(nullable));
+   }
+
+   /*******************************************************************************
+    ** Optional for legacy clients; new clients increment on every renewal and leave.
+    *******************************************************************************/
+   private static Schema sequenceSchema()
+   {
+      return (new Schema().withType(Type.INTEGER).withNullable(true)
+         .withDescription("Monotonically increasing nonnegative safe integer per connection and target; orders delayed requests."));
    }
 }

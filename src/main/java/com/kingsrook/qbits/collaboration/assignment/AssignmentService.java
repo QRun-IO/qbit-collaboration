@@ -54,14 +54,41 @@ public class AssignmentService
     *******************************************************************************/
    public QRecord assign(String table, Serializable recordId, String ownerUserId, String assigneeUserId) throws QException
    {
+      return (assignRoles(table, recordId, ownerUserId, assigneeUserId, java.util.Set.of("ownerUserId", "assigneeUserId")));
+   }
+
+   /*******************************************************************************
+    ** Omitted roles remain unchanged; an explicitly supplied null clears a role.
+    *******************************************************************************/
+   public QRecord assignRoles(String table, Serializable recordId, String ownerUserId, String assigneeUserId, java.util.Set<String> roles) throws QException
+   {
       ParentRecordAccess.requireFeature(table, recordId, "assign");
       String id = FollowService.canonicalId(table, recordId);
+      if(roles == null || roles.isEmpty() || !java.util.Set.of("ownerUserId", "assigneeUserId").containsAll(roles))
+      {
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Supply ownerUserId or assigneeUserId; omitted roles remain unchanged."));
+      }
+      var instance = com.kingsrook.qqq.backend.core.context.QContext.getQInstance();
+      var ownership = com.kingsrook.qqq.backend.core.actions.collaboration.RecordFeaturesResolver.resolve(instance, instance.getTable(table)).getOwnership();
+      if(ownership != null && ((roles.contains("ownerUserId") && ownership.getOwnerFieldName() != null)
+         || (roles.contains("assigneeUserId") && ownership.getAssigneeFieldName() != null)))
+      {
+         throw (new com.kingsrook.qqq.backend.core.exceptions.QBadRequestException("Update native ownership fields through the parent record's versioned update endpoint."));
+      }
       WorkSupport.requireReader(ownerUserId, table, id);
       WorkSupport.requireReader(assigneeUserId, table, id);
       synchronized(CollaborationRecords.config())
       {
          Optional<QRecord> old = get(table, id);
-         QRecord change = new QRecord().withValue("ownerUserId", ownerUserId).withValue("assigneeUserId", assigneeUserId);
+         QRecord change = new QRecord();
+         if(roles.contains("ownerUserId"))
+         {
+            change.setValue("ownerUserId", ownerUserId);
+         }
+         if(roles.contains("assigneeUserId"))
+         {
+            change.setValue("assigneeUserId", assigneeUserId);
+         }
          QRecord row;
          if(old.isEmpty())
          {
@@ -73,7 +100,7 @@ public class AssignmentService
             row = get(table, id).orElseThrow();
          }
          ActivityWriter.write(table, id, "ASSIGNED", "Record assignment changed", CollaborationTables.RECORD_ASSIGNMENT, row.getValueString("id"));
-         if(assigneeUserId != null && (old.isEmpty() || !Objects.equals(old.get().getValueString("assigneeUserId"), assigneeUserId)))
+         if(roles.contains("assigneeUserId") && assigneeUserId != null && (old.isEmpty() || !Objects.equals(old.get().getValueString("assigneeUserId"), assigneeUserId)))
          {
             new FollowService().ensureFollower(assigneeUserId, table, id, "ASSIGNED");
             if(!assigneeUserId.equals(PersonalRecords.currentUserId()))
