@@ -35,3 +35,41 @@ five task queries and between one and eight parent queries. It also verifies the
 same top ten, visible count and next-request permission revocation against SQL.
 The fixture passes; these query counts are not sustained throughput or
 deployment-capacity measurements.
+
+## Reproducible local workload
+
+Run `mvn -Dtest=MyWorkPostgresTest -Dqqq.mywork.load=true test` with Java21 and
+Docker. The fixture owns a disposable PostgreSQL17 container, uses the generated
+schema and real authorization checks, and writes `target/mywork-load.csv`.
+It never connects to an application database. The optional workload runs after
+the normal query-budget regression so ordinary CI keeps the smaller test.
+
+Each scenario has 2,000 tasks: one uses ten shared parents, the other 2,000 distinct
+parents. Every tenth parent is inaccessible. Two warmups precede ten measured
+sequential summaries. Every sample verifies 1,800 visible tasks and the exact top
+ten. SQL calls and server execution time are collected independently using
+pg_stat_statements after warmup. Latency includes service execution and database
+round trips, excluding fixture setup and assertions.
+
+CSV percentiles use nearest rank. With only ten samples, p95 and p99 both equal
+the maximum observed sample; they are descriptive, not stable tail estimates.
+SQL figures are totals for all ten samples. This is a single-JVM local workload,
+not HTTP/browser latency, sustained concurrency, pool saturation, multi-node
+presence or a deployment-capacity claim. Do not derive production alert thresholds
+from these numbers. No wall-clock performance assertion is added to CI.
+
+The fixture explicitly uses the framework C3P0 connection provider, matching the
+host's provider, with initial/minimum1, maximum3 and a two-second checkout timeout.
+It verifies the pool stays within that cap, has no checkout timeouts and returns
+all borrowed connections after each scenario. The original fixture used the
+unpooled default; the expanded workload failed with a Windows socket-allocation
+error after repeatedly opening connections. This was a fixture mismatch, not
+proof of a Kof22 outage. The same workload completed with pooling.
+
+Observed local run (Java21, PostgreSQL17 in Docker on Windows, ten sequential
+samples after two warmups): shared-parent p50=91.192ms, max=112.105ms; distinct-parent
+p50=960.565ms, max=1100.260ms. SQL calls per summary were113 and2013 respectively.
+This confirms linear distinct-parent authorization work remains despite bounded
+row retention. The existing exact-count semantics still require examining every
+matching task. No runtime optimization or production-capacity claim follows from
+this fixture measurement alone.

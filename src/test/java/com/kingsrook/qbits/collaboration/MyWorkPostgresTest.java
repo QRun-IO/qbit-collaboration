@@ -21,7 +21,11 @@
 
 package com.kingsrook.qbits.collaboration;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
+import java.util.Arrays;
+import java.util.Locale;
 import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +33,9 @@ import com.kingsrook.qbits.collaboration.mywork.MyWorkService;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.module.postgres.model.metadata.PostgreSQLBackendMetaData;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
+import com.kingsrook.qqq.backend.module.rdbms.jdbc.C3P0PooledConnectionProvider;
+import com.kingsrook.qqq.backend.module.rdbms.model.metadata.ConnectionPoolSettings;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,6 +88,10 @@ class MyWorkPostgresTest extends PersonalServiceFixture
       instance.addBackend(new PostgreSQLBackendMetaData().withName("memory").withHostName(postgres.getHost())
          .withPort(postgres.getMappedPort(5432)).withDatabaseName("postgres")
          .withUsername("postgres").withPassword("mywork-fixture-only"));
+      var backend = (PostgreSQLBackendMetaData) instance.getBackend("memory");
+      backend.setConnectionProvider(new QCodeReference(C3P0PooledConnectionProvider.class));
+      backend.setConnectionPoolSettings(new ConnectionPoolSettings().withInitialPoolSize(1).withMinPoolSize(1)
+         .withMaxPoolSize(3).withAcquireIncrement(1).withCheckoutTimeoutSeconds(2));
       try(Connection connection = connect(); var sql = connection.createStatement())
       {
          sql.execute("CREATE EXTENSION pg_stat_statements");
@@ -136,6 +147,78 @@ class MyWorkPostgresTest extends PersonalServiceFixture
       }
       QContext.getQSession().getSecurityKeyValues().put("tenant", new ArrayList<>(List.of("b")));
       assertThat(new MyWorkService().summary().openTaskCount()).isEqualTo(1);
+      if(Boolean.getBoolean("qqq.mywork.load"))
+      {
+         QContext.getQSession().getSecurityKeyValues().put("tenant", new ArrayList<>(List.of("a")));
+         measureLoad();
+      }
+   }
+
+   /*******************************************************************************
+    ** Opt-in reproducible SQL work measurement, not a deployment capacity claim.
+    *******************************************************************************/
+   private void measureLoad() throws Exception
+   {
+      final int tasks = 2000;
+      final int samples = 10;
+      List<String> report = new ArrayList<>();
+      report.add("tasks,parents,samples,p50_ms,p95_ms,p99_ms,sql_calls,sql_execution_ms");
+      for(int parents : List.of(10, tasks))
+      {
+         try(Connection connection = connect(); var sql = connection.createStatement())
+         {
+            sql.execute("TRUNCATE collaboration_task, document");
+            sql.execute("INSERT INTO document SELECT n, 'Document ' || n, CASE WHEN n%10=0 THEN 'b' ELSE 'a' END FROM generate_series(1," + parents + ") n");
+            sql.execute("INSERT INTO collaboration_task (id, table_name, record_id, title, assignee_user_id, created_by_user_id, status, parent_deleted) "
+               + "SELECT n, 'document', (((n-1)%" + parents + ")+1)::text, 'Task ' || n, 'alice', 'alice', 'OPEN', false FROM generate_series(1," + tasks + ") n");
+         }
+         // Warm the JVM and pool without counting these calls in the samples.
+         for(int warmup = 0; warmup < 2; warmup++)
+         {
+            assertThat(new MyWorkService().summary().openTaskCount()).isEqualTo(1800);
+         }
+         try(Connection connection = connect(); var sql = connection.createStatement())
+         {
+            sql.execute("SELECT pg_stat_statements_reset()");
+         }
+         double[] elapsed = new double[samples];
+         for(int sample = 0; sample < samples; sample++)
+         {
+            long start = System.nanoTime();
+            var summary = new MyWorkService().summary();
+            elapsed[sample] = (System.nanoTime() - start) / 1_000_000.0;
+            assertThat(summary.openTaskCount()).isEqualTo(1800);
+            assertThat(summary.tasks()).extracting(row -> row.getValueInteger("id"))
+               .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 11);
+         }
+         var backend = (PostgreSQLBackendMetaData) instance.getBackend("memory");
+         var pool = ConnectionManager.getPoolMetrics(instance, backend);
+         // C3P0 returns connections asynchronously; allow a bounded check-in interval.
+         long deadline = System.nanoTime() + 2_000_000_000L;
+         while(pool.get("connectionsBusy").intValue() != 0 && System.nanoTime() < deadline)
+         {
+            Thread.sleep(10);
+            pool = ConnectionManager.getPoolMetrics(instance, backend);
+         }
+         assertThat(pool.get("connectionsTotal").intValue()).isBetween(1, 3);
+         assertThat(pool.get("connectionsBusy").intValue()).isZero();
+         assertThat(pool.get("checkoutTimeouts").longValue()).isZero();
+         Arrays.sort(elapsed);
+         try(Connection connection = connect(); var sql = connection.createStatement();
+            var rows = sql.executeQuery("SELECT COALESCE(sum(calls),0), COALESCE(sum(total_exec_time),0) FROM pg_stat_statements "
+               + "WHERE query ILIKE 'SELECT%' AND (query LIKE '%\"document\"%' OR query LIKE '%\"collaboration_task\"%' "
+               + "OR query LIKE '%\"collaboration_record_assignment\"%' OR query LIKE '%\"collaboration_mention\"%')"))
+         {
+            assertThat(rows.next()).isTrue();
+            report.add(String.format(Locale.ROOT, "%d,%d,%d,%.3f,%.3f,%.3f,%d,%.3f", tasks, parents, samples,
+               elapsed[4], elapsed[9], elapsed[9], rows.getLong(1), rows.getDouble(2)));
+         }
+      }
+      Path output = Path.of("target/mywork-load.csv");
+      Files.createDirectories(output.getParent());
+      Files.write(output, report);
+      System.out.println("My Work local PostgreSQL workload: " + output.toAbsolutePath());
+      report.forEach(System.out::println);
    }
 
    /*******************************************************************************
