@@ -306,6 +306,16 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       }
 
       /***************************************************************************
+       ** The test runner confirms the only writer JVM has exited before recovery.
+       ***************************************************************************/
+      @Override
+      public boolean cleanupUpload(String name, String key)
+      {
+         delete(name, key);
+         return (!haltAfterPut);
+      }
+
+      /***************************************************************************
        ** Verify recovery uses the original locator before deleting fixture bytes.
        ***************************************************************************/
       @Override
@@ -644,6 +654,58 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
 
 
    /*******************************************************************************
+    ** Object absence is not proof that a remote upload has stopped.
+    *******************************************************************************/
+   @Test
+   void genericUploadCleanupDoesNotClaimSettlement()
+   {
+      java.util.concurrent.atomic.AtomicInteger deletes = new java.util.concurrent.atomic.AtomicInteger();
+      AttachmentStorage uncertain = new AttachmentStorage()
+      {
+         @Override
+         public void delete(String name, String key)
+         {
+            deletes.incrementAndGet();
+         }
+      };
+      assertThat(uncertain.cleanupUpload("bucket", "key")).isFalse();
+      assertThat(deletes.get()).isEqualTo(1);
+   }
+
+
+   /*******************************************************************************
+    ** A timed-out remote PUT can finish after rollback has already attempted DELETE.
+    *******************************************************************************/
+   @Test
+   void lateUploadCompletionRemainsRecoverable() throws Exception
+   {
+      storage.deferPutUntilAfterFailure = true;
+      assertThatThrownBy(this::upload).isInstanceOf(IllegalStateException.class)
+         .hasMessage("injected upload timeout");
+      assertThat(rowCount()).isZero();
+      assertThat(storage.objects).isEmpty();
+
+      admin();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isZero();
+      assertThat(pendingCount()).isEqualTo(1);
+      int attempts = storage.deleteAttempts.get();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isZero();
+      assertThat(storage.deleteAttempts.get()).as("uncertain writes use persisted backoff").isEqualTo(attempts);
+
+      // The remote service finishes after rollback and an independent cleanup sweep.
+      storage.deferredPut.run();
+      assertThat(storage.objects).hasSize(1);
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.executeUpdate("UPDATE collaboration_attachment_cleanup SET next_attempt_at = CURRENT_TIMESTAMP - INTERVAL '1 second'");
+      }
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      assertThat(storage.objects).as("late provider bytes must remain discoverable for cleanup").isEmpty();
+      assertThat(pendingCount()).isZero();
+   }
+
+
+   /*******************************************************************************
     ** Replay real provider deletes after the database rejects queue acknowledgement.
     *******************************************************************************/
    @Test
@@ -852,6 +914,8 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       private final Map<String, byte[]> objects = new java.util.concurrent.ConcurrentHashMap<>();
       private boolean failDelete;
       private boolean failPutAfterWrite;
+      private boolean deferPutUntilAfterFailure;
+      private Runnable deferredPut;
       private Runnable beforePut;
       private Runnable afterPut;
       private final java.util.Set<String> failedKeys = new java.util.HashSet<>();
@@ -880,7 +944,17 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
             {
                beforePut.run();
             }
-            objects.put(name + "/" + request.getKey(), request.getStream().readAllBytes());
+            byte[] bytes = request.getStream().readAllBytes();
+            if(deferPutUntilAfterFailure)
+            {
+               deferredPut = () ->
+               {
+                  objects.put(name + "/" + request.getKey(), bytes);
+                  deferPutUntilAfterFailure = false;
+               };
+               throw (new IllegalStateException("injected upload timeout"));
+            }
+            objects.put(name + "/" + request.getKey(), bytes);
             if(afterPut != null)
             {
                afterPut.run();
@@ -894,6 +968,16 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
          {
             throw (new IllegalStateException(e));
          }
+      }
+
+      /***************************************************************************
+       ** This synchronous fixture knows whether its deferred PUT has completed.
+       ***************************************************************************/
+      @Override
+      public boolean cleanupUpload(String name, String key)
+      {
+         delete(name, key);
+         return (!deferPutUntilAfterFailure);
       }
 
       /***************************************************************************

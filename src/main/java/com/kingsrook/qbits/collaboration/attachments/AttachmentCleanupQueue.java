@@ -250,7 +250,7 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
     *******************************************************************************/
    private enum CleanupOutcome
    {
-      COMPLETED, ACTIVE, REFERENCED
+      COMPLETED, ACTIVE, REFERENCED, UNCERTAIN_UPLOAD
    }
 
 
@@ -306,7 +306,17 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
       {
          return (CleanupOutcome.REFERENCED);
       }
-      storage.delete(pending.getValueString("bucketName"), pending.getValueString("storageKey"));
+      if(pending.getValue("attachmentId") == null)
+      {
+         if(!storage.cleanupUpload(pending.getValueString("bucketName"), pending.getValueString("storageKey")))
+         {
+            return (CleanupOutcome.UNCERTAIN_UPLOAD);
+         }
+      }
+      else
+      {
+         storage.delete(pending.getValueString("bucketName"), pending.getValueString("storageKey"));
+      }
       DeleteInput delete = new DeleteInput(CollaborationTables.ATTACHMENT_CLEANUP).withPrimaryKeys(List.of(pending.getValue("id"))).withTransaction(QContext.getQBackendTransaction());
       delete.withPermissionBypass("Storage cleanup completed; remove its durable intent.");
       AttachmentRecords.checkErrors(new DeleteAction().execute(delete).getRecordsWithErrors());
@@ -368,7 +378,7 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
             {
                completed++;
             }
-            else if(outcome == CleanupOutcome.REFERENCED)
+            else if(outcome == CleanupOutcome.REFERENCED || outcome == CleanupOutcome.UNCERTAIN_UPLOAD)
             {
                defer(row);
             }
