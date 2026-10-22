@@ -1,6 +1,8 @@
 # QBit Collaboration
 
-Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and core-integrated tag filtering/search. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g add the custom-field designer and ephemeral replicated presence. Runtime overrides and TAGS mode settings resolve through core.
+Record collaboration for QQQ: attachments, tags, custom fields, comments and mentions, presence, sharing, favorites, follow, timeline, tasks, assignments and My Work. Feature settings, people directories, permissions and the app home use the standard QQQ framework. The coordinated candidate includes issued presence leases with optional shared Redis, recipient-aware field filtering, partial assignment updates, delivery acknowledgements and transaction-aware attachment cleanup.
+
+Published versions, verified behavior and deployment requirements: [Coordinated candidate](docs/CANDIDATE-RELEASE.md). Historical phase references below describe implementation history, not the current release sequence.
 
 Design: [QRun-IO/qqq PR #1136](https://github.com/QRun-IO/qqq/pull/1136), `docs/COLLABORATION.md`. See [the phase table](docs/DESIGN.md).
 
@@ -242,7 +244,7 @@ Uploads check the parent and `attach`, count bytes and compute SHA-256 while str
 
 File names are reduced to a safe basename (maximum 255 characters). Object keys are `attachments/{table}/{recordId}/{uuid}/{fileName}`; table/id segments are URL-encoded to protect string primary keys containing slashes. Renames change the display name and subsequent download filename, retaining the original storage key. `AttachmentEntry` returns display metadata, creation time and `canDelete` (author or admin); it omits bucket/key and signed URLs. Lists are newest first. Changing or deleting an own row also rechecks `attach`; admins may moderate another author's row but must still see its parent. A batch authorizes all selected rows before deleting its first object.
 
-**Permission model.** The panel service checks the parent with an enforced `GetAction` under the caller's session. Missing, unreadable and locked parents produce `QNotFoundException("Not found")`. Upload requires `<permissionBaseName>.attach` or table EDIT plus a visible parent. This is the explicitly temporary approximation of write-lock checks; distinct WRITE-only parent locks are not enforced until core's record-reference helper is released. Explicit `attach` grants work without EDIT. Collaboration tables cannot themselves be parents.
+**Permission model.** The panel service checks the parent with an enforced `GetAction` under the caller's session. Missing, unreadable and locked parents produce `QNotFoundException("Not found")`. Upload requires `<permissionBaseName>.attach` or table EDIT plus a visible parent. Core RecordReferenceSecurityHelper enforces parent visibility, and RecordFeaturePermissions applies WRITE locks for implied grants. Explicit `attach` grants work without EDIT. Collaboration tables cannot themselves be parents.
 
 The admin Attachments table additionally requires `collaboration.view` (or `collaboration.admin`). The panel service bypasses that browse grant only after its own parent/feature/ownership checks. Direct table insert/update/delete is denied; use the service and record action so storage and rows remain coordinated. Storage operations use `ObjectStorage.asSystem("collaboration", runId).bucket(alias)` after these checks, preserving calling-qbit/initiating-user operation logging without requiring users to hold `object_storage.*` grants.
 
@@ -252,7 +254,7 @@ Core reference metadata now restricts parent tables/features and enforces parent
 
 **Actions and cleanup.** `Delete attachments` is a standard streamed ETL record action with Review/Result counts, skipped unauthorized rows, permission rechecks at execution and per-row failure summaries. It is not in navigation. Soft deletion follows the bucket's versioning/trash; without either, deletion is permanent. There is deliberately no **Attach files** table action: uploads come through the API/panel. The current browse action requires `collaboration.view`; the panel may call the service without that grant.
 
-After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. Wiring to core's `RecordReferenceCleanupInterface` waits for its release. UI API endpoints use the merged #1128 extension point from the locally installed snapshot; direct/presigned upload endpoints and realtime events remain future integrations. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
+After a parent deletion commits, trusted host code can call `new AttachmentCleanup().onParentsDeleted(table, ids)`. It deletes objects and rows in batches and is retryable. It cannot check an already-deleted parent and must never be exposed as a user endpoint. CollaborationCleanup implements core's `RecordReferenceCleanupInterface`. The versioned UI API provides multipart upload and authorized download/preview URL responses using the coordinated published core. Outer transactions defer object deletion until commit; uploads require confirmed rollback-callback support. Durable crash/retry qualification remains tracked in QQQ#1289. Upload/delete now write FILE_ADDED/FILE_REMOVED activity. The table declares `fileName`/`description` search fields and uses normal QQQ writes, so host-configured record-change/ESB listeners receive events; this qbit does not install an ESB publication or Quick Search provider.
 
 Tests use real QQQ memory actions and record locks plus an in-memory `AttachmentStorage` adapter. Object storage RC.2 exposes no fake bucket; its provider conformance suite uses MinIO/Testcontainers. This suite requires no Docker and does not claim MinIO/S3 conformance.
 
@@ -339,7 +341,7 @@ The guardrail allowlist properties retain the object-storage API and `*-api` art
 2. For PostgreSQL, generate `CollaborationSchema.postgresScript(config)` and apply it with the host's migration tool. It creates tables and unique indexes, never executes DDL, and does not migrate existing schemas. QQQ owns date/default values on writes.
 3. Grant `collaboration.view` and `collaboration.admin` as appropriate; wire the host's audit persistence for FIELD audit events.
 4. Validate the assembled instance. Navigate to Collaboration for Comments, Attachments, Activity (admins), Feature Settings and People. People populate as signed-in users call collaboration services.
-5. Wait for the released core contracts and later qbit phases before enabling collaboration features on host records. Favorites, recents, attachments, comments, follow and timeline services can be used now. The versioned UI API is enabled by default; host-table overlays remain separate and scheduled work is opt-in.
+5. Use the coordinated versions in docs/CANDIDATE-RELEASE.md, enable the desired record features in host metadata, and configure their dependencies. The versioned UI API is enabled by default; scheduled work remains opt-in. Apply the documented host registration and schema migrations before rollout.
 
 ## Build
 
@@ -712,34 +714,23 @@ Archive drops the index concurrently while retaining values.
 There is no automatic migration receipt. The home shows definition/index status totals and the
 number of definitions with diagnostic messages.
 
-## Presence (phase g)
+## Presence
 
-Enable `RecordFeature.PRESENCE` on the table. The typed endpoints below
-`/qqq/v1/qbit/collaboration` are:
+Enable `RecordFeature.PRESENCE` on the relevant tables. For multiple web nodes, configure the shared Redis provider described in [REDIS-PRESENCE.md](docs/REDIS-PRESENCE.md). Use the paired versions and deployment requirements in [CANDIDATE-RELEASE.md](docs/CANDIDATE-RELEASE.md).
 
-| Operation | Input |
+The shared provider uses server-issued authority:
+
+| Operation | Behavior |
 | --- | --- |
-| `POST /presence` | `{connectionId, table, pk?, mode: "VIEWING"|"EDITING", fieldName?}` |
-| `DELETE /presence` | `{connectionId, table, pk?}` |
-| `GET /presence?table=...&pk=...` | Omit pk for a table snapshot |
+| `POST /presence/leases` | Authorizes the target and creates an invisible expiring reservation; returns its connectionId. |
+| `POST /presence/leases/renew` | Activates or renews an existing handle using an ordered sequence; includes viewing/editing mode and optional focused field. |
+| `DELETE /presence` | Performs ordered departure. A delayed renewal cannot reopen that handle. |
+| `GET /presence?table=...&pk=...` | Reads the authorized record snapshot; omit pk for a table snapshot. |
 
-Session identity supplies userId and displayName. Every call rechecks table READ and record
-GetAction visibility. Disabled features and denied/missing parents return the same 404. A
-refused renewal removes the caller's previous lease. Connection ids are namespaced by user;
-they need not be active SSE connections, allowing polling clients to participate.
+All paths are under `/qqq/v1/qbit/collaboration`. Shared presence rejects legacy heartbeat upserts. Local legacy behavior remains for compatibility; local issued authority is suitable for a single node, not an HA replacement for shared Redis.
 
-Renew on open/focus change and every 20 seconds. Leases expire after 45 seconds, with a one-second
-sweep and expiry checks on reads. The cap is 50,000 leases per pod: new targets are refused with
-a warning while existing leases can renew. Tabs merge per user; EDITING wins and the latest
-editor supplies focus. Nothing is persisted, including directory rows.
+Identity and tenant scope come from authenticated host context. Reads and renewals recheck permissions; recipient field filtering prevents focus-name disclosure. Tabs merge by user, editing takes precedence over viewing, and table snapshots omit focus. Redis stores presence metadata, never unsaved record contents.
 
-Every heartbeat/leave replicates over core's bus on `instance:presence`, a channel refused by
-core client subscriptions. `presence.changed` is emitted to record and table channels. Table
-snapshots aggregate users without record ids or focused field names; those stay on record
-channels. Configure core's ESB bus for multiple pods. Delivery is best effort; clients renew and
-refetch after reconnecting.
+HTTP409 with `PRESENCE_LEASE_EXPIRED` requires a fresh lease; unavailable shared storage returns503 and an explicit unavailable UI state. It never silently falls back to an empty room or local state. The frontend releases leases on hide/unmount and preserves drafts through presence changes.
 
-The initial overlay refresh starts the registry on every pod, including those without local
-viewers. Endpoints also initialize it lazily. At shutdown call `PresenceRegistry.close(instance)`
-before `RealtimeBus.close(instance)`. The admin-only **Who's here** home card shows user counts
-per table, and core record-feature summaries include the presence snapshot.
+Browser events use SSE; HTTP performs lease mutations; Redis Pub/Sub carries scoped invalidation hints. Route each stream's subscription requests to its owning node. The Redis admin dashboard and framework health checks expose the configured connection and subscription state. Presence is advisory; supported versioned database writes protect concurrent saves.

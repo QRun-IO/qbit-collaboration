@@ -1,6 +1,6 @@
 # Shared Redis presence candidate
 
-Status: implemented and locally verified; coordinated artifact publication and remote candidate verification remain pending. This guide describes the current main-line scope. See MAINLINE-ACCEPTANCE.md for evidence and SESSION-STATE.md for live release checkpoints.
+Status: coordinated candidate artifacts are published; remote CI, empty-cache consumer resolution and published-artifact two-node browser checks passed. See [CANDIDATE-RELEASE.md](CANDIDATE-RELEASE.md) for exact versions and deployment requirements. This guide describes the current main-line scope. See MAINLINE-ACCEPTANCE.md for evidence and SESSION-STATE.md for live release checkpoints.
 
 ## Host configuration and dependency ownership
 
@@ -34,7 +34,7 @@ Reads and renewals recheck parent and field access. Canonical record identifiers
 
 - Real Redis tests cover six users on a record with two editors, duplicate-tab aggregation, ordering, departure, expiry, isolation, capacity and script-cache recovery.
 - Service and real HTTP tests cover issued open/activation/renew/departure, 409 expiry, authorization, canonical keys, field projection and unavailable responses.
-- Full collaboration verify passed 179 tests with coverage/architecture gates; focused frontend suites passed 34 tests, TypeScript and changed-file lint.
+- Clean release-source collaboration verify passed 177 tests with coverage/architecture gates; focused frontend suites passed 34 tests, TypeScript and changed-file lint.
 - Live browser acceptance with mocks disabled used three identities on two independent QQQ JVMs sharing Redis. It verified avatars, field focus, drafts, table projection and departure. Demo records were independently seeded memory data; this is presence evidence, not cross-node database save-consistency evidence.
 - Live Redis admin acceptance verified pool/subscription status, persisted framework health results and navigation to standard health records.
 

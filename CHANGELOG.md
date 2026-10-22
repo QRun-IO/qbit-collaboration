@@ -2,6 +2,15 @@
 
 All notable changes are documented here, following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and semantic versioning.
 
+## Coordinated candidate — 2026-10-21
+
+Published `0.1.0-collab-8f348da-SNAPSHOT` with core `4.1.0-collab-33464d37e-SNAPSHOT` and Redis `0.1.0-redis-7fe5492-SNAPSHOT`. See [candidate release guide](docs/CANDIDATE-RELEASE.md) for the paired frontend/session-store and migration requirements.
+
+- Added server-issued, ordered presence leases, shared Redis record/table state, explicit unavailable/expired responses and recipient-aware field filtering.
+- Preserved omitted assignment roles and prevented fallback ownership from overriding configured native ownership.
+- Added delivery acknowledgement semantics, transaction-aware attachment compensation and authorized mention-read flow.
+- Verified 177 release-source tests, coverage, remote CI, published-artifact consumer resolution and live cross-node presence/admin/health with the paired frontend.
+
 ## [Unreleased]
 
 ### Added

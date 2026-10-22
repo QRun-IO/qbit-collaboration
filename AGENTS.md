@@ -4,7 +4,7 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## Project Overview
 
-**QBit Collaboration**: record collaboration for QQQ. Phase a implements feature settings, people tables and the app home. Design: [QRun-IO/qqq#1136](https://github.com/QRun-IO/qqq/pull/1136) (`docs/COLLABORATION.md`). Phases b to i are planned.
+**QBit Collaboration**: record collaboration for QQQ. The implemented feature set and published candidate deployment contract are documented in README.md and docs/CANDIDATE-RELEASE.md. Historical phase design: docs/DESIGN.md.
 
 ## Build Commands
 
@@ -23,7 +23,7 @@ This file provides guidance to Codex when working with code in this repository.
 - The home reads real data with the current session.
 - People are a service-managed directory; direct user writes are denied.
 - Feature settings are audited at FIELD level; writes require `collaboration.admin`.
-- Runtime override application and record feature services await the core contracts.
+- Runtime overrides and record feature services use the coordinated core contracts; preserve authorization, transaction boundaries and recipient field filtering.
 
 ## Naming (owner rule)
 
@@ -42,12 +42,12 @@ This file provides guidance to Codex when working with code in this repository.
 ## Dependencies
 
 - Java 21.
-- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.5` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Read pom.xml for the current build parent. The default-active qqq-snapshot profile pins the coordinated published core BOM; docs/CANDIDATE-RELEASE.md records compatible Redis, session-store and frontend versions.
 - Tests: JUnit 5, AssertJ.
 
 ## Release
 
-- CircleCI qqq-orb 0.6.8.
+- CircleCI is centrally owned through .qqq-ci.yml and the canonical setup caller. Keep both declarations aligned; validate with the selected orb canonical validator as well as CircleCI schema validation.
 - `develop` publishes SNAPSHOTs.
 - A `release/*` branch publishes RCs (the orb bumps the version).
-- A `v*` tag publishes the release.
+- Stable release tags and feature publish tags follow the manifest policy. Feature snapshots use the existing publish-tag automation; keep generated versions within the framework length limit. Do not treat snapshot publication as GA or production deployment.
