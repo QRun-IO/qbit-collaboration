@@ -21,6 +21,7 @@
 package com.kingsrook.qbits.collaboration.attachments;
 
 
+import java.time.Instant;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
@@ -30,6 +31,7 @@ import com.kingsrook.qqq.backend.core.actions.permissions.CustomPermissionChecke
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
+import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
 import com.kingsrook.qqq.backend.core.context.CapturedContext;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -38,8 +40,10 @@ import com.kingsrook.qqq.backend.core.model.actions.AbstractActionInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.MetaDataWithPermissionRules;
 import com.kingsrook.qqq.backend.core.model.session.QSystemUserSession;
@@ -159,7 +163,9 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
     *******************************************************************************/
    private boolean finish(QRecord pending) throws QException
    {
-      if(!AttachmentRecords.query(new QQueryFilter().withCriteria("id", QCriteriaOperator.EQUALS, pending.getValue("attachmentId"))).isEmpty())
+      if(!AttachmentRecords.query(new QQueryFilter()
+         .withCriteria("bucketName", QCriteriaOperator.EQUALS, pending.getValue("bucketName"))
+         .withCriteria("storageKey", QCriteriaOperator.EQUALS, pending.getValue("storageKey"))).isEmpty())
       {
          return (false);
       }
@@ -168,6 +174,32 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
       delete.withPermissionBypass("Storage cleanup completed; remove its durable intent.");
       AttachmentRecords.checkErrors(new DeleteAction().execute(delete).getRecordsWithErrors());
       return (true);
+   }
+
+
+   /*******************************************************************************
+    ** Rollback compensation must survive a provider outage. Persist independently
+    ** of the failed transaction, then attempt cleanup with the original context.
+    *******************************************************************************/
+   void compensateUpload(String bucket, String key)
+   {
+      CapturedContext context = new CapturedContext(QContext.getQInstance(), QContext.getQSession());
+      try
+      {
+         QContext.withTemporaryContext(context, () ->
+         {
+            InsertInput insert = new InsertInput(CollaborationTables.ATTACHMENT_CLEANUP).withRecords(List.of(
+               new QRecord().withValue("bucketName", bucket).withValue("storageKey", key)));
+            insert.withPermissionBypass("Failed authorized upload retains its immutable storage locator for compensation.");
+            List<QRecord> inserted = new InsertAction().execute(insert).getRecords();
+            AttachmentRecords.checkErrors(inserted);
+            finish(inserted.getFirst());
+         });
+      }
+      catch(QException e)
+      {
+         throw (new IllegalStateException("Upload compensation could not complete.", e));
+      }
    }
 
 
@@ -181,7 +213,11 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
       {
          throw (new QException("Attachment cleanup must run outside a caller transaction."));
       }
-      QueryInput query = new QueryInput(CollaborationTables.ATTACHMENT_CLEANUP).withFilter(new QQueryFilter().withLimit(100));
+      QueryInput query = new QueryInput(CollaborationTables.ATTACHMENT_CLEANUP).withFilter(new QQueryFilter()
+         .withBooleanOperator(QQueryFilter.BooleanOperator.OR)
+         .withCriteria("nextAttemptAt", QCriteriaOperator.IS_BLANK)
+         .withCriteria("nextAttemptAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, Instant.now())
+         .withOrderBy(new QFilterOrderBy("id")).withLimit(100));
       query.withPermissionBypass("Authorized operator retries committed storage cleanup.");
       List<QRecord> pending = new QueryAction().execute(query).getRecords();
       int completed = 0;
@@ -194,9 +230,21 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
             {
                completed++;
             }
+            else
+            {
+               defer(row);
+            }
          }
          catch(QException | RuntimeException e)
          {
+            try
+            {
+               defer(row);
+            }
+            catch(QException | RuntimeException deferFailure)
+            {
+               e.addSuppressed(deferFailure);
+            }
             if(failure == null)
             {
                failure = new QException("Attachment cleanup remains pending; retry after the provider or database recovers.", e);
@@ -208,6 +256,18 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
          throw (failure);
       }
       return (completed);
+   }
+
+
+   /*******************************************************************************
+    ** Persist backoff so failing entries do not monopolize the next bounded batch.
+    *******************************************************************************/
+   private void defer(QRecord pending) throws QException
+   {
+      UpdateInput update = new UpdateInput(CollaborationTables.ATTACHMENT_CLEANUP).withRecords(List.of(
+         new QRecord().withValue("id", pending.getValue("id")).withValue("nextAttemptAt", Instant.now().plusSeconds(60))));
+      update.withPermissionBypass("Committed cleanup failed or is not yet safe; retain it for a later attempt.");
+      AttachmentRecords.checkErrors(new UpdateAction().execute(update).getRecords());
    }
 
 

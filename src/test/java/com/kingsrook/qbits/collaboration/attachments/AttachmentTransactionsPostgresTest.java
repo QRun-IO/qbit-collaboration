@@ -296,6 +296,91 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
 
 
    /*******************************************************************************
+    ** Failed first-page entries must not starve later healthy cleanup requests.
+    *******************************************************************************/
+   @Test
+   void failedBatchDoesNotStarveLaterRequests() throws Exception
+   {
+      try(Connection connection = connect(); var sql = connection.prepareStatement(
+         "INSERT INTO collaboration_attachment_cleanup (attachment_id, bucket_name, storage_key) VALUES (?, 'collaboration', ?)"))
+      {
+         for(int id = 1; id <= 101; id++)
+         {
+            String key = "queued/" + id;
+            sql.setInt(1, id);
+            sql.setString(2, key);
+            sql.executeUpdate();
+            storage.objects.put("collaboration/" + key, new byte[] { 1 });
+            if(id <= 100)
+            {
+               storage.failedKeys.add(key);
+            }
+         }
+      }
+      admin();
+      assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).retryPending()).isInstanceOf(Exception.class);
+      assertThat(storage.deleteAttempts).isEqualTo(100);
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      assertThat(storage.deleteAttempts).isEqualTo(101);
+      assertThat(pendingCount()).isEqualTo(100);
+      assertThat(storage.objects).doesNotContainKey("collaboration/queued/101");
+      storage.failedKeys.clear();
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute("UPDATE collaboration_attachment_cleanup SET next_attempt_at = CURRENT_TIMESTAMP - INTERVAL '1 second'");
+      }
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(100);
+      assertThat(pendingCount()).isZero();
+      assertThat(storage.objects).isEmpty();
+   }
+
+
+   /*******************************************************************************
+    ** Failed rollback compensation must preserve a durable locator for later cleanup.
+    *******************************************************************************/
+   @Test
+   void failedUploadRollbackCompensationRemainsRetryable() throws Exception
+   {
+      try(var tx = new RDBMSTransaction(connect()))
+      {
+         QContext.setTransaction(tx);
+         upload();
+         storage.failDelete = true;
+         tx.rollback();
+         QContext.clearTransaction();
+      }
+      assertThat(rowCount()).isZero();
+      assertThat(storage.objects).hasSize(1);
+      assertThat(pendingCount()).isEqualTo(1);
+      storage.failDelete = false;
+      admin();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      assertThat(storage.objects).isEmpty();
+      assertThat(pendingCount()).isZero();
+   }
+
+
+   /*******************************************************************************
+    ** Upgrading the first queue shape preserves pending deletions and is repeatable.
+    *******************************************************************************/
+   @Test
+   void cleanupSchemaUpgradePreservesPendingRequests() throws Exception
+   {
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute("ALTER TABLE collaboration_attachment_cleanup DROP COLUMN next_attempt_at");
+         sql.execute("ALTER TABLE collaboration_attachment_cleanup ALTER COLUMN attachment_id SET NOT NULL");
+         sql.execute("CREATE UNIQUE INDEX uq_collaboration_attachment_cleanup_1 ON collaboration_attachment_cleanup (attachment_id)");
+         sql.execute("INSERT INTO collaboration_attachment_cleanup (attachment_id, bucket_name, storage_key) VALUES (42, 'collaboration', 'pending/42')");
+         sql.execute(CollaborationSchema.postgresScript(config));
+         sql.execute(CollaborationSchema.postgresScript(config));
+         sql.execute("INSERT INTO collaboration_attachment_cleanup (bucket_name, storage_key) VALUES ('collaboration', 'rollback/one'), ('collaboration', 'rollback/two')");
+      }
+      assertThat(pendingCount()).isEqualTo(3);
+   }
+
+
+   /*******************************************************************************
     ** Recovery locations are admin-only and cannot be forged through table writes.
     *******************************************************************************/
    @Test
@@ -355,6 +440,8 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
    {
       private final Map<String, byte[]> objects = new HashMap<>();
       private boolean failDelete;
+      private final java.util.Set<String> failedKeys = new java.util.HashSet<>();
+      private int deleteAttempts;
 
       /***************************************************************************
        ** Keep the production service's upload bound active.
@@ -387,7 +474,8 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       @Override
       public void delete(String name, String key)
       {
-         if(failDelete)
+         deleteAttempts++;
+         if(failDelete || failedKeys.contains(key))
          {
             throw (new IllegalStateException("injected storage delete failure"));
          }

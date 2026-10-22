@@ -206,13 +206,13 @@ public final class CollaborationTables
       tables.add(base(config, ATTACHMENT_CLEANUP, "Attachment Cleanup", "delete")
          .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
             .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentCleanupQueue.class)))
-         .withRecordLabelFormatAndFields("Attachment %s", "attachmentId")
-         .withField(new QFieldMetaData("attachmentId", QFieldType.INTEGER).withIsRequired(true))
+         .withRecordLabelFormatAndFields("Cleanup %s", "id")
+         .withField(new QFieldMetaData("attachmentId", QFieldType.INTEGER))
          .withField(string("bucketName", "Bucket", 255).withIsRequired(true))
          .withField(string("storageKey", "Storage Key", 1024).withIsRequired(true))
-         .withUniqueKey(new UniqueKey("attachmentId"))
+         .withField(new QFieldMetaData("nextAttemptAt", QFieldType.DATE_TIME).withLabel("Next Attempt"))
          .withSection(new QFieldSection("cleanup", new QIcon("delete"), Tier.T1,
-            List.of("id", "attachmentId", "bucketName", "storageKey")).withLabel("Cleanup")));
+            List.of("id", "attachmentId", "bucketName", "storageKey", "nextAttemptAt")).withLabel("Cleanup")));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));

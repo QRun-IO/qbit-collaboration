@@ -141,7 +141,8 @@ public class AttachmentsService
          if(transaction != null)
          {
             var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
-            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context, () -> storage.delete(bucket, key)));
+            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context,
+               () -> new AttachmentCleanupQueue(storage).compensateUpload(bucket, key)));
          }
          boolean rowSaved = false;
          try
@@ -164,7 +165,7 @@ public class AttachmentsService
             {
                if(!rowSaved)
                {
-                  storage.delete(bucket, key);
+                  new AttachmentCleanupQueue(storage).compensateUpload(bucket, key);
                }
             }
             catch(RuntimeException cleanupFailure)

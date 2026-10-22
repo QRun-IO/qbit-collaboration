@@ -751,11 +751,13 @@ entries:
   content: |
     **How rows get created:** Authorized attachment deletion creates these records automatically. The attachment disappears from the record immediately; its file is removed after the database commits. Successful cleanup removes this entry. If storage is unavailable, the entry remains for the scheduled retry. Administrators can inspect pending work; these records cannot be edited directly.
 - key: table:collaboration_attachment_cleanup;field:attachmentId
-  summary: "The deleted attachment whose file is awaiting cleanup."
+  summary: "The deleted attachment, when known; failed uploads may have no committed attachment ID."
 - key: table:collaboration_attachment_cleanup;field:bucketName
   summary: "The storage bucket containing the file awaiting cleanup."
 - key: table:collaboration_attachment_cleanup;field:storageKey
   summary: "The immutable file location retained until cleanup succeeds."
+- key: table:collaboration_attachment_cleanup;field:nextAttemptAt
+  summary: "Failed cleanup waits at least one minute before another scheduled attempt."
 - key: process:collaborationRetryAttachmentCleanup;slot:help
   summary: "Retry pending attachment file cleanup after storage or database recovery."
   content: |
