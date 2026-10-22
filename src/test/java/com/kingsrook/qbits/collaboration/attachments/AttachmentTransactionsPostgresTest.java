@@ -25,7 +25,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import com.kingsrook.qbits.collaboration.CollaborationSchema;
@@ -319,9 +318,9 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       }
       admin();
       assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).retryPending()).isInstanceOf(Exception.class);
-      assertThat(storage.deleteAttempts).isEqualTo(100);
+      assertThat(storage.deleteAttempts.get()).isEqualTo(100);
       assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
-      assertThat(storage.deleteAttempts).isEqualTo(101);
+      assertThat(storage.deleteAttempts.get()).isEqualTo(101);
       assertThat(pendingCount()).isEqualTo(100);
       assertThat(storage.objects).doesNotContainKey("collaboration/queued/101");
       storage.failedKeys.clear();
@@ -377,6 +376,166 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
          sql.execute("INSERT INTO collaboration_attachment_cleanup (bucket_name, storage_key) VALUES ('collaboration', 'rollback/one'), ('collaboration', 'rollback/two')");
       }
       assertThat(pendingCount()).isEqualTo(3);
+   }
+
+
+   /*******************************************************************************
+    ** A provider may store bytes and then fail before acknowledging the upload.
+    *******************************************************************************/
+   @Test
+   void ambiguousUploadFailureRetainsCompensation() throws Exception
+   {
+      storage.failPutAfterWrite = true;
+      storage.failDelete = true;
+      assertThatThrownBy(this::upload).isInstanceOf(IllegalStateException.class)
+         .hasMessage("injected upload acknowledgement failure");
+      assertThat(rowCount()).isZero();
+      assertThat(storage.objects).hasSize(1);
+      assertThat(pendingCount()).isEqualTo(1);
+      storage.failDelete = false;
+      admin();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      assertThat(storage.objects).isEmpty();
+      assertThat(pendingCount()).isZero();
+   }
+
+
+   /*******************************************************************************
+    ** Replay real provider deletes after the database rejects queue acknowledgement.
+    *******************************************************************************/
+   @Test
+   void minioDeletionReplayPreservesOtherObjects() throws Exception
+   {
+      try(var minio = new GenericContainer<>("cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56")
+         .withEnv("MINIO_ROOT_USER", "collaboration-test").withEnv("MINIO_ROOT_PASSWORD", "collaboration-test-password")
+         .withCommand("server", "/tmp/minio-data").withExposedPorts(9000)
+         .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000)))
+      {
+         minio.start();
+         String endpoint = "http://" + minio.getHost() + ":" + minio.getMappedPort(9000);
+         try(var client = software.amazon.awssdk.services.s3.S3Client.builder()
+            .endpointOverride(java.net.URI.create(endpoint)).region(software.amazon.awssdk.regions.Region.US_EAST_1)
+            .forcePathStyle(true).credentialsProvider(software.amazon.awssdk.auth.credentials.StaticCredentialsProvider.create(
+               software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create("collaboration-test", "collaboration-test-password"))).build())
+         {
+            client.createBucket(b -> b.bucket("collaboration-plain"));
+            client.createBucket(b -> b.bucket("collaboration-versioned"));
+            client.putBucketVersioning(b -> b.bucket("collaboration-versioned").versioningConfiguration(v ->
+               v.status(software.amazon.awssdk.services.s3.model.BucketVersioningStatus.ENABLED)));
+            System.setProperty("collaboration.minio.access", "collaboration-test");
+            System.setProperty("collaboration.minio.secret", "collaboration-test-password");
+            var storageConfig = new com.kingsrook.qbits.objectstorage.ObjectStorageQBitConfig()
+               .withBackendName("memory")
+               .withAllowedSecretRefPatterns(List.of("prop.collaboration.minio.*"))
+               .withBucketScoping(false)
+               .withConnection(new com.kingsrook.qbits.objectstorage.config.StorageConnectionConfig("fixture")
+                  .withEndpoint(endpoint).withRegion("us-east-1")
+                  .withAddressingStyle(com.kingsrook.qbits.objectstorage.config.AddressingStyle.PATH)
+                  .withChecksumMode(com.kingsrook.qbits.objectstorage.config.ChecksumMode.WHEN_REQUIRED)
+                  .withAccessKeyRef("${prop.collaboration.minio.access}").withSecretKeyRef("${prop.collaboration.minio.secret}"));
+            for(String alias : List.of("plain", "versioned"))
+            {
+               storageConfig.withBucket(new com.kingsrook.qbits.objectstorage.config.StorageBucketConfig(alias)
+                  .withConnection("fixture").withBucketName("collaboration-" + alias)
+                  .withRole(com.kingsrook.qbits.objectstorage.config.BucketRole.PRIVATE).withIndexed(false));
+            }
+            com.kingsrook.qbits.objectstorage.api.ObjectStorage.configureStandalone(storageConfig);
+            for(String alias : List.of("plain", "versioned"))
+            {
+               config.withAttachmentsBucketName(alias);
+               service = new AttachmentsService(config, new AttachmentStorage());
+               AttachmentEntry removed = upload();
+               AttachmentEntry retained = upload();
+               String removedKey = storedKey(removed.id());
+               String retainedKey = storedKey(retained.id());
+               try(Connection connection = connect(); var sql = connection.createStatement())
+               {
+                  sql.execute("CREATE OR REPLACE FUNCTION reject_provider_ack() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                     + "BEGIN RAISE EXCEPTION 'injected provider acknowledgement rejection'; END $$");
+                  sql.execute("CREATE TRIGGER reject_provider_ack BEFORE DELETE ON collaboration_attachment_cleanup "
+                     + "FOR EACH ROW EXECUTE FUNCTION reject_provider_ack()");
+               }
+               assertThatThrownBy(() -> service.delete(List.of(removed.id()))).isInstanceOf(Exception.class);
+               assertThat(pendingCount()).isEqualTo(1);
+               try(Connection connection = connect(); var sql = connection.createStatement())
+               {
+                  sql.execute("DROP TRIGGER reject_provider_ack ON collaboration_attachment_cleanup");
+               }
+               admin();
+               assertThat(new AttachmentCleanupQueue(new AttachmentStorage()).retryPending()).isEqualTo(1);
+               assertThat(pendingCount()).isZero();
+               var bucket = com.kingsrook.qbits.objectstorage.api.ObjectStorage.asSystem("collaboration-test", "replay").bucket(alias);
+               assertThat(bucket.head(removedKey)).isEmpty();
+               assertThat(bucket.head(retainedKey)).isPresent();
+               assertThat(client.getObjectAsBytes(b -> b.bucket("collaboration-" + alias).key(retainedKey)).asByteArray())
+                  .containsExactly((byte) 1, (byte) 2, (byte) 3);
+               service.delete(List.of(retained.id()));
+               login("alice");
+            }
+         }
+      }
+      finally
+      {
+         com.kingsrook.qbits.objectstorage.internal.ObjectStorageRuntime.reset();
+         com.kingsrook.qbits.objectstorage.internal.ConfigSync.reset();
+         System.clearProperty("collaboration.minio.access");
+         System.clearProperty("collaboration.minio.secret");
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Observe the immutable provider key from committed SQL metadata.
+    *******************************************************************************/
+   private String storedKey(int attachmentId) throws Exception
+   {
+      try(Connection connection = connect(); var sql = connection.prepareStatement("SELECT storage_key FROM collaboration_attachment WHERE id = ?"))
+      {
+         sql.setInt(1, attachmentId);
+         try(var rows = sql.executeQuery())
+         {
+            assertThat(rows.next()).isTrue();
+            return (rows.getString(1));
+         }
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Two workers may observe the same committed intent; replay must remain safe.
+    *******************************************************************************/
+   @Test
+   void concurrentWorkersCanReplayTheSameIntent() throws Exception
+   {
+      AttachmentEntry entry = upload();
+      storage.failDelete = true;
+      assertThatThrownBy(() -> service.delete(List.of(entry.id()))).isInstanceOf(IllegalStateException.class);
+      storage.failDelete = false;
+      storage.concurrentDeletes = new java.util.concurrent.CountDownLatch(2);
+      admin();
+      var session = QContext.getQSession();
+      try(var executor = java.util.concurrent.Executors.newFixedThreadPool(2))
+      {
+         java.util.concurrent.Callable<Integer> retry = () ->
+         {
+            QContext.init(instance, session);
+            try
+            {
+               return (new AttachmentCleanupQueue(storage).retryPending());
+            }
+            finally
+            {
+               QContext.clear();
+            }
+         };
+         var first = executor.submit(retry);
+         var second = executor.submit(retry);
+         assertThat(first.get(20, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(1);
+         assertThat(second.get(20, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(1);
+      }
+      assertThat(rowCount()).isZero();
+      assertThat(pendingCount()).isZero();
+      assertThat(storage.objects).isEmpty();
    }
 
 
@@ -438,10 +597,12 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
     *******************************************************************************/
    private static class RecordingStorage extends AttachmentStorage
    {
-      private final Map<String, byte[]> objects = new HashMap<>();
+      private final Map<String, byte[]> objects = new java.util.concurrent.ConcurrentHashMap<>();
       private boolean failDelete;
+      private boolean failPutAfterWrite;
       private final java.util.Set<String> failedKeys = new java.util.HashSet<>();
-      private int deleteAttempts;
+      private final java.util.concurrent.atomic.AtomicInteger deleteAttempts = new java.util.concurrent.atomic.AtomicInteger();
+      private java.util.concurrent.CountDownLatch concurrentDeletes;
 
       /***************************************************************************
        ** Keep the production service's upload bound active.
@@ -461,6 +622,10 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
          try
          {
             objects.put(name + "/" + request.getKey(), request.getStream().readAllBytes());
+            if(failPutAfterWrite)
+            {
+               throw (new IllegalStateException("injected upload acknowledgement failure"));
+            }
          }
          catch(IOException e)
          {
@@ -474,7 +639,23 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       @Override
       public void delete(String name, String key)
       {
-         deleteAttempts++;
+         deleteAttempts.incrementAndGet();
+         if(concurrentDeletes != null)
+         {
+            concurrentDeletes.countDown();
+            try
+            {
+               if(!concurrentDeletes.await(10, java.util.concurrent.TimeUnit.SECONDS))
+               {
+                  throw (new IllegalStateException("Concurrent cleanup worker did not arrive"));
+               }
+            }
+            catch(InterruptedException e)
+            {
+               Thread.currentThread().interrupt();
+               throw (new IllegalStateException(e));
+            }
+         }
          if(failDelete || failedKeys.contains(key))
          {
             throw (new IllegalStateException("injected storage delete failure"));

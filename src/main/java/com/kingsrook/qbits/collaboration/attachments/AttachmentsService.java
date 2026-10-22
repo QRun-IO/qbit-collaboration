@@ -138,6 +138,18 @@ public class AttachmentsService
          {
             storage.put(bucket, PutRequest.of(key, upload).withContentLength(size).withContentType(type).withContentDisposition("inline"));
          }
+         catch(IOException | RuntimeException failure)
+         {
+            try
+            {
+               new AttachmentCleanupQueue(storage).compensateUpload(bucket, key);
+            }
+            catch(RuntimeException cleanupFailure)
+            {
+               failure.addSuppressed(cleanupFailure);
+            }
+            throw (failure);
+         }
          if(transaction != null)
          {
             var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
