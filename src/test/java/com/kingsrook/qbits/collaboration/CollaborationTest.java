@@ -114,7 +114,7 @@ class CollaborationTest
          CollaborationTables.SCOPE_TYPE, CollaborationTables.FEATURE, CollaborationTables.PERMISSION_MODE);
       assertThat(instance.getPossibleValueSource(CollaborationTables.FEATURE).getEnumValues()).hasSize(12);
       assertThat(instance.getApp("collaboration").getChildren()).extracting(child -> child.getName())
-         .containsExactlyInAnyOrder(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER);
+         .containsExactlyInAnyOrder(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.ATTACHMENT_CLEANUP, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER);
       assertThat(instance.getApp("collaboration").getWidgets()).containsExactlyElementsOf(CollaborationHome.HOME_WIDGETS);
       for(String widget : CollaborationHome.HOME_WIDGETS)
       {
@@ -221,7 +221,7 @@ class CollaborationTest
       QInstance headless = new QInstance();
       headless.addBackend(new QBackendMetaData().withName("memory").withBackendType(MemoryBackendModule.class));
       new CollaborationQBitProducer().withQBitConfig(config.withAdminApp(false)).produce(headless);
-      assertThat(headless.getTables()).hasSize(19);
+      assertThat(headless.getTables()).hasSize(20);
       assertThat(headless.getApps()).isEmpty();
       assertThat(headless.getWidgets()).hasSize(5);
    }

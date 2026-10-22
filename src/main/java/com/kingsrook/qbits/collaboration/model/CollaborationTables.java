@@ -80,6 +80,7 @@ public final class CollaborationTables
    public static final String ACTIVITY = "collaboration_activity";
    public static final String FOLLOW_DIGEST = "collaboration_follow_digest";
    public static final String ATTACHMENT = "collaboration_attachment";
+   public static final String ATTACHMENT_CLEANUP = "collaboration_attachment_cleanup";
    public static final String FEATURE_SETTING = "collaboration_feature_setting";
    public static final String FAVORITE = "collaboration_favorite";
    public static final String RECENT = "collaboration_recent";
@@ -202,6 +203,16 @@ public final class CollaborationTables
       tables.addAll(tagTables(config));
       tables.addAll(workTables(config));
       tables.addAll(customFieldTables(config));
+      tables.add(base(config, ATTACHMENT_CLEANUP, "Attachment Cleanup", "delete")
+         .withPermissionRules(new QPermissionRules().withLevel(PermissionLevel.NOT_PROTECTED)
+            .withCustomPermissionChecker(new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentCleanupQueue.class)))
+         .withRecordLabelFormatAndFields("Attachment %s", "attachmentId")
+         .withField(new QFieldMetaData("attachmentId", QFieldType.INTEGER).withIsRequired(true))
+         .withField(string("bucketName", "Bucket", 255).withIsRequired(true))
+         .withField(string("storageKey", "Storage Key", 1024).withIsRequired(true))
+         .withUniqueKey(new UniqueKey("attachmentId"))
+         .withSection(new QFieldSection("cleanup", new QIcon("delete"), Tier.T1,
+            List.of("id", "attachmentId", "bucketName", "storageKey")).withLabel("Cleanup")));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));
