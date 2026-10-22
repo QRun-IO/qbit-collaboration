@@ -83,7 +83,7 @@ public final class CustomFieldStorage
       }
       if(!postgres(table))
       {
-         return (new Availability(false, "Backend does not support JsonPathStorage; EAV fields are read-only filters (values are not selected)."));
+         return (new Availability(false, "Backend does not support JsonPathStorage; EAV fields support read-only values and filters."));
       }
       try(Connection connection = connection(table); var statement = connection.createStatement())
       {
@@ -92,7 +92,7 @@ public final class CustomFieldStorage
       }
       catch(SQLException | IllegalArgumentException e)
       {
-         return (new Availability(false, "JSON column unavailable; EAV fields are read-only filters. " + e.getMessage()));
+         return (new Availability(false, "JSON column unavailable; EAV fields support read-only values and filters. " + e.getMessage()));
       }
    }
 
