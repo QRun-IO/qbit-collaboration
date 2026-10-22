@@ -116,6 +116,249 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
 
 
    /*******************************************************************************
+    ** An independently visible intent precedes external I/O, but active uploads
+    ** cannot be claimed by a cleanup worker on another database connection.
+    *******************************************************************************/
+   @Test
+   void uploadIntentPrecedesPutAndProtectsActiveUpload() throws Exception
+   {
+      storage.beforePut = () ->
+      {
+         try
+         {
+            assertThat(pendingCount()).isEqualTo(1);
+            var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(instance,
+               new com.kingsrook.qqq.backend.core.model.session.QSystemUserSession());
+            QContext.withTemporaryContext(context, () -> assertThat(new AttachmentCleanupQueue(storage).retryPending()).isZero());
+            assertThat(storage.deleteAttempts).hasValue(0);
+         }
+         catch(Exception e)
+         {
+            throw (new IllegalStateException(e));
+         }
+      };
+      upload();
+      assertThat(rowCount()).isEqualTo(1);
+      assertThat(pendingCount()).isZero();
+      assertThat(storage.objects).hasSize(1);
+   }
+
+
+   /*******************************************************************************
+    ** Rejecting durable intent creation must prevent all provider I/O.
+    *******************************************************************************/
+   @Test
+   void rejectedUploadIntentPreventsProviderWrite() throws Exception
+   {
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute("CREATE FUNCTION reject_upload_intent() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            + "BEGIN RAISE EXCEPTION 'injected upload intent rejection'; END $$");
+         sql.execute("CREATE TRIGGER reject_upload_intent BEFORE INSERT ON collaboration_attachment_cleanup "
+            + "FOR EACH ROW EXECUTE FUNCTION reject_upload_intent()");
+      }
+      var puts = new java.util.concurrent.atomic.AtomicInteger();
+      storage.beforePut = puts::incrementAndGet;
+      assertThatThrownBy(this::upload).isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QException.class);
+      assertThat(puts).hasValue(0);
+      assertThat(storage.objects).isEmpty();
+      assertThat(storage.deleteAttempts).hasValue(0);
+      assertThat(rowCount()).isZero();
+      assertThat(pendingCount()).isZero();
+      assertThat(QContext.getQBackendTransaction()).isNull();
+   }
+
+
+   /*******************************************************************************
+    ** Completed provider I/O remains protected until the outer owner commits.
+    *******************************************************************************/
+   @Test
+   void outerTransactionProtectsUploadedBytesUntilCommit() throws Exception
+   {
+      try(var tx = new RDBMSTransaction(connect()))
+      {
+         QContext.setTransaction(tx);
+         upload();
+         assertThat(rowCount()).isZero();
+         assertThat(pendingCount()).isEqualTo(1);
+         var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(instance,
+            new com.kingsrook.qqq.backend.core.model.session.QSystemUserSession());
+         QContext.withTemporaryContext(context, () -> assertThat(new AttachmentCleanupQueue(storage).retryPending()).isZero());
+         assertThat(storage.deleteAttempts).hasValue(0);
+         assertThat(storage.objects).hasSize(1);
+         tx.commit();
+         QContext.clearTransaction();
+      }
+      assertThat(rowCount()).isEqualTo(1);
+      assertThat(pendingCount()).isZero();
+      assertThat(storage.objects).hasSize(1);
+   }
+
+
+   /*******************************************************************************
+    ** A separate JVM halts after durable provider bytes, without callbacks or finally.
+    *******************************************************************************/
+   @Test
+   void abruptlyTerminatedJvmLeavesRecoverableUpload(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception
+   {
+      String classpath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+      java.nio.file.Path arguments = directory.resolve("java.args");
+      java.nio.file.Files.writeString(arguments, "-cp\n\"" + classpath.replace('\\', '/') + "\"\n"
+         + UploadCrashProbe.class.getName() + "\n" + postgres.getHost() + "\n" + postgres.getMappedPort(5432)
+         + "\n\"" + directory.toString().replace('\\', '/') + "\"\n");
+      java.nio.file.Path executable = java.nio.file.Path.of(System.getProperty("java.home"), "bin",
+         System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java");
+      Process child = new ProcessBuilder(executable.toString(), "@" + arguments)
+         .redirectErrorStream(true).redirectOutput(directory.resolve("child.log").toFile()).start();
+      try
+      {
+         assertThat(child.waitFor(45, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+         assertThat(child.exitValue()).as(java.nio.file.Files.readString(directory.resolve("child.log"))).isEqualTo(73);
+      }
+      finally
+      {
+         if(child.isAlive())
+         {
+            child.destroyForcibly();
+            assertThat(child.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+         }
+      }
+      assertThat(rowCount()).isZero();
+      assertThat(pendingCount()).isEqualTo(1);
+      java.nio.file.Path object = directory.resolve("uploaded-object");
+      assertThat(java.nio.file.Files.readAllBytes(object)).containsExactly(1, 2, 3);
+      admin();
+      assertThat(new AttachmentCleanupQueue(new CrashFileStorage(directory, false)).retryPending()).isEqualTo(1);
+      assertThat(java.nio.file.Files.exists(object)).isFalse();
+      assertThat(pendingCount()).isZero();
+      assertThat(new AttachmentCleanupQueue(new CrashFileStorage(directory, false)).retryPending()).isZero();
+   }
+
+
+   /*******************************************************************************
+    ** Standalone child uses the real service against the parent's disposable DB.
+    *******************************************************************************/
+   public static class UploadCrashProbe extends PersonalServiceFixture
+   {
+      /***************************************************************************
+       ** Intentionally never returns: the provider halts this child JVM.
+       ***************************************************************************/
+      public static void main(String[] args) throws Exception
+      {
+         var probe = new UploadCrashProbe();
+         probe.setUp();
+         probe.instance.getBackends().remove("memory");
+         probe.instance.addBackend(new PostgreSQLBackendMetaData().withName("memory").withHostName(args[0])
+            .withPort(Integer.parseInt(args[1])).withDatabaseName("postgres")
+            .withUsername("postgres").withPassword("attachment-fixture-only"));
+         new AttachmentsService(probe.config, new CrashFileStorage(java.nio.file.Path.of(args[2]), true))
+            .upload("document", 1, "hello.txt", "text/plain", new ByteArrayInputStream(new byte[] { 1, 2, 3 }), null);
+         throw (new IllegalStateException("Crash fixture unexpectedly returned"));
+      }
+   }
+
+
+   /*******************************************************************************
+    ** One fixture-owned object persists across JVM death independently of SQL.
+    *******************************************************************************/
+   private static class CrashFileStorage extends AttachmentStorage
+   {
+      private final java.nio.file.Path directory;
+      private final boolean haltAfterPut;
+
+      /***************************************************************************
+       ** Scope every file to the test runner's disposable directory.
+       ***************************************************************************/
+      private CrashFileStorage(java.nio.file.Path directory, boolean haltAfterPut)
+      {
+         this.directory = directory;
+         this.haltAfterPut = haltAfterPut;
+      }
+
+      /***************************************************************************
+       ** Bound this fixture exactly as the normal injected provider.
+       ***************************************************************************/
+      @Override
+      public long maxBytes(String name)
+      {
+         return (1024L);
+      }
+
+      /***************************************************************************
+       ** Persist bytes and their locator, then terminate without shutdown hooks.
+       ***************************************************************************/
+      @Override
+      public void put(String name, PutRequest request)
+      {
+         try
+         {
+            java.nio.file.Files.writeString(directory.resolve("locator"), name + "/" + request.getKey());
+            java.nio.file.Files.write(directory.resolve("uploaded-object"), request.getStream().readAllBytes());
+            if(haltAfterPut)
+            {
+               Runtime.getRuntime().halt(73);
+            }
+         }
+         catch(IOException e)
+         {
+            throw (new IllegalStateException(e));
+         }
+      }
+
+      /***************************************************************************
+       ** Verify recovery uses the original locator before deleting fixture bytes.
+       ***************************************************************************/
+      @Override
+      public void delete(String name, String key)
+      {
+         try
+         {
+            assertThat(java.nio.file.Files.readString(directory.resolve("locator"))).isEqualTo(name + "/" + key);
+            java.nio.file.Files.deleteIfExists(directory.resolve("uploaded-object"));
+         }
+         catch(IOException e)
+         {
+            throw (new IllegalStateException(e));
+         }
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Losing the upload stack before metadata and rollback callbacks still leaves
+    ** independently committed intent for a later service instance to recover.
+    *******************************************************************************/
+   @Test
+   void interruptedUploadSurvivesLostRollbackCallbacks() throws Exception
+   {
+      storage.afterPut = () -> { throw new AssertionError("injected interrupted upload"); };
+      try(var tx = new RDBMSTransaction(connect())
+      {
+         /***********************************************************************
+          ** Simulate loss of process-local callbacks, not a killed-JVM test.
+          ***********************************************************************/
+         @Override
+         public void addAfterRollbackCallback(Runnable callback)
+         {
+         }
+      })
+      {
+         QContext.setTransaction(tx);
+         assertThatThrownBy(this::upload).isInstanceOf(AssertionError.class);
+         tx.rollback();
+         QContext.clearTransaction();
+      }
+      assertThat(rowCount()).isZero();
+      assertThat(pendingCount()).isEqualTo(1);
+      assertThat(storage.objects).hasSize(1);
+      admin();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      assertThat(storage.objects).isEmpty();
+      assertThat(pendingCount()).isZero();
+   }
+
+
+   /*******************************************************************************
     ** Later outer rollback removes both the SQL row and the uploaded object.
     *******************************************************************************/
    @Test
@@ -511,7 +754,8 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       storage.failDelete = true;
       assertThatThrownBy(() -> service.delete(List.of(entry.id()))).isInstanceOf(IllegalStateException.class);
       storage.failDelete = false;
-      storage.concurrentDeletes = new java.util.concurrent.CountDownLatch(2);
+      storage.concurrentDeletes = new java.util.concurrent.CountDownLatch(1);
+      storage.allowDelete = new java.util.concurrent.CountDownLatch(1);
       admin();
       var session = QContext.getQSession();
       try(var executor = java.util.concurrent.Executors.newFixedThreadPool(2))
@@ -529,9 +773,17 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
             }
          };
          var first = executor.submit(retry);
-         var second = executor.submit(retry);
+         assertThat(storage.concurrentDeletes.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+         try
+         {
+            var second = executor.submit(retry);
+            assertThat(second.get(10, java.util.concurrent.TimeUnit.SECONDS)).isZero();
+         }
+         finally
+         {
+            storage.allowDelete.countDown();
+         }
          assertThat(first.get(20, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(1);
-         assertThat(second.get(20, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(1);
       }
       assertThat(rowCount()).isZero();
       assertThat(pendingCount()).isZero();
@@ -600,9 +852,12 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       private final Map<String, byte[]> objects = new java.util.concurrent.ConcurrentHashMap<>();
       private boolean failDelete;
       private boolean failPutAfterWrite;
+      private Runnable beforePut;
+      private Runnable afterPut;
       private final java.util.Set<String> failedKeys = new java.util.HashSet<>();
       private final java.util.concurrent.atomic.AtomicInteger deleteAttempts = new java.util.concurrent.atomic.AtomicInteger();
       private java.util.concurrent.CountDownLatch concurrentDeletes;
+      private java.util.concurrent.CountDownLatch allowDelete;
 
       /***************************************************************************
        ** Keep the production service's upload bound active.
@@ -621,7 +876,15 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       {
          try
          {
+            if(beforePut != null)
+            {
+               beforePut.run();
+            }
             objects.put(name + "/" + request.getKey(), request.getStream().readAllBytes());
+            if(afterPut != null)
+            {
+               afterPut.run();
+            }
             if(failPutAfterWrite)
             {
                throw (new IllegalStateException("injected upload acknowledgement failure"));
@@ -645,9 +908,9 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
             concurrentDeletes.countDown();
             try
             {
-               if(!concurrentDeletes.await(10, java.util.concurrent.TimeUnit.SECONDS))
+               if(!allowDelete.await(20, java.util.concurrent.TimeUnit.SECONDS))
                {
-                  throw (new IllegalStateException("Concurrent cleanup worker did not arrive"));
+                  throw (new IllegalStateException("Timed out waiting to release the cleanup owner"));
                }
             }
             catch(InterruptedException e)
