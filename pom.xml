@@ -75,7 +75,7 @@
       <dependency>
          <groupId>com.kingsrook.qbits</groupId>
          <artifactId>qbit-redis</artifactId>
-         <version>0.1.0-SNAPSHOT</version>
+         <version>0.1.0-redis-7fe5492-SNAPSHOT</version>
          <optional>true</optional>
       </dependency>
       <dependency>
@@ -247,7 +247,7 @@
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-SNAPSHOT</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-collab-33464d37e-SNAPSHOT</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>
