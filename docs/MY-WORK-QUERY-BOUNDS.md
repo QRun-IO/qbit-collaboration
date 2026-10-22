@@ -27,5 +27,11 @@ Regression evidence: the 601-task case passes a budget of at most eight parent
 queries, with no task query above 200 rows; correct top-ten ordering and revoked
 access on a subsequent request are checked. Another case crosses assignment and
 mention page boundaries and excludes hidden parents, other users and undelivered
-mentions. These tests use the framework's real memory backend instrumentation;
-they are not PostgreSQL performance or deployment-capacity measurements.
+mentions. These tests use the framework's real memory backend instrumentation.
+
+`MyWorkPostgresTest` repeats the 601-row case using PostgreSQL 17 and the generated
+production schema. Independent `pg_stat_statements` observations verify exactly
+five task queries and between one and eight parent queries. It also verifies the
+same top ten, visible count and next-request permission revocation against SQL.
+The fixture passes; these query counts are not sustained throughput or
+deployment-capacity measurements.
