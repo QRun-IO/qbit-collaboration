@@ -24,6 +24,7 @@ package com.kingsrook.qbits.collaboration;
 
 import java.time.Duration;
 import com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException;
+import com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException;
 import com.kingsrook.qbits.collaboration.presence.RedisPresenceStore;
 import com.kingsrook.qbits.collaboration.presence.RedisPresenceAudience;
 import com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig;
@@ -111,6 +112,37 @@ class RedisPresenceRecoveryTest extends PersonalServiceFixture
             awaitVisible(a, replacement);
             assertThat(b.snapshot("document", null)).extracting("userId").containsExactly("alice");
             assertThat(b.snapshot("document", "unoccupied")).isEmpty();
+         }
+      }
+   }
+
+
+   /***************************************************************************
+    ** Guard loss cleans the table once and untouched record rooms on demand.
+    ***************************************************************************/
+   @Test
+   void missingGuardRetiresUnvisitedRecordsWithoutRemovingNewLeases() throws Exception
+   {
+      try(var redis = new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379))
+      {
+         redis.start();
+         try(var connection = new RedisConnection(new HostAndPort(redis.getHost(), redis.getMappedPort(6379)),
+            DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
+         {
+            var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "guard-loss", "tenant", "presence"), Duration.ofSeconds(2), 2);
+            String oldAlice = store.openLease("alice", "Alice", "document", "1");
+            String oldBob = store.openLease("bob", "Bob", "document", "2");
+            connection.client().del(connection.client().keys("*:recovery").toArray(String[]::new));
+            assertThatThrownBy(() -> store.snapshot("document", null)).isInstanceOf(PresenceRecoveringException.class);
+            String alice = store.openLease("alice", "Alice", "document", "1");
+            String bob = store.openLease("bob", "Bob", "document", "2");
+            assertThatThrownBy(() -> store.renewLease("alice", "Alice", oldAlice, "document", "1", "VIEWING", null, 99L))
+               .isInstanceOf(PresenceLeaseExpiredException.class);
+            assertThatThrownBy(() -> store.renewLease("bob", "Bob", oldBob, "document", "2", "VIEWING", null, 99L))
+               .isInstanceOf(PresenceLeaseExpiredException.class);
+            assertThat(store.renewLease("bob", "Bob", bob, "document", "2", "VIEWING", null, 1L)).isTrue();
+            awaitVisible(store, alice);
+            assertThat(store.snapshot("document", "1")).extracting("userId").containsExactly("alice");
          }
       }
    }

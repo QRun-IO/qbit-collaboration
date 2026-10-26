@@ -51,12 +51,12 @@ version rolling deployment. Existing published v1 snapshots are unchanged.
 
 - Before the patch, a two-client disposable Redis test failed because total loss
   returned an empty snapshot.
-- Five focused tests now pass: full loss, loss of volatile projections while the
+- Six focused tests now pass: full loss, loss of volatile projections while the
   guard survives, restored guard/lease bytes followed by a host generation
   change, bounded generation validation, and rejection of inconsistent lease
-  lifetimes across nodes. These use independent clients in
+  lifetimes across nodes, plus guard loss across previously unvisited records. These use independent clients in
   one JVM, not a deployed HA cluster.
-- Full wrapper verification passed on October 26: 183 tests, no failures,
+- Full wrapper verification passed on October 26: 184 tests, no failures,
   errors or skips; packaging and coverage gates passed. This includes the
   original seven store tests and two-node six-viewer/two-editor scenario.
   The admin dashboard reads every table, so the fixture initializes every

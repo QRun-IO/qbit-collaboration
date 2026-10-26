@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--java", required=True)
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--frontend-repo", type=Path)
+    parser.add_argument("--browser-profile", choices=("chromium", "firefox", "webkit", "mobile", "tablet"), default="chromium")
     args = parser.parse_args()
     repo = args.repo.resolve()
     output = repo / "target" / ("recovery-processes-" + uuid.uuid4().hex[:10])
@@ -110,7 +111,7 @@ def main():
                 time.sleep(0.2)
         if args.frontend_repo:
             subprocess.run(["node", str(repo / "docs/acceptance/presence_recovery_browser.mjs"),
-                            str(args.frontend_repo.resolve()), str(ports[0]), str(ports[1]), container, str(output)], check=True)
+                            str(args.frontend_repo.resolve()), str(ports[0]), str(ports[1]), container, str(output), args.browser_profile], check=True)
             return
         def join():
             """Acquire each person's new lease on a different node."""
