@@ -210,7 +210,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
          .withServeLegacyUnversionedMiddlewareAPI(false).withStrictUiApiRoutes(true)
          .withJavalinConfigCustomizer(config ->
          {
-            config.jetty.host = "127.0.0.1";
+            config.jetty.host = System.getProperty("collab.dev.bindAddress", "127.0.0.1");
             userSelection(config);
             MemoryStorage.routes(config);
          }));

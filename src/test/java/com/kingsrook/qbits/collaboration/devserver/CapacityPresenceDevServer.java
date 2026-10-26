@@ -59,7 +59,7 @@ public class CapacityPresenceDevServer
       PresenceRegistry.close(instance);
       RealtimeBus.close(instance);
       new RedisQBitProducer().withQBitConfig(new RedisQBitConfig().withConnection("presence",
-         new RedisConnectionConfig().withHost("127.0.0.1").withPort(redisPort).withTls(false).withMaximumConnections(8).withMaximumWaitMillis(500))
+         new RedisConnectionConfig().withHost(System.getProperty("collab.capacity.redisHost", "127.0.0.1")).withPort(redisPort).withTls(false).withMaximumConnections(8).withMaximumWaitMillis(500))
          .withRealtime("presence", "acceptance", "collaboration")).produce(instance);
       instance.getQBits().values().stream().map(bit -> bit.getConfig())
          .filter(CollaborationQBitConfig.class::isInstance).map(CollaborationQBitConfig.class::cast)
@@ -71,17 +71,34 @@ public class CapacityPresenceDevServer
       new com.kingsrook.qqq.backend.core.health.HealthMetaDataProvider().defineAll(instance, "memory", null);
       var health = new com.kingsrook.qqq.backend.core.health.HealthRunner(instance, "acceptance-" + port, java.time.Clock.systemUTC());
       var server = CollaborationDevServer.server(instance, port, false);
+      var sampler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
       try
       {
          redis.start(instance);
          transport.start(instance);
          health.start();
          server.start();
+         sampler.scheduleAtFixedRate(() ->
+         {
+            var pool = RedisRuntimeService.connection(instance, "presence").metrics();
+            var heap = java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+            var values = new java.util.LinkedHashMap<String, Object>();
+            values.put("uptimeMillis", java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime());
+            values.put("cpuNanos", ProcessHandle.current().info().totalCpuDuration().map(java.time.Duration::toNanos).orElse(-1L));
+            values.put("heapUsedBytes", heap.getUsed());
+            values.put("heapCommittedBytes", heap.getCommitted());
+            values.put("poolActive", pool.active());
+            values.put("poolIdle", pool.idle());
+            values.put("poolWaiting", pool.waiting());
+            values.put("poolMaximum", pool.maximum());
+            System.out.println("CAPACITY_METRIC " + com.kingsrook.qqq.backend.core.utils.JsonUtils.toJson(values));
+         }, 0, 100, java.util.concurrent.TimeUnit.MILLISECONDS);
          System.out.println("CAPACITY_PRESENCE_READY " + port);
          Thread.currentThread().join();
       }
       finally
       {
+         sampler.shutdownNow();
          server.stop();
          health.stop();
          transport.stop();
