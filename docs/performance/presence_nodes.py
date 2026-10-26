@@ -73,6 +73,7 @@ def main():
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--crash-round", type=int, default=0, help="Kill the first node before this round; zero disables")
     parser.add_argument("--churn-every", type=int, default=0, help="Leave/rejoin the last user's tabs every N rounds; zero disables")
+    parser.add_argument("--pause-redis", action="store_true", help="After the workload, freeze owned Redis and verify bounded failures/recovery")
     args = parser.parse_args()
     for name, lower, upper in (("nodes", 2, 8), ("tenants", 2, 8), ("users", 2, 100),
                                ("tabs", 2, 8), ("rounds", 1, 1000), ("workers", 1, 64)):
@@ -216,6 +217,40 @@ def main():
                     result["churn_cycles"] = result.get("churn_cycles", 0) + 1
                     result["departed_leases_rejected"] = result.get("departed_leases_rejected", 0) + len(departing)
                 result["completed_rounds"] = sequence
+        if args.pause_redis:
+            failures = []
+
+            def stalled_renew(item):
+                """A frozen authority must fail explicitly, never acknowledge a write."""
+                index, (identity, record, tab, lease, user) = item
+                before = time.perf_counter()
+                response = request(nodes[index % len(nodes)], identity, "/presence/leases/renew",
+                                   {"connectionId": lease, "table": "person", "pk": record,
+                                    "mode": "EDITING" if user < 2 else "VIEWING", "sequence": args.rounds + 1},
+                                   tab, expected=503)
+                if "viewers" in response or "temporarily unavailable" not in response.get("message", ""):
+                    raise AssertionError("Stalled authority did not return the expected unavailable response")
+                duration = (time.perf_counter() - before) * 1000
+                if duration > 8000:
+                    raise AssertionError("Unavailable response exceeded the eight-second fixture bound")
+                return duration
+
+            subprocess.run(["docker", "pause", container], check=True, capture_output=True)
+            try:
+                with ThreadPoolExecutor(max_workers=64) as burst:
+                    failures.extend(burst.map(stalled_renew, enumerate(actors)))
+                for node in nodes:
+                    response = request(node, "load-t0-u0", "/presence?table=person&pk=1", expected=503)
+                    if "viewers" in response:
+                        raise AssertionError("Stalled authority was presented as a room snapshot")
+            finally:
+                subprocess.run(["docker", "unpause", container], check=True, capture_output=True)
+            subprocess.run(["docker", "exec", container, "redis-cli", "PING"], check=True, capture_output=True, timeout=10)
+            for item in enumerate(actors):
+                renew(item, args.rounds + 2)
+            check_rooms()
+            result["redis_stall"] = {"rejected_renewals": len(failures), "failed_snapshot_nodes": len(nodes),
+                                     "response_times": distribution(failures), "same_leases_recovered": True}
         elapsed = time.perf_counter() - started
         result.update(status="PASS", seconds=elapsed, renewals=distribution(renewals),
                       snapshots=distribution(snapshots), renewal_throughput=len(renewals) / elapsed,
@@ -275,6 +310,8 @@ def main():
         result["resources"] = resources
         if result["status"] == "PASS" and len(resources) != args.nodes:
             result.update(status="FAIL", error="Missing resource samples for a node")
+        if result["status"] == "PASS" and args.pause_redis and not any(node["poolWaiting_sampled_max"] > 0 for node in resources):
+            result.update(status="FAIL", error="Redis stall did not demonstrate pool waiters")
         cleanup = subprocess.run(["docker", "rm", "-f", container], capture_output=True)
         network_cleanup = True
         if network_created:

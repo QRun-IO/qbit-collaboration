@@ -93,6 +93,22 @@ user absent on both records, then show the original exact membership after
 fresh, distinct leases are acquired and activated. Only this explicit rejoin
 path acquires new leases; the node-crash path preserves existing ones.
 
+`--pause-redis` adds a controlled failure phase after the ordinary rounds. It
+freezes only the owned Redis container, sends up to 64 concurrent renewal
+requests, and requires HTTP 503 within an eight-second fixture bound. Snapshots
+must also fail explicitly rather than return an empty room. Redis is unpaused
+in `finally`; once reachable, higher-sequence renewals must recover the same
+leases and exact membership. The test requires observed pool waiters and rejects
+sampled active counts above the configured maximum. It does not retry failed
+requests invisibly or raise production timeouts.
+
+The [Linux Redis-stall receipt](results/linux-redis-stall.json) passed with three
+nodes, two tenants, 24 users and 96 tab leases. All 96 stalled renewals and all
+three node snapshots returned the expected unavailable response. Existing
+leases recovered after Redis resumed, and cleanup passed. This proves bounded
+failure and recovery for an injected stall; it does not explain the intermittent
+Windows timeout or establish a saturation throughput threshold.
+
 ```powershell
 python docs/performance/presence_nodes.py --java java --node-image eclipse-temurin:21-jre --nodes 3 --tenants 2 --users 12 --tabs 4 --rounds 1000
 ```
