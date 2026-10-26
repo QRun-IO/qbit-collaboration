@@ -56,7 +56,8 @@ public class TagsMetaDataProvider implements RuntimeMetaDataProviderInterface
          {
             contribution.getTables().put(table.getName(), new RuntimeTableMetaDataContribution()
                .withVirtualFields(List.of(new QVirtualFieldMetaData("collaborationTags", QFieldType.STRING).withLabel("Tags")
-                  .withPossibleValueSourceName(CollaborationTables.TAG).withIsQueryCriteria(true).withIsQuerySelectable(false)
+                  .withPossibleValueSourceName(CollaborationTables.TAG).withIsQueryCriteria(true).withIsQuerySelectable(true)
+                  .withValueProvider(new QCodeReference(TagValueProvider.class)).withShouldTranslatePossibleValues(false)
                   .withCriteriaExpander(new QCodeReference(TagCriteriaExpander.class))))
                .withSearchFields(List.of("collaborationTags")));
          }

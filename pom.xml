@@ -73,6 +73,11 @@
 
    <dependencies>
       <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-postgres</artifactId>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
          <groupId>com.kingsrook.qbits</groupId>
          <artifactId>qbit-redis</artifactId>
          <version>0.1.0-redis-7fe5492-SNAPSHOT</version>
@@ -247,7 +252,7 @@
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-collab-33464d37e-SNAPSHOT</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>

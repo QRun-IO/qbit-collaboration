@@ -122,7 +122,8 @@ public class CustomFieldsProvider implements RuntimeMetaDataProviderInterface
       String name = "cf_" + definition.getValueString("name");
       QFieldType type = type(definition.getValueString("type"));
       QFieldMetaData field = json ? new QFieldMetaData(name, type).withBackendStorage(new JsonPathStorage().withColumnName("qqq_custom_fields").withKey(definition.getValueString("name")))
-         : new QVirtualFieldMetaData(name, type).withIsEditable(false).withIsQueryCriteria(true).withIsQuerySelectable(false)
+         : new QVirtualFieldMetaData(name, type).withIsEditable(false).withIsQueryCriteria(true).withIsQuerySelectable(true)
+            .withValueProvider(new QCodeReference(CustomFieldValueProvider.class))
             .withCriteriaExpander(new QCodeReference(FieldCriteriaExpander.class));
       field.withLabel(definition.getValueString("label")).withIsRequired(json && Boolean.TRUE.equals(definition.getValueBoolean("required")))
          .withMaxLength(definition.getValueInteger("maxLength"));
