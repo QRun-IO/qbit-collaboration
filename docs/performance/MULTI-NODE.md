@@ -86,6 +86,13 @@ platform and scheduling environment; it is a diagnostic comparison, not proof
 of a specific operating-system or Docker defect. Cleanup includes every owned
 node container and the owned network.
 
+`--churn-every 20` departs all tabs belonging to the last user in each tenant
+every 20 rounds. Every departed lease must reject a later renewal with HTTP 409
+and `PRESENCE_LEASE_EXPIRED` on another node. All surviving nodes must show that
+user absent on both records, then show the original exact membership after
+fresh, distinct leases are acquired and activated. Only this explicit rejoin
+path acquires new leases; the node-crash path preserves existing ones.
+
 ```powershell
 python docs/performance/presence_nodes.py --java java --node-image eclipse-temurin:21-jre --nodes 3 --tenants 2 --users 12 --tabs 4 --rounds 1000
 ```
@@ -106,6 +113,13 @@ failover, database durability or a Redis outage.
 The Linux crash run passed 100 rounds (9,600 renewals and 996 snapshots) in
 25.148 seconds. The first JVM exited with code 137 at round 50; the remaining
 two retained all issued leases and expected membership. Cleanup passed.
+
+A [combined churn and node-loss run](results/linux-node-crash-churn.json) passed
+100 rounds with the first node killed at round 50 and churn every 20 rounds.
+Five cycles rejected all 40 departed handles and checked absence/restored
+membership across both tenants and records on every surviving node. Cleanup
+passed. This is bounded HTTP lifecycle qualification; browser reconnect and
+missed-event behavior remain separate requirements.
 
 Recorded receipts retain both successful and failing evidence:
 

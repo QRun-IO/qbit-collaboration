@@ -28,22 +28,26 @@ def port():
         return listener.getsockname()[1]
 
 
-def request(node, user, path, body=None, tab=0):
+def request(node, user, path, body=None, tab=0, method=None, expected=200):
     """Use real HTTP and the explicit mock identity; no tenant parameter."""
     separator = "&" if "?" in path else "?"
     req = urllib.request.Request(
         f"http://127.0.0.1:{node}/qqq/v1/qbit/collaboration{path}{separator}user={user}",
         data=None if body is None else json.dumps(body).encode(),
+        method=method,
         headers={"Content-Type": "application/json",
                  "Cookie": f"sessionUUID={user}-capacity-{tab}"})
     try:
         response = urllib.request.urlopen(req, timeout=10)
     except urllib.error.HTTPError as error:
+        if error.code == expected:
+            with error:
+                return json.load(error)
         with error:
             detail = error.read(4096).decode(errors="replace")
         raise RuntimeError(f"HTTP {error.code} node={node} user={user} path={path}: {detail}") from error
     with response:
-        if response.status != 200:
+        if response.status != expected:
             raise AssertionError(f"Unexpected status {response.status}")
         return json.load(response)
 
@@ -68,6 +72,7 @@ def main():
     parser.add_argument("--rounds", type=int, default=10)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--crash-round", type=int, default=0, help="Kill the first node before this round; zero disables")
+    parser.add_argument("--churn-every", type=int, default=0, help="Leave/rejoin the last user's tabs every N rounds; zero disables")
     args = parser.parse_args()
     for name, lower, upper in (("nodes", 2, 8), ("tenants", 2, 8), ("users", 2, 100),
                                ("tabs", 2, 8), ("rounds", 1, 1000), ("workers", 1, 64)):
@@ -75,6 +80,8 @@ def main():
             parser.error(f"{name} must be {lower}..{upper}")
     if args.crash_round and not 2 <= args.crash_round <= args.rounds:
         parser.error("crash-round must be zero or 2..rounds")
+    if args.churn_every and not 1 <= args.churn_every <= args.rounds:
+        parser.error("churn-every must be zero or 1..rounds")
     repo = Path(__file__).resolve().parents[2]
     output = repo / "target" / ("capacity-nodes-" + uuid.uuid4().hex[:10])
     output.mkdir(parents=True)
@@ -148,6 +155,21 @@ def main():
                     actors.append((identity, record, tab, lease, user))
         renewals, snapshots = [], []
 
+        def check_rooms(excluded=None):
+            """Check every tenant/record on every surviving node, including absence."""
+            for tenant in range(args.tenants):
+                expected_users = {f"load-t{tenant}-u{user}" for user in range(args.users) if user != excluded}
+                for node in nodes:
+                    for record in ("1", "2"):
+                        before = time.perf_counter()
+                        viewers = request(node, f"load-t{tenant}-u0", f"/presence?table=person&pk={record}")["viewers"]
+                        snapshots.append((time.perf_counter() - before) * 1000)
+                        actual = {viewer["userId"] for viewer in viewers}
+                        if actual != expected_users or len(viewers) != len(expected_users):
+                            raise AssertionError(f"Tenant isolation/deduplication mismatch: {actual} != {expected_users}")
+                        if sum(viewer["mode"] == "EDITING" for viewer in viewers) != sum(user != excluded for user in range(2)):
+                            raise AssertionError("Unexpected editor count")
+
         def renew(item, sequence):
             """Keep each tab sequential while moving its writes between nodes."""
             index, (identity, record, tab, lease, user) = item
@@ -171,18 +193,28 @@ def main():
                     result["crash"] = {"round": sequence, "http_port": crashed,
                                        "surviving_nodes": len(nodes), "process_exit": processes[0].returncode}
                 renewals.extend(workers.map(lambda item: renew(item, sequence), enumerate(actors)))
-                for tenant in range(args.tenants):
-                    expected = {f"load-t{tenant}-u{user}" for user in range(args.users)}
-                    for node in nodes:
-                        for record in ("1", "2"):
-                            before = time.perf_counter()
-                            viewers = request(node, f"load-t{tenant}-u0", f"/presence?table=person&pk={record}")["viewers"]
-                            snapshots.append((time.perf_counter() - before) * 1000)
-                            actual = {viewer["userId"] for viewer in viewers}
-                            if actual != expected or len(viewers) != len(expected):
-                                raise AssertionError(f"Tenant isolation/deduplication mismatch: {actual} != {expected}")
-                            if sum(viewer["mode"] == "EDITING" for viewer in viewers) != 2:
-                                raise AssertionError("Expected exactly two editors")
+                check_rooms()
+                if args.churn_every and sequence % args.churn_every == 0:
+                    departing = [(index, actor) for index, actor in enumerate(actors) if actor[4] == args.users - 1]
+                    for index, (identity, record, tab, lease, user) in departing:
+                        request(nodes[index % len(nodes)], identity, "/presence",
+                                {"connectionId": lease, "table": "person", "pk": record, "sequence": sequence + 1}, tab, method="DELETE")
+                        response = request(nodes[(index + 1) % len(nodes)], identity, "/presence/leases/renew",
+                                           {"connectionId": lease, "table": "person", "pk": record,
+                                            "mode": "VIEWING", "sequence": sequence + 2}, tab, expected=409)
+                        if response.get("code") != "PRESENCE_LEASE_EXPIRED":
+                            raise AssertionError("Departed lease was not rejected as expired")
+                    check_rooms(excluded=args.users - 1)
+                    for index, (identity, record, tab, lease, user) in departing:
+                        replacement = request(nodes[(index + 1) % len(nodes)], identity, "/presence/leases",
+                                              {"table": "person", "pk": record}, tab)["connectionId"]
+                        if replacement == lease:
+                            raise AssertionError("Rejoin reused departed authority")
+                        actors[index] = (identity, record, tab, replacement, user)
+                        renew((index, actors[index]), sequence)
+                    check_rooms()
+                    result["churn_cycles"] = result.get("churn_cycles", 0) + 1
+                    result["departed_leases_rejected"] = result.get("departed_leases_rejected", 0) + len(departing)
                 result["completed_rounds"] = sequence
         elapsed = time.perf_counter() - started
         result.update(status="PASS", seconds=elapsed, renewals=distribution(renewals),
