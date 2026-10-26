@@ -1,4 +1,4 @@
-# Selectable collaboration fields: unreleased upgrade
+# Selectable collaboration fields: published feature snapshot
 
 Tracks [QQQ #1196](https://github.com/QRun-IO/qqq/issues/1196).
 
@@ -18,8 +18,28 @@ Published artifact SHA-256 receipts:
 | Core POM | `d89d491aaa9312051ec462e1cf165b948ee3e88c9aec2721ff25a00e956c431b` |
 | Core JAR | `ae6dbeba8d0e4bc55f2714303ee3482dbf6a0cd34c03663c6009d8fe2c1da54d` |
 
-This collaboration follow-up is still unpublished. The coordinated versions in
-CANDIDATE-RELEASE.md describe the earlier candidate, not this source branch.
+The collaboration follow-up is published as
+`0.1.0-field-values-1196-ecff347-SNAPSHOT`, timestamp
+`20261026.133203-1`. Publisher job 168 passed from commit
+`ecff347efe2bb84949b8452a3383e3fdeb4bcede`, using signed tag
+`publish-values1196-20261026-ecff347`.
+
+| Collaboration artifact | SHA-256 |
+| --- | --- |
+| POM | `cc12f59cbdfd4bc53ba545a9f2b6d7c14a316034b107ef5541ddc48df45fe6af` |
+| JAR | `284fa370504dd82cee8c87d2b8f5c0cecba8c4b15b32a4f9d3d62a0a062e549d` |
+
+On October 26, an independent Java 21 consumer downloaded this pair into an
+initially empty Maven repository and compiled both `TagValueProvider` and
+`CustomFieldValueProvider` as `VirtualFieldValueProviderInterface` instances.
+Maven recorded Sonatype `central-portal-snapshots` as the artifact source. The
+downloaded collaboration POM pins the core version above; the independently
+downloaded core JAR matches the receipt above. This checks published dependency
+resolution and API compatibility; runtime behavior is covered by the 198-test
+verification below, not by this compilation probe.
+
+This snapshot does not include the separate attachment, My Work or presence
+recovery follow-up PRs. It has not been deployed to Kof22.
 
 Earlier local verification used core artifacts installed as
 `4.1.0-values1196-SNAPSHOT`, with
@@ -48,9 +68,9 @@ That version exists only in the local Maven repository; it is not an adoption pi
    (done October 26: 198 tests, no failures/errors/skips; packaging and coverage
    passed, including HTTP, PostgreSQL transaction and Redis tests).
 4. Publish the collaboration snapshot and verify an independent consumer using
-   published artifacts. Update CANDIDATE-RELEASE.md with the exact pair.
+   published artifacts (done; exact pair recorded in CANDIDATE-RELEASE.md).
 5. Update Kof22 Website-Backend adoption work and qualify it in the selected
    isolated staging environment before requesting production deployment.
 
-Local verification is evidence for this implementation, not proof that the
-published candidate or Kof22 deployment has these changes.
+The published pair contains this implementation. Kof22 adoption, a compatible
+packaged frontend and staging qualification remain separate release steps.
