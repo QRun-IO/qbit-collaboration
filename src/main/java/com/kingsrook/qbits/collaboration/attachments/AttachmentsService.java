@@ -129,50 +129,11 @@ public class AttachmentsService
             }
          }
          String type = contentType == null || contentType.isBlank() ? "application/octet-stream" : contentType;
-         var transaction = QContext.getQBackendTransaction();
-         if(transaction != null && !transaction.supportsRollbackCallbacks())
-         {
-            throw (new QException("Attachment uploads require a transaction with confirmed rollback support."));
-         }
-         try(InputStream upload = Files.newInputStream(temporary))
-         {
-            storage.put(bucket, PutRequest.of(key, upload).withContentLength(size).withContentType(type).withContentDisposition("inline"));
-         }
-         if(transaction != null)
-         {
-            var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
-            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context, () -> storage.delete(bucket, key)));
-         }
-         boolean rowSaved = false;
-         try
-         {
-            QRecord row = new QRecord().withValue("tableName", tableName).withValue("recordId", id).withValue("fileName", name)
-               .withValue("contentType", type).withValue("sizeBytes", size).withValue("sha256", HexFormat.of().formatHex(digest.digest()))
-               .withValue("bucketName", bucket).withValue("storageKey", key).withValue("description", description)
-               .withValue("createdByUserId", user).withValue("parentDeleted", false);
-            InsertInput input = new InsertInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withRecords(List.of(row));
-            input.withPermissionBypass("AttachmentsService checked parent and attach permission before upload.");
-            List<QRecord> records = new InsertAction().execute(input).getRecords();
-            AttachmentRecords.checkErrors(records);
-            rowSaved = true;
-            com.kingsrook.qbits.collaboration.activity.ActivityWriter.write(tableName, id, "FILE_ADDED", "File added", CollaborationTables.ATTACHMENT, records.getFirst().getValueString("id"));
-            return (entry(records.getFirst()));
-         }
-         catch(QException | RuntimeException failure)
-         {
-            try
-            {
-               if(!rowSaved)
-               {
-                  storage.delete(bucket, key);
-               }
-            }
-            catch(RuntimeException cleanupFailure)
-            {
-               failure.addSuppressed(cleanupFailure);
-            }
-            throw (failure);
-         }
+         QRecord row = new QRecord().withValue("tableName", tableName).withValue("recordId", id).withValue("fileName", name)
+            .withValue("contentType", type).withValue("sizeBytes", size).withValue("sha256", HexFormat.of().formatHex(digest.digest()))
+            .withValue("bucketName", bucket).withValue("storageKey", key).withValue("description", description)
+            .withValue("createdByUserId", user).withValue("parentDeleted", false);
+         return (storeUpload(row, temporary));
       }
       catch(IOException | NoSuchAlgorithmException e)
       {
@@ -193,6 +154,107 @@ public class AttachmentsService
          }
       }
    }
+
+   /*******************************************************************************
+    ** On transactional locking backends, own a transaction only after spooling
+    ** the bounded input. An existing outer transaction retains the upload lock.
+    *******************************************************************************/
+   private AttachmentEntry storeUpload(QRecord row, Path temporary) throws QException, IOException
+   {
+      var transaction = QContext.getQBackendTransaction();
+      if(transaction == null && AttachmentCleanupQueue.supportsUploadOwnership())
+      {
+         try(var owned = com.kingsrook.qqq.backend.core.actions.QBackendTransaction.openFor(new InsertInput(CollaborationTables.ATTACHMENT)))
+         {
+            QContext.setTransaction(owned);
+            try
+            {
+               AttachmentEntry result = storeUpload(row, temporary);
+               owned.commit();
+               return (result);
+            }
+            catch(QException | IOException | RuntimeException failure)
+            {
+               try
+               {
+                  owned.rollback();
+               }
+               catch(QException rollbackFailure)
+               {
+                  failure.addSuppressed(rollbackFailure);
+               }
+               throw (failure);
+            }
+            finally
+            {
+               QContext.clearTransaction();
+            }
+         }
+      }
+      if(transaction != null && !transaction.supportsRollbackCallbacks())
+      {
+         throw (new QException("Attachment uploads require a transaction with confirmed rollback support."));
+      }
+      String bucket = row.getValueString("bucketName");
+      String key = row.getValueString("storageKey");
+      AttachmentCleanupQueue cleanup = new AttachmentCleanupQueue(storage);
+      QRecord pending = cleanup.beginUpload(bucket, key);
+      try(InputStream upload = Files.newInputStream(temporary))
+      {
+         storage.put(bucket, PutRequest.of(key, upload).withContentLength(row.getValueLong("sizeBytes"))
+            .withContentType(row.getValueString("contentType")).withContentDisposition("inline"));
+      }
+      catch(IOException | RuntimeException failure)
+      {
+         if(pending == null)
+         {
+            try
+            {
+               cleanup.compensateUpload(bucket, key);
+            }
+            catch(RuntimeException cleanupFailure)
+            {
+               failure.addSuppressed(cleanupFailure);
+            }
+         }
+         throw (failure);
+      }
+      if(transaction != null && pending == null)
+      {
+         var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
+         transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context,
+            () -> cleanup.compensateUpload(bucket, key)));
+      }
+      boolean rowSaved = false;
+      try
+      {
+         InsertInput input = new InsertInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withRecords(List.of(row));
+         input.withPermissionBypass("AttachmentsService checked parent and attach permission before upload.");
+         List<QRecord> records = new InsertAction().execute(input).getRecords();
+         AttachmentRecords.checkErrors(records);
+         rowSaved = true;
+         cleanup.completeUpload(pending);
+         com.kingsrook.qbits.collaboration.activity.ActivityWriter.write(row.getValueString("tableName"), row.getValueString("recordId"),
+            "FILE_ADDED", "File added", CollaborationTables.ATTACHMENT, records.getFirst().getValueString("id"));
+         return (entry(records.getFirst()));
+      }
+      catch(QException | RuntimeException failure)
+      {
+         if(!rowSaved && pending == null)
+         {
+            try
+            {
+               cleanup.compensateUpload(bucket, key);
+            }
+            catch(RuntimeException cleanupFailure)
+            {
+               failure.addSuppressed(cleanupFailure);
+            }
+         }
+         throw (failure);
+      }
+   }
+
 
    /*******************************************************************************
     ** Newest first, independently of collaboration.view.
@@ -301,7 +363,7 @@ public class AttachmentsService
    }
 
    /*******************************************************************************
-    ** Delete storage first so a provider failure leaves a retryable row.
+    ** Atomically remove metadata and retain a durable storage cleanup request.
     *******************************************************************************/
    void deleteStoredRow(QRecord row) throws QException
    {
@@ -313,27 +375,7 @@ public class AttachmentsService
     *******************************************************************************/
    void deleteStoredRow(QRecord row, boolean cleanup) throws QException
    {
-      if(QContext.getQBackendTransaction() != null)
-      {
-         var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
-         QContext.getQBackendTransaction().addAfterCommitCallback(() ->
-         {
-            try
-            {
-               QContext.withTemporaryContext(context, () -> deleteStoredRow(row, cleanup));
-            }
-            catch(QException e)
-            {
-               throw (new IllegalStateException("Attachment deletion requires retry", e));
-            }
-         });
-         return;
-      }
-      storage.delete(row.getValueString("bucketName"), row.getValueString("storageKey"));
-      DeleteInput input = new DeleteInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withPrimaryKeys(List.of(row.getValue("id")));
-      input.setTableMetaData(cleanup ? com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupMetadata(CollaborationTables.ATTACHMENT) : AttachmentRecords.storageTable());
-      input.withPermissionBypass("Attachment service authorized deletion, or trusted parent cleanup selected this row.");
-      AttachmentRecords.checkErrors(new DeleteAction().execute(input).getRecordsWithErrors());
+      new AttachmentCleanupQueue(storage).delete(row, cleanup);
    }
 
    /*******************************************************************************

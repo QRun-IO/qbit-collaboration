@@ -746,3 +746,31 @@ entries:
   summary: "Choose the record feature you want to configure."
 - key: possibleValueSource:collaboration_permission_mode;slot:help
   summary: "Choose whether a feature accepts editing permission or requires an explicit feature permission."
+- key: table:collaboration_attachment_cleanup;slot:help
+  summary: "Review storage cleanup waiting to finish after an attachment was deleted."
+  content: |
+    **How rows get created:** Authorized attachment operations create these records automatically. Deleted files are removed after the database commits. Uncertain uploads remain pending until the provider has finished writing. Ordinary successful cleanup removes its entry; administrator-resolved uploads retain a receipt. Administrators can inspect the records but cannot edit them directly.
+- key: table:collaboration_attachment_cleanup;field:attachmentId
+  summary: "The deleted attachment, when known; failed uploads may have no committed attachment ID."
+- key: table:collaboration_attachment_cleanup;field:bucketName
+  summary: "The storage bucket containing the file awaiting cleanup."
+- key: table:collaboration_attachment_cleanup;field:storageKey
+  summary: "The immutable file location retained until cleanup succeeds."
+- key: table:collaboration_attachment_cleanup;field:nextAttemptAt
+  summary: "Failed cleanup waits at least one minute before another scheduled attempt."
+- key: table:collaboration_attachment_cleanup;field:resolvedAt
+  summary: "When an administrator resolved this upload. Resolved receipts are excluded from retries."
+- key: table:collaboration_attachment_cleanup;field:resolvedBy
+  summary: "The signed-in administrator who resolved this upload. The original identity is retained on repeat requests."
+- key: table:collaboration_attachment_cleanup;field:settlementEvidence
+  summary: "Evidence that the provider completed or cancelled the upload. Never include credentials or private file contents."
+- key: table:collaboration_attachment_cleanup;section:settlement
+  summary: "Retained evidence and identity for an administrator-resolved upload."
+- key: process:collaborationResolveAttachmentUpload;slot:help
+  summary: "Resolve uncertain uploads only after confirming that the provider has finished writing."
+  content: |
+    Select upload intents, record evidence of provider completion or cancellation for every selected location, and confirm the Review screen. Object absence or elapsed time alone is not proof. If completion cannot be established, leave the intent pending. The action requires an identified collaboration administrator, refuses active or referenced uploads, deletes current bytes, and retains a settlement receipt. Read Result to see which uploads remain unresolved. Existing attachment deletions use normal cleanup retry instead.
+- key: process:collaborationRetryAttachmentCleanup;slot:help
+  summary: "Retry pending attachment file cleanup after storage or database recovery."
+  content: |
+    Processes up to 100 committed cleanup requests. Completed entries are removed; failures remain available for retry. Runs every minute when the host configures a collaboration scheduler. Manual execution requires collaboration administrator access.

@@ -108,7 +108,7 @@ public final class CollaborationHome
          .withPermissionRules(CollaborationPermissions.permissionRules())
          .withWidgets(HOME_WIDGETS)
          .withSection(new QAppSection().withName("collaboration").withLabel("Collaboration").withIcon(new QIcon("forum"))
-            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
+            .withTables(List.of(CollaborationTables.COMMENT, CollaborationTables.ATTACHMENT, CollaborationTables.ATTACHMENT_CLEANUP, CollaborationTables.TAG, CollaborationTables.FIELD_DEFINITION, CollaborationTables.TASK, CollaborationTables.SHARE, CollaborationTables.ACCESS_REQUEST, CollaborationTables.RECORD_ASSIGNMENT, CollaborationTables.ACTIVITY, CollaborationTables.FEATURE_SETTING, CollaborationTables.USER)));
       app.setParentAppName(config.getParentAppName());
       return (app);
    }

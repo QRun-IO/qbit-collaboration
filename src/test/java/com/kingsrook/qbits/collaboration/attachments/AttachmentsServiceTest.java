@@ -383,7 +383,7 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
-    ** Storage failures leave rows for retries; trusted cleanup works after parent deletion.
+    ** Storage failures leave durable cleanup; trusted cleanup works after parent deletion.
     *******************************************************************************/
    @Test
    void failuresAndCleanup() throws Exception
@@ -391,8 +391,13 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
       AttachmentEntry row = upload("file.txt", "x");
       storage.failDelete = true;
       assertThatThrownBy(() -> service.delete(List.of(row.id()))).hasMessage("Storage unavailable");
-      assertThat(service.list("document", 1)).hasSize(1);
+      assertThat(service.list("document", 1)).isEmpty();
+      assertThat(storage.objects).hasSize(1);
       storage.failDelete = false;
+      admin();
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isEqualTo(1);
+      login("alice");
+      upload("parent-cleanup.txt", "parent bytes");
       new DeleteAction().execute(new DeleteInput("document").withPrimaryKeys(List.of(1)));
       assertThatThrownBy(() -> service.list("document", 1)).hasMessage("Not found");
       QContext.getQSession().getPermissions().clear();
@@ -400,6 +405,8 @@ public class AttachmentsServiceTest extends PersonalServiceFixture
       cleanup.onParentsDeleted("document", List.of());
       cleanup.onParentsDeleted("document", List.of(1));
       cleanup.onParentsDeleted("document", List.of(1));
+      admin();
+      new AttachmentCleanupQueue(storage).retryPending();
       assertThat(storage.objects).isEmpty();
       assertThat(AttachmentRecords.query(new QQueryFilter())).isEmpty();
    }

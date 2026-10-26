@@ -74,6 +74,18 @@ public class AttachmentStorage
    }
 
    /*******************************************************************************
+    ** Remove failed-upload bytes and report whether no earlier PUT can still finish.
+    ** Generic object storage cannot prove remote settlement after a timeout. Keep
+    ** its durable locator for later sweeps. Adapters may return true only with an
+    ** authoritative completion/cancellation guarantee, never from object absence.
+    *******************************************************************************/
+   public boolean cleanupUpload(String name, String key)
+   {
+      delete(name, key);
+      return (false);
+   }
+
+   /*******************************************************************************
     ** Create a temporary link, never a persistent table value.
     *******************************************************************************/
    public URL presign(String name, PresignGet request)
