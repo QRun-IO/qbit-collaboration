@@ -169,8 +169,8 @@ class RedisPresenceStoreTest
    }
 
    /***************************************************************************
-    ** Characterize the open recovery gap: all projections lost together look new.
-    ** This is evidence for #1295, not an assertion of the desired final contract.
+    ** Total loss stays unknown even when the internal legacy API repopulates it.
+    ** The shared HTTP service requires server-issued leases instead of this API.
     ***************************************************************************/
    @Test
    void totalLossIsRecoveringEvenForLegacyHeartbeat() throws Exception
@@ -353,21 +353,24 @@ class RedisPresenceStoreTest
          try(var connection = new RedisConnection(new HostAndPort(redis.getHost(), redis.getMappedPort(6379)),
             DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
          {
-            for(String suffix : java.util.List.of("state", "expiry"))
+            for(String lostPart : java.util.List.of("record:state", "record:expiry", "table:state", "table:expiry"))
             {
-               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", suffix, "presence"), Duration.ofSeconds(2), 10);
+               String[] parts = lostPart.split(":");
+               boolean record = parts[0].equals("record");
+               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", parts[0] + parts[1], "presence"), Duration.ofSeconds(2), 10);
                awaitReady(store);
-               assertThat(store.heartbeat("one", "One", "tab", "orders", "1", "VIEWING", null, 1L)).isTrue();
+               String lease = store.openLease("one", "One", "orders", "1");
+               assertThat(store.renewLease("one", "One", lease, "orders", "1", "VIEWING", null, 1L)).isTrue();
                // KEYS is confined to this disposable test server, never the application path.
-               String recordKey = connection.client().keys("*:record:*:" + suffix).iterator().next();
-               String tableKey = recordKey.substring(0, recordKey.indexOf(":record:")) + ":table:state";
-               var before = connection.client().hgetAll(tableKey);
-               connection.client().del(recordKey);
+               String lostKey = connection.client().keys(record ? "*:record:*:" + parts[1] : "*:table:" + parts[1]).iterator().next();
+               String retainedState = connection.client().keys(record ? "*:table:state" : "*:record:*:state").iterator().next();
+               var before = connection.client().hgetAll(retainedState);
+               connection.client().del(lostKey);
                assertThatThrownBy(() -> store.snapshot("orders", "1"))
                   .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
-               assertThatThrownBy(() -> store.heartbeat("one", "One", "tab", "orders", "1", "EDITING", "status", 2L))
+               assertThatThrownBy(() -> store.renewLease("one", "One", lease, "orders", "1", "EDITING", "status", 2L))
                   .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
-               assertThat(connection.client().hgetAll(tableKey)).isEqualTo(before);
+               assertThat(connection.client().hgetAll(retainedState)).isEqualTo(before);
                connection.client().flushDB();
             }
             for(String room : java.util.List.of("record", "table"))

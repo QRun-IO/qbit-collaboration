@@ -52,10 +52,14 @@ version rolling deployment. Existing published v1 snapshots are unchanged.
 
 - Before the patch, a two-client disposable Redis test failed because total loss
   returned an empty snapshot.
-- Six focused tests now pass: full loss, loss of volatile projections while the
+- Seven focused tests now pass: full loss, loss of volatile projections while the
   guard survives, restored guard/lease bytes followed by a host generation
   change, bounded generation validation, and rejection of inconsistent lease
-  lifetimes across nodes, plus guard loss across previously unvisited records. These use independent clients in
+  lifetimes across nodes, guard loss across previously unvisited records, and
+  shared cold readiness followed by normal idle expiry. The latter verifies
+  that peer reads do not extend the deadline, the guard remains persistent,
+  expired projections remain known-empty and expired leases cannot renew.
+  These use independent clients in
   one JVM, not a deployed HA cluster.
 - Full wrapper verification passed on October 26: 184 tests, no failures,
   errors or skips; packaging and coverage gates passed. This includes the
@@ -71,8 +75,11 @@ version rolling deployment. Existing published v1 snapshots are unchanged.
   inaccessible, and a new lease rejoins through the production recovery window.
   This uses a loopback HTTP server with fixture authentication, not a browser
   or a deployed host. The focused test and the combined full suite both pass.
-- Still required: remaining cold/readiness and partial-loss edge cases,
-  deployed-host qualification and enforced host maintenance/reset. Local
+- The store suite checks loss of either state or expiry data in both record
+  and table projections. Server-issued lease renewal must fail unavailable
+  without changing the surviving projection. It also covers complete loss
+  of either projection pair and stale departure ordering.
+- Still required: deployed-host qualification and enforced host maintenance/reset. Local
   per-operation cost measurements at 1,000 and 10,000 leases are recorded in
   `acceptance/RECOVERY-COST.md`; sustained production capacity is unqualified.
   The implementation uses no INFO call or lifecycle polling cache.

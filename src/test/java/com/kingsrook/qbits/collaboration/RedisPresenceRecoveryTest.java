@@ -48,6 +48,67 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RedisPresenceRecoveryTest extends PersonalServiceFixture
 {
    /***************************************************************************
+    ** Peer reads cannot prolong cold recovery; normal expiry stays known-empty.
+    ***************************************************************************/
+   @Test
+   void coldRecoveryDeadlineAndIdleKnowledgeAreShared() throws Exception
+   {
+      try(var redis = new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379))
+      {
+         redis.start();
+         var address = new HostAndPort(redis.getHost(), redis.getMappedPort(6379));
+         var config = DefaultJedisClientConfig.builder().build();
+         try(var first = new RedisConnection(address, config, 2, Duration.ofMillis(500));
+             var second = new RedisConnection(address, config, 2, Duration.ofMillis(500)))
+         {
+            var namespace = new RedisNamespace("test", "cold-idle", "tenant", "presence");
+            var a = new RedisPresenceStore(first.scripts(), namespace, Duration.ofSeconds(2), 10);
+            var b = new RedisPresenceStore(second.scripts(), namespace, Duration.ofSeconds(2), 10);
+            assertThatThrownBy(() -> a.snapshot("document", "1")).isInstanceOf(PresenceRecoveringException.class);
+            String guardKey = first.client().keys("*:recovery").iterator().next();
+            String coldGuard = first.client().get(guardKey);
+            assertThatThrownBy(() -> b.snapshot("document", null)).isInstanceOf(PresenceRecoveringException.class);
+            assertThat(first.client().get(guardKey)).isEqualTo(coldGuard);
+            long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
+            while(true)
+            {
+               try
+               {
+                  assertThat(b.snapshot("document", "1")).isEmpty();
+                  break;
+               }
+               catch(PresenceRecoveringException recovering)
+               {
+                  assertThat(System.nanoTime()).isLessThan(deadline);
+                  assertThat(first.client().get(guardKey)).isEqualTo(coldGuard);
+                  Thread.sleep(50);
+               }
+            }
+            assertThat(a.snapshot("document", null)).isEmpty();
+            assertThat(first.client().get(guardKey)).isEqualTo(coldGuard);
+            assertThat(first.client().pttl(guardKey)).isEqualTo(-1L);
+
+            String lease = a.openLease("alice", "Alice", "document", "1");
+            awaitVisible(b, lease);
+            String activeGuard = first.client().get(guardKey);
+            deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
+            while(first.client().keys("*").size() > 1)
+            {
+               assertThat(System.nanoTime()).isLessThan(deadline);
+               Thread.sleep(50);
+            }
+            assertThat(first.client().keys("*")).containsExactly(guardKey);
+            assertThat(a.snapshot("document", "1")).isEmpty();
+            assertThat(b.snapshot("document", null)).isEmpty();
+            assertThat(first.client().get(guardKey)).isEqualTo(activeGuard);
+            assertThatThrownBy(() -> b.renewLease("alice", "Alice", lease, "document", "1", "VIEWING", null, 100L))
+               .isInstanceOf(PresenceLeaseExpiredException.class);
+         }
+      }
+   }
+
+
+   /***************************************************************************
     ** Keep a real lease alive while waiting for bounded initial recovery.
     ***************************************************************************/
    private void awaitVisible(RedisPresenceStore store, String lease) throws Exception
