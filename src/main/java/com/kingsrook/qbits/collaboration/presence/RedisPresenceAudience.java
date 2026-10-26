@@ -49,6 +49,6 @@ public class RedisPresenceAudience implements RealtimeAudienceProvider
    public static RedisNamespace namespace(RedisPresenceConfig config) throws Exception
    {
       var scope = QCodeLoader.getAdHoc(PresenceScopeProvider.class, config.getScopeProvider()).tenantScope();
-      return (new RedisNamespace(config.getDeployment(), config.getApplication(), scope, "presence"));
+      return (new RedisNamespace(config.getDeployment(), config.getApplication(), scope, "presence:" + config.getRecoveryGeneration()));
    }
 }

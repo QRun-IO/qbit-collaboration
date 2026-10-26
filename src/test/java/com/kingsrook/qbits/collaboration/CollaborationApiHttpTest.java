@@ -64,6 +64,69 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CollaborationApiHttpTest extends PersonalServiceFixture
 {
    /***************************************************************************
+    ** Data loss is unavailable over HTTP until a fresh lease has rejoined.
+    ***************************************************************************/
+   @Test
+   void redisLossRequiresHttpRejoin() throws Exception
+   {
+      try(var redis = new org.testcontainers.containers.GenericContainer<>(org.testcontainers.utility.DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379))
+      {
+         redis.start();
+         new com.kingsrook.qbits.redis.RedisQBitProducer().withQBitConfig(new com.kingsrook.qbits.redis.RedisQBitConfig()
+            .withConnection("presence", new com.kingsrook.qbits.redis.RedisConnectionConfig()
+               .withHost(redis.getHost()).withPort(redis.getMappedPort(6379)).withTls(false))).produce(instance);
+         config.withRedisPresence(new com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig()
+            .withConnectionName("presence").withDeployment("test").withApplication("http-recovery")
+            .withScopeProvider(new QCodeReference(RedisPresenceServiceTest.TenantScope.class)));
+         var runtime = new com.kingsrook.qbits.redis.RedisRuntimeService();
+         try
+         {
+            runtime.start(instance);
+            String original = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}").get("connectionId").asText();
+            awaitHttpPresence(original);
+            assertThat(redis.execInContainer("redis-cli", "FLUSHDB").getExitCode()).isZero();
+            assertError(503, "GET", "/presence?table=document&pk=1", null, "alice");
+            assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
+            String oldRenewal = JSON.writeValueAsString(Map.of("connectionId", original, "table", "document", "pk", "1", "mode", "VIEWING", "sequence", 1000));
+            assertThat(json(request("POST", "/presence/leases/renew", oldRenewal, "alice"), 409).path("code").asText())
+               .isEqualTo("PRESENCE_LEASE_EXPIRED");
+            assertError(404, "POST", "/presence/leases/renew", oldRenewal, "outsider");
+            String replacement = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}").get("connectionId").asText();
+            assertThat(replacement).isNotEqualTo(original);
+            awaitHttpPresence(replacement);
+            assertThat(ok("GET", "/presence?table=document&pk=1", null).path("viewers")).hasSize(1);
+         }
+         finally
+         {
+            runtime.stop();
+            runtime.afterApplicationStop();
+         }
+      }
+   }
+
+   /***************************************************************************
+    ** Keep a real HTTP lease alive while the production recovery window elapses.
+    ***************************************************************************/
+   private void awaitHttpPresence(String lease) throws Exception
+   {
+      long deadline = System.nanoTime() + Duration.ofSeconds(55).toNanos();
+      long sequence = 0;
+      while(true)
+      {
+         String body = JSON.writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "mode", "VIEWING", "sequence", ++sequence));
+         var response = request("POST", "/presence/leases/renew", body, "alice");
+         if(response.statusCode() == 200)
+         {
+            assertThat(json(response, 200).path("viewers")).hasSize(1);
+            return;
+         }
+         assertThat(json(response, 503).path("message").asText()).contains("recovering");
+         assertThat(System.nanoTime()).as("HTTP presence recovery deadline").isLessThan(deadline);
+         Thread.sleep(1000);
+      }
+   }
+
+   /***************************************************************************
     ** Shared presence has an explicit unavailable response, never a local fallback.
     ***************************************************************************/
    @Test

@@ -35,6 +35,7 @@ public class RedisPresenceConfig implements Serializable
    private String application = null;
    private QCodeReference scopeProvider = null;
    private Integer capacity = 2000;
+   private String recoveryGeneration = "initial";
 
    /***************************************************************************
     ** Inspect configuration without creating a runtime pool or local registry.
@@ -60,6 +61,10 @@ public class RedisPresenceConfig implements Serializable
       if(capacity == null || capacity < 1 || capacity > 10000)
       {
          errors.add("Redis presence capacity must be between 1 and 10000");
+      }
+      if(recoveryGeneration == null || !recoveryGeneration.matches("[A-Za-z0-9_-]{1,64}"))
+      {
+         errors.add("Redis presence recovery generation must contain 1 to 64 letters, digits, underscores or hyphens");
       }
    }
 
@@ -145,6 +150,25 @@ public class RedisPresenceConfig implements Serializable
    public RedisPresenceConfig withCapacity(Integer value)
    {
       capacity = value;
+      return (this);
+   }
+
+
+   /***************************************************************************
+    ** Host-owned generation, stored outside Redis and changed after restoring data.
+    ***************************************************************************/
+   public String getRecoveryGeneration()
+   {
+      return (recoveryGeneration);
+   }
+
+
+   /***************************************************************************
+    ** All nodes must use the same new generation before maintenance traffic resumes.
+    ***************************************************************************/
+   public RedisPresenceConfig withRecoveryGeneration(String value)
+   {
+      recoveryGeneration = value;
       return (this);
    }
 }
