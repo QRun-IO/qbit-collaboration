@@ -117,6 +117,35 @@ Only the Java executable path is normalized in these receipts. The Linux image
 used for these runs was
 `eclipse-temurin@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99`.
 
+## Browser propagation baseline
+
+`browser_presence_latency.mjs` measures Chromium field-focus changes until a
+different editor sees the corresponding remote marker. Supply a caller-owned
+two-node loopback fixture serving the published frontend with `alice`/`admin`
+mock identities and the acceptance router's `presence_node=first/second`
+affinity cookies:
+
+```powershell
+node docs/performance/browser_presence_latency.mjs /path/to/frontend http://localhost:PORT result.json 25
+```
+
+The test verifies the target marker is absent before every change, the old
+marker disappears afterward, both real SSE streams opened successfully,
+issued-lease writes reached distinct nodes, and unsaved drafts survive. API
+responses are not mocked. The fixture owns backend/router/Redis cleanup; this
+script owns and closes its browser.
+
+The [25-transition receipt](results/browser-focus-25.json) passed against the
+downloaded public RC37 JAR and published backend snapshots. Focus-to-observed-DOM
+p50/p95/p99 were 31.648/33.078/36.092 ms; p99 is the maximum in this small sample.
+There were no page errors or failed lease responses. Six-user presence and Redis
+admin browser checks also passed in the same fixture run; fixture cleanup passed.
+
+This baseline includes browser automation, UI debounce, network, invalidation
+and rendering. It is not a server-only transport measurement, an SSE-only causal
+proof, an under-load result, or a production latency objective. Browser propagation
+under sustained load, churn and failures remains unqualified.
+
 Remaining qualification includes larger sustained workloads, total resident
 memory and Redis-server resource measurements, browser/SSE propagation percentiles, saturation, churn,
 missed messages and process crashes. Loopback HTTP latency must not be reported
