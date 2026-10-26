@@ -123,9 +123,33 @@ import io.javalin.config.JavalinConfig;
 public class CollaborationDevServer extends AbstractQQQApplication
 {
    private final QInstance instance;
-   static final List<String> USERS = List.of("alice", "bob", "admin");
+   static final List<String> USERS = fixtureUsers();
    static final String USER_COOKIE = "collab_dev_user";
    private static final ThreadLocal<String> REQUEST_USER = new ThreadLocal<>();
+
+
+   /*******************************************************************************
+    ** Opt-in bounded identities for the disposable capacity fixture only.
+    *******************************************************************************/
+   private static List<String> fixtureUsers()
+   {
+      int tenants = Integer.getInteger("collab.capacity.tenants", 0);
+      int users = Integer.getInteger("collab.capacity.users", 0);
+      if(tenants < 0 || tenants > 8 || users < 0 || users > 100)
+      {
+         throw (new IllegalArgumentException("Capacity fixture permits at most 8 tenants and 100 users each"));
+      }
+      var identities = new java.util.ArrayList<>(List.of("alice", "bob", "admin"));
+      for(int tenant = 0; tenant < tenants; tenant++)
+      {
+         for(int user = 0; user < users; user++)
+         {
+            identities.add("load-t" + tenant + "-u" + user);
+         }
+      }
+      return (List.copyOf(identities));
+   }
+
 
 
 
@@ -332,7 +356,7 @@ public class CollaborationDevServer extends AbstractQQQApplication
       {
          case "alice" -> "Alice Morgan";
          case "bob" -> "Bob Chen";
-         default -> "Demo Administrator";
+         default -> user.equals("admin") ? "Demo Administrator" : user;
       };
       QSession session = new QSession().withUser(new QUser().withIdReference(user).withFullName(name))
          .withPermissions("person.read", "person.comment")
