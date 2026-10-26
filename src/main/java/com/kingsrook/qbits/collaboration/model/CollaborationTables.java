@@ -211,8 +211,13 @@ public final class CollaborationTables
          .withField(string("bucketName", "Bucket", 255).withIsRequired(true))
          .withField(string("storageKey", "Storage Key", 1024).withIsRequired(true))
          .withField(new QFieldMetaData("nextAttemptAt", QFieldType.DATE_TIME).withLabel("Next Attempt"))
+         .withField(new QFieldMetaData("resolvedAt", QFieldType.DATE_TIME).withLabel("Resolved At"))
+         .withField(string("resolvedBy", "Resolved By", 255))
+         .withField(string("settlementEvidence", "Provider Settlement Evidence", 2000))
          .withSection(new QFieldSection("cleanup", new QIcon("delete"), Tier.T1,
-            List.of("id", "attachmentId", "bucketName", "storageKey", "nextAttemptAt")).withLabel("Cleanup")));
+            List.of("id", "attachmentId", "bucketName", "storageKey", "nextAttemptAt")).withLabel("Cleanup"))
+         .withSection(new QFieldSection("settlement", new QIcon("check"), Tier.T2,
+            List.of("resolvedAt", "resolvedBy", "settlementEvidence")).withLabel("Operator Settlement")));
       for(QTableMetaData table : tables)
       {
          table.withSection(new QFieldSection("dates", new QIcon("calendar_today"), Tier.T3, List.of("createDate", "modifyDate")).withLabel("Dates"));

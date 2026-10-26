@@ -21,9 +21,11 @@
 package com.kingsrook.qbits.collaboration.attachments;
 
 
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
+import com.kingsrook.qbits.collaboration.CollaborationSecurity;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.permissions.CollaborationPermissions;
 import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
@@ -300,6 +302,10 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
     *******************************************************************************/
    private CleanupOutcome finishUnlocked(QRecord pending) throws QException
    {
+      if(pending.getValue("resolvedAt") != null)
+      {
+         return (CleanupOutcome.COMPLETED);
+      }
       if(!AttachmentRecords.query(new QQueryFilter()
          .withCriteria("bucketName", QCriteriaOperator.EQUALS, pending.getValue("bucketName"))
          .withCriteria("storageKey", QCriteriaOperator.EQUALS, pending.getValue("storageKey"))).isEmpty())
@@ -361,9 +367,10 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
          throw (new QException("Attachment cleanup must run outside a caller transaction."));
       }
       QueryInput query = new QueryInput(CollaborationTables.ATTACHMENT_CLEANUP).withFilter(new QQueryFilter()
+         .withCriteria("resolvedAt", QCriteriaOperator.IS_BLANK).withSubFilter(new QQueryFilter()
          .withBooleanOperator(QQueryFilter.BooleanOperator.OR)
          .withCriteria("nextAttemptAt", QCriteriaOperator.IS_BLANK)
-         .withCriteria("nextAttemptAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, Instant.now())
+         .withCriteria("nextAttemptAt", QCriteriaOperator.LESS_THAN_OR_EQUALS, Instant.now()))
          .withOrderBy(new QFilterOrderBy("id")).withLimit(100));
       query.withPermissionBypass("Authorized operator retries committed storage cleanup.");
       List<QRecord> pending = new QueryAction().execute(query).getRecords();
@@ -416,6 +423,93 @@ public class AttachmentCleanupQueue implements CustomPermissionChecker
          new QRecord().withValue("id", pending.getValue("id")).withValue("nextAttemptAt", Instant.now().plusSeconds(60))));
       update.withPermissionBypass("Committed cleanup failed or is not yet safe; retain it for a later attempt.");
       AttachmentRecords.checkErrors(new UpdateAction().execute(update).getRecords());
+   }
+
+
+   /*******************************************************************************
+    ** An identified administrator attests provider settlement; absence or age alone
+    ** is not evidence. Keep the receipt on the service-managed row permanently.
+    *******************************************************************************/
+   public void resolveUpload(Serializable id, String evidence) throws QException
+   {
+      String actor = requireSettlementOperator();
+      validateEvidence(evidence);
+      if(id == null || QContext.getQBackendTransaction() != null || !supportsUploadOwnership())
+      {
+         throw (new QException("Upload settlement requires a record ID and an independent locking transaction."));
+      }
+      try(QBackendTransaction transaction = QBackendTransaction.openFor(new UpdateInput(CollaborationTables.ATTACHMENT_CLEANUP)))
+      {
+         QContext.setTransaction(transaction);
+         try
+         {
+            QRecord pending = lock(new QRecord().withValue("id", id), transaction);
+            if(pending == null)
+            {
+               throw (new QException("Cleanup record is active or no longer exists. Retry after its owner finishes."));
+            }
+            if(pending.getValue("resolvedAt") != null)
+            {
+               transaction.commit();
+               return;
+            }
+            if(pending.getValue("attachmentId") != null)
+            {
+               throw (new QException("Use normal cleanup retry for committed attachment deletions."));
+            }
+            if(!AttachmentRecords.query(new QQueryFilter()
+               .withCriteria("bucketName", QCriteriaOperator.EQUALS, pending.getValue("bucketName"))
+               .withCriteria("storageKey", QCriteriaOperator.EQUALS, pending.getValue("storageKey"))).isEmpty())
+            {
+               throw (new QException("An attachment still references this object; settlement is not allowed."));
+            }
+            storage.delete(pending.getValueString("bucketName"), pending.getValueString("storageKey"));
+            UpdateInput update = new UpdateInput(CollaborationTables.ATTACHMENT_CLEANUP).withTransaction(transaction)
+               .withRecords(List.of(new QRecord().withValue("id", pending.getValue("id"))
+                  .withValue("resolvedAt", Instant.now()).withValue("resolvedBy", actor)
+                  .withValue("settlementEvidence", evidence.strip())));
+            update.withPermissionBypass("Identified collaboration administrator records confirmed upload settlement after storage cleanup.");
+            AttachmentRecords.checkErrors(new UpdateAction().execute(update).getRecords());
+            transaction.commit();
+         }
+         catch(QException | RuntimeException failure)
+         {
+            transaction.rollback();
+            throw (failure);
+         }
+         finally
+         {
+            QContext.clearTransaction();
+         }
+      }
+   }
+
+
+   /*******************************************************************************
+    ** The form and service both reject missing or oversized evidence.
+    *******************************************************************************/
+   static void validateEvidence(String evidence) throws QException
+   {
+      if(evidence == null || evidence.isBlank() || evidence.strip().length() > 2000)
+      {
+         throw (new QException("Record provider completion or cancellation evidence (1–2000 characters)."));
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Settlement is a deliberate, attributable admin action, never scheduled work.
+    *******************************************************************************/
+   static String requireSettlementOperator() throws QPermissionDeniedException
+   {
+      var session = QContext.getQSession();
+      String actor = CollaborationSecurity.userId(session);
+      if(session == null || session instanceof QSystemUserSession || !session.hasPermission(CollaborationPermissions.ADMIN)
+         || actor == null || actor.isBlank() || actor.length() > 255)
+      {
+         throw (new QPermissionDeniedException("An identified collaboration administrator must confirm upload settlement."));
+      }
+      return (actor);
    }
 
 

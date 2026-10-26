@@ -96,10 +96,14 @@ public final class CollaborationSchema
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_assignment_assignee ON collaboration_record_assignment (assignee_user_id)");
       statements.add("ALTER TABLE collaboration_mention ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ");
       statements.add("ALTER TABLE collaboration_attachment_cleanup ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ");
+      statements.add("ALTER TABLE collaboration_attachment_cleanup ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ");
+      statements.add("ALTER TABLE collaboration_attachment_cleanup ADD COLUMN IF NOT EXISTS resolved_by VARCHAR(255)");
+      statements.add("ALTER TABLE collaboration_attachment_cleanup ADD COLUMN IF NOT EXISTS settlement_evidence VARCHAR(2000)");
       statements.add("ALTER TABLE collaboration_attachment_cleanup ALTER COLUMN attachment_id DROP NOT NULL");
       statements.add("DROP INDEX IF EXISTS uq_collaboration_attachment_cleanup_1");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_attachment_storage_key ON collaboration_attachment USING HASH (storage_key)");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_attachment_cleanup_due ON collaboration_attachment_cleanup (next_attempt_at, id)");
+      statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_attachment_cleanup_pending ON collaboration_attachment_cleanup (next_attempt_at, id) WHERE resolved_at IS NULL");
       statements.add("CREATE INDEX IF NOT EXISTS idx_collaboration_mention_unread ON collaboration_mention (mentioned_user_id) WHERE notified_at IS NOT NULL AND read_at IS NULL");
       return (String.join(";\n", statements) + ";\n");
    }

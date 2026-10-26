@@ -31,6 +31,11 @@ import com.kingsrook.qbits.collaboration.CollaborationSchema;
 import com.kingsrook.qbits.collaboration.PersonalServiceFixture;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
 import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.actions.processes.RunProcessAction;
+import com.kingsrook.qqq.backend.core.model.actions.processes.RunProcessInput;
+import com.kingsrook.qqq.backend.core.model.actions.processes.ProcessSummaryLine;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import com.kingsrook.qqq.backend.core.processes.implementations.etl.streamedwithfrontend.StreamedETLWithFrontendProcess;
 import com.kingsrook.qqq.backend.module.postgres.model.metadata.PostgreSQLBackendMetaData;
 import com.kingsrook.qqq.backend.module.rdbms.actions.RDBMSTransaction;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
@@ -38,6 +43,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +59,7 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
    private static GenericContainer<?> postgres;
    private RecordingStorage storage;
    private AttachmentsService service;
+   private static AttachmentCleanupQueue processQueue;
 
 
    /*******************************************************************************
@@ -670,6 +678,252 @@ class AttachmentTransactionsPostgresTest extends PersonalServiceFixture
       };
       assertThat(uncertain.cleanupUpload("bucket", "key")).isFalse();
       assertThat(deletes.get()).isEqualTo(1);
+   }
+
+
+   /*******************************************************************************
+    ** Manual settlement retains an attributable receipt and does not retry it.
+    *******************************************************************************/
+   @Test
+   void operatorSettlementRetainsReceiptAndStopsRetries() throws Exception
+   {
+      int id = settlementIntent();
+      admin();
+      new AttachmentCleanupQueue(storage).resolveUpload(id, " Provider case 123 confirms PUT completion. ");
+      assertThat(storage.objects).isEmpty();
+      try(Connection connection = connect(); var sql = connection.createStatement();
+         var row = sql.executeQuery("SELECT resolved_by, settlement_evidence, resolved_at FROM collaboration_attachment_cleanup WHERE id = " + id))
+      {
+         assertThat(row.next()).isTrue();
+         assertThat(row.getString(1)).isEqualTo("admin");
+         assertThat(row.getString(2)).isEqualTo("Provider case 123 confirms PUT completion.");
+         assertThat(row.getTimestamp(3)).isNotNull();
+      }
+      int attempts = storage.deleteAttempts.get();
+      new AttachmentCleanupQueue(storage).resolveUpload(id, "A repeat must not overwrite the original receipt.");
+      assertThat(new AttachmentCleanupQueue(storage).retryPending()).isZero();
+      assertThat(storage.deleteAttempts.get()).isEqualTo(attempts);
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute(CollaborationSchema.postgresScript(config));
+         try(var row = sql.executeQuery("SELECT settlement_evidence FROM collaboration_attachment_cleanup WHERE id = " + id))
+         {
+            assertThat(row.next()).isTrue();
+            assertThat(row.getString(1)).isEqualTo("Provider case 123 confirms PUT completion.");
+         }
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Deny unauthenticated, non-admin and scheduled callers before provider I/O.
+    *******************************************************************************/
+   @Test
+   void operatorSettlementRequiresIdentityPermissionAndEvidence() throws Exception
+   {
+      int id = settlementIntent();
+      AttachmentCleanupQueue queue = new AttachmentCleanupQueue(storage);
+      assertThatThrownBy(() -> queue.resolveUpload(id, "confirmed")).isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException.class);
+      QContext.init(instance, new com.kingsrook.qqq.backend.core.model.session.QSystemUserSession());
+      assertThatThrownBy(() -> queue.resolveUpload(id, "confirmed")).isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException.class);
+      admin();
+      assertThatThrownBy(() -> queue.resolveUpload(id, " ")).hasMessageContaining("evidence");
+      assertThatThrownBy(() -> queue.resolveUpload(id, "x".repeat(2001))).hasMessageContaining("evidence");
+      assertThatThrownBy(() -> queue.resolveUpload(null, "confirmed")).hasMessageContaining("record ID");
+      assertThat(storage.deleteAttempts.get()).isZero();
+      assertThat(storage.objects).hasSize(1);
+   }
+
+
+   /*******************************************************************************
+    ** A locked upload cannot be settled by an administrator on another connection.
+    *******************************************************************************/
+   @Test
+   void operatorSettlementSkipsActiveOwner() throws Exception
+   {
+      int id = settlementIntent();
+      admin();
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         connection.setAutoCommit(false);
+         sql.executeQuery("SELECT id FROM collaboration_attachment_cleanup WHERE id = " + id + " FOR UPDATE").close();
+         assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed"))
+            .hasMessageContaining("active or no longer exists");
+         connection.rollback();
+      }
+      assertThat(storage.deleteAttempts.get()).isZero();
+      assertThat(QContext.getQBackendTransaction()).isNull();
+   }
+
+
+   /*******************************************************************************
+    ** Even an admin cannot delete a referenced locator or settle normal deletions.
+    *******************************************************************************/
+   @Test
+   void operatorSettlementProtectsReferencedObjects() throws Exception
+   {
+      var attachment = upload();
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.executeUpdate("INSERT INTO collaboration_attachment_cleanup (bucket_name, storage_key) SELECT bucket_name, storage_key FROM collaboration_attachment");
+      }
+      admin();
+      int id;
+      try(Connection connection = connect(); var sql = connection.createStatement(); var row = sql.executeQuery("SELECT id FROM collaboration_attachment_cleanup"))
+      {
+         row.next();
+         id = row.getInt(1);
+      }
+      assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed"))
+         .hasMessageContaining("still references");
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.executeUpdate("UPDATE collaboration_attachment_cleanup SET attachment_id = " + attachment.id());
+      }
+      assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed"))
+         .hasMessageContaining("normal cleanup retry");
+      assertThat(storage.deleteAttempts.get()).isZero();
+      assertThat(storage.objects).hasSize(1);
+   }
+
+
+   /*******************************************************************************
+    ** Provider failure or rejected receipt persistence leaves a retryable locator.
+    *******************************************************************************/
+   @Test
+   void operatorSettlementFailureRetainsIntent() throws Exception
+   {
+      int id = settlementIntent();
+      admin();
+      storage.failDelete = true;
+      assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed")).isInstanceOf(Exception.class);
+      assertThat(storage.objects).hasSize(1);
+      storage.failDelete = false;
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute("CREATE FUNCTION reject_receipt() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''receipt failure''; END'; CREATE TRIGGER reject_receipt BEFORE UPDATE ON collaboration_attachment_cleanup FOR EACH ROW EXECUTE FUNCTION reject_receipt()");
+      }
+      assertThatThrownBy(() -> new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed")).isInstanceOf(Exception.class);
+      assertThat(storage.objects).isEmpty();
+      try(Connection connection = connect(); var sql = connection.createStatement(); var row = sql.executeQuery("SELECT resolved_at FROM collaboration_attachment_cleanup WHERE id = " + id))
+      {
+         assertThat(row.next()).isTrue();
+         assertThat(row.getTimestamp(1)).isNull();
+      }
+      try(Connection connection = connect(); var sql = connection.createStatement())
+      {
+         sql.execute("DROP TRIGGER reject_receipt ON collaboration_attachment_cleanup");
+      }
+      new AttachmentCleanupQueue(storage).resolveUpload(id, "confirmed after database recovery");
+      assertThat(pendingCount()).isEqualTo(1);
+      assertThat(QContext.getQBackendTransaction()).isNull();
+   }
+
+
+   /*******************************************************************************
+    ** Fixture-only orphan, after its writer has definitively stopped.
+    *******************************************************************************/
+   private int settlementIntent() throws Exception
+   {
+      storage.objects.put("fixture/settled", new byte[] { 1, 2, 3 });
+      try(Connection connection = connect(); var sql = connection.createStatement(); var row = sql.executeQuery(
+         "INSERT INTO collaboration_attachment_cleanup (bucket_name, storage_key) VALUES ('fixture', 'settled') RETURNING id"))
+      {
+         row.next();
+         return (row.getInt(1));
+      }
+   }
+
+
+   /*******************************************************************************
+    ** Genuine form, Review and Result boundaries; revoked access is checked again.
+    *******************************************************************************/
+   @ParameterizedTest
+   @ValueSource(strings = { "success", "revoked", "storageFailure" })
+   @SuppressWarnings("unchecked")
+   void operatorSettlementProcess(String scenario) throws Exception
+   {
+      int id = settlementIntent();
+      int deletionId;
+      try(Connection connection = connect(); var sql = connection.createStatement(); var row = sql.executeQuery(
+         "INSERT INTO collaboration_attachment_cleanup (attachment_id, bucket_name, storage_key) VALUES (99, 'fixture', 'normal-deletion') RETURNING id"))
+      {
+         row.next();
+         deletionId = row.getInt(1);
+      }
+      var process = instance.getProcess(ResolveAttachmentUploadProcess.NAME);
+      process.getBackendStep(StreamedETLWithFrontendProcess.STEP_NAME_EXECUTE).getInputMetaData()
+         .getFieldThrowing(StreamedETLWithFrontendProcess.FIELD_LOAD_CODE).setDefaultValue(new QCodeReference(FixtureSettlement.class));
+      processQueue = new AttachmentCleanupQueue(storage);
+      try
+      {
+         RunProcessInput start = new RunProcessInput();
+         start.setProcessName(ResolveAttachmentUploadProcess.NAME);
+         start.addValue("recordsParam", "recordIds");
+         start.addValue("recordIds", id + "," + deletionId);
+         start.setFrontendStepBehavior(RunProcessInput.FrontendStepBehavior.BREAK);
+         assertThatThrownBy(() -> new RunProcessAction().execute(start))
+            .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException.class);
+         admin();
+         var form = new RunProcessAction().execute(start);
+         assertThat(form.getException()).isEmpty();
+         start.setProcessUUID(form.getProcessUUID());
+         start.setStartAfterStep("evidence");
+         start.addValue(ResolveAttachmentUploadProcess.EVIDENCE, "Provider request 123 completed; writer stopped.");
+         var review = new RunProcessAction().execute(start);
+         assertThat(review.getException()).isEmpty();
+         List<ProcessSummaryLine> reviewLines = (List<ProcessSummaryLine>) review.getValues().get(StreamedETLWithFrontendProcess.FIELD_VALIDATION_SUMMARY);
+         assertThat(reviewLines).hasSize(2);
+         assertThat(storage.deleteAttempts.get()).isZero();
+         if(scenario.equals("revoked"))
+         {
+            login("admin");
+         }
+         storage.failDelete = scenario.equals("storageFailure");
+         RunProcessInput go = new RunProcessInput();
+         go.setProcessName(ResolveAttachmentUploadProcess.NAME);
+         go.setProcessUUID(review.getProcessUUID());
+         go.setStartAfterStep(StreamedETLWithFrontendProcess.STEP_NAME_REVIEW);
+         go.setFrontendStepBehavior(RunProcessInput.FrontendStepBehavior.SKIP);
+         if(scenario.equals("revoked"))
+         {
+            assertThatThrownBy(() -> new RunProcessAction().execute(go))
+               .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException.class);
+            assertThat(storage.deleteAttempts.get()).isZero();
+         }
+         else
+         {
+            var result = new RunProcessAction().execute(go);
+            assertThat(result.getException()).isEmpty();
+            List<ProcessSummaryLine> lines = (List<ProcessSummaryLine>) result.getValues().get(StreamedETLWithFrontendProcess.FIELD_PROCESS_SUMMARY);
+            assertThat(lines).anySatisfy(line ->
+            {
+               line.pickMessage(true);
+               assertThat(line.getMessage()).isEqualTo(scenario.equals("success") ? "uploads resolved" : "uploads unresolved; inspect and retry");
+               assertThat(line.getCount()).isEqualTo(1);
+            });
+         }
+         assertThat(storage.objects).hasSize(scenario.equals("success") ? 0 : 1);
+      }
+      finally
+      {
+         processQueue = null;
+      }
+   }
+
+
+   /*******************************************************************************
+    ** The real process uses the real queue with deterministic fixture storage.
+    *******************************************************************************/
+   public static class FixtureSettlement extends ResolveAttachmentUploadProcess.Apply
+   {
+      /*******************************************************************************
+       ** Instantiated by the standard process loader.
+       *******************************************************************************/
+      public FixtureSettlement()
+      {
+         super(processQueue);
+      }
    }
 
 
