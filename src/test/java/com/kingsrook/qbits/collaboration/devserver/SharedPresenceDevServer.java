@@ -70,7 +70,7 @@ public class SharedPresenceDevServer
       var transport = new RedisRealtimeRuntimeService();
       new com.kingsrook.qqq.backend.core.health.HealthMetaDataProvider().defineAll(instance, "memory", null);
       var health = new com.kingsrook.qqq.backend.core.health.HealthRunner(instance, "acceptance-" + port, java.time.Clock.systemUTC());
-      var server = CollaborationDevServer.server(instance, port, false);
+      var server = CollaborationDevServer.server(instance, port, Boolean.getBoolean("collab.dev.frontend"));
       try
       {
          redis.start(instance);

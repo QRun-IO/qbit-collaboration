@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -74,12 +75,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--java", required=True)
     parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--frontend-repo", type=Path)
     args = parser.parse_args()
     repo = args.repo.resolve()
     output = repo / "target" / ("recovery-processes-" + uuid.uuid4().hex[:10])
     output.mkdir()
     classpath = os.pathsep.join([str(repo / "target/test-classes"), str(repo / "target/classes"),
                                 (repo / "target/recovery-process-classpath.txt").read_text().strip()])
+    if args.frontend_repo:
+        shutil.copytree(args.frontend_repo.resolve() / "out", output / "next-dashboard")
+        classpath = str(output) + os.pathsep + classpath
     container = "qqq-recovery-" + uuid.uuid4().hex[:12]
     processes, logs = [], []
     try:
@@ -89,7 +94,7 @@ def main():
         ports = [free_port(), free_port()]
         for port in ports:
             argfile = output / f"node-{port}.args"
-            argfile.write_text('-cp\n"' + classpath.replace("\\", "/") + '"\n'
+            argfile.write_text('-Dcollab.dev.frontend=' + str(bool(args.frontend_repo)).lower() + '\n-cp\n"' + classpath.replace("\\", "/") + '"\n'
                                'com.kingsrook.qbits.collaboration.devserver.SharedPresenceDevServer\n'
                                f'{port}\n{redis_port}\n', encoding="utf-8")
             log = (output / f"node-{port}.log").open("w")
@@ -103,6 +108,10 @@ def main():
                 assert process.poll() is None, f"Node exited; see {output}"
                 assert time.monotonic() < deadline, f"Startup timed out; see {output}"
                 time.sleep(0.2)
+        if args.frontend_repo:
+            subprocess.run(["node", str(repo / "docs/acceptance/presence_recovery_browser.mjs"),
+                            str(args.frontend_repo.resolve()), str(ports[0]), str(ports[1]), container, str(output)], check=True)
+            return
         def join():
             """Acquire each person's new lease on a different node."""
             return {user: require(200, request(port, user, "POST", "/presence/leases", {

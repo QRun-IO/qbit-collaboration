@@ -71,8 +71,7 @@ version rolling deployment. Existing published v1 snapshots are unchanged.
   This uses a loopback HTTP server with fixture authentication, not a browser
   or a deployed host. The focused test and the combined full suite both pass.
 - Still required: remaining cold/readiness and partial-loss edge cases,
-  browser re-registration and unavailable
-  rendering, enforced host maintenance/reset, and measured
+  browser-matrix and deployed-host qualification, enforced host maintenance/reset, and measured
   per-operation cost before adoption. The implementation uses no INFO call or
   lifecycle polling cache; its additional guard reads/writes still need measurement.
 - This is an unreleased draft candidate. Publication and production deployment
@@ -98,3 +97,18 @@ python docs/acceptance/presence_recovery_processes.py --java /path/to/java --rep
 Requires Python 3, Java 21 and Docker. JVM output and argument files stay under
 `target/recovery-processes-*` for diagnosis. The harness uses the production
 45-second recovery window, with bounded startup and recovery deadlines.
+
+## Chromium recovery acceptance
+
+The same harness accepts `--frontend-repo /path/to/qqq-frontend-next`. It copies
+that checkout's existing `out` export into the owned test output directory and
+serves it through the real middleware on both JVMs. Playwright is loaded from
+the frontend checkout; no API mocks are installed. Both browser users first
+see the other viewer, then Redis FLUSHDB triggers the unavailable message and
+removes stale people. Both viewer badges return without reloading either page.
+
+This check passed on October 26 with the local export; traces and screenshots
+are under `target/recovery-processes-229f305e83`. The final screenshot was also
+visually inspected. This is Chromium only and does not establish provenance
+of a newly published frontend artifact or deployed Kof22 acceptance. Fixture
+frontend serving is opt-in via `collab.dev.frontend`; its default remains false.
