@@ -1,7 +1,8 @@
 # Presence recovery candidate — QQQ #1300
 
-This branch is an uncommitted implementation candidate. It is not part of the
-published snapshots and has not passed the existing store/service suites.
+This is an unreleased implementation candidate in collaboration draft PR47.
+The existing store/service suites and CI pass; host adoption and enforced
+maintenance remain incomplete. It is not part of the published snapshots.
 
 ## Contract under qualification
 
@@ -71,9 +72,10 @@ version rolling deployment. Existing published v1 snapshots are unchanged.
   This uses a loopback HTTP server with fixture authentication, not a browser
   or a deployed host. The focused test and the combined full suite both pass.
 - Still required: remaining cold/readiness and partial-loss edge cases,
-  browser-matrix and deployed-host qualification, enforced host maintenance/reset, and measured
-  per-operation cost before adoption. The implementation uses no INFO call or
-  lifecycle polling cache; its additional guard reads/writes still need measurement.
+  deployed-host qualification and enforced host maintenance/reset. Local
+  per-operation cost measurements at 1,000 and 10,000 leases are recorded in
+  `acceptance/RECOVERY-COST.md`; sustained production capacity is unqualified.
+  The implementation uses no INFO call or lifecycle polling cache.
 - This is an unreleased draft candidate. Publication and production deployment
   have not occurred; the remaining acceptance work above is still required.
 
@@ -98,7 +100,7 @@ Requires Python 3, Java 21 and Docker. JVM output and argument files stay under
 `target/recovery-processes-*` for diagnosis. The harness uses the production
 45-second recovery window, with bounded startup and recovery deadlines.
 
-## Chromium recovery acceptance
+## Browser recovery acceptance
 
 The same harness accepts `--frontend-repo /path/to/qqq-frontend-next`. It copies
 that checkout's existing `out` export into the owned test output directory and
@@ -107,8 +109,40 @@ the frontend checkout; no API mocks are installed. Both browser users first
 see the other viewer, then Redis FLUSHDB triggers the unavailable message and
 removes stale people. Both viewer badges return without reloading either page.
 
-This check passed on October 26 with the local export; traces and screenshots
-are under `target/recovery-processes-229f305e83`. The final screenshot was also
-visually inspected. This is Chromium only and does not establish provenance
-of a newly published frontend artifact or deployed Kof22 acceptance. Fixture
-frontend serving is opt-in via `collab.dev.frontend`; its default remains false.
+The final fixed-candidate run passed all five profiles on October 26 against
+commit `4b0d6a32d6bd8ecba023857d3661d9f3f5980975`: Chromium, Firefox, WebKit,
+Pixel 7 emulation and iPad emulation. Source/compiled Lua hashes were checked
+before the run and after each profile. Traces and screenshots remain under
+each `target/recovery-processes-*` directory. The earlier Chromium screenshot
+in `target/recovery-processes-229f305e83` was also visually inspected.
+
+Select profiles using `--browser-profile chromium|firefox|webkit|mobile|tablet`.
+These tests use the local export and do not establish provenance of a newly
+published frontend artifact, physical-device behavior or deployed Kof22
+acceptance. Fixture frontend serving is opt-in via `collab.dev.frontend`;
+its default remains false.
+
+## Controlled restore acceptance
+
+`acceptance/presence_restore_processes.py` exercises a disposable Redis RDB
+restore with two independent JVMs. It saves the populated dataset, verifies
+both old JVMs have terminated and their listeners have closed, clears the
+dataset, reloads the saved image and starts both nodes with a shared fresh
+generation supplied outside Redis. It checks recovery responses, rejects old
+leases on both nodes, and requires two fresh viewers to rejoin across nodes.
+The final run passed on October 26; logs are retained in
+`target/restore-processes-aec5288289`. Both leases are explicitly renewed before
+saving, and rejection must complete within 40 seconds of that renewal, before
+their normal 45-second expiry. Old leases are rejected again after fresh
+viewers have rejoined.
+
+The fixture enables Redis DEBUG RELOAD only on its owned loopback container.
+Run after test compilation and classpath preparation:
+
+```text
+python docs/acceptance/presence_restore_processes.py --java /path/to/java --repo /path/to/repository
+```
+
+This is a protocol acceptance fixture, not host maintenance automation. Actual
+host admission closure, replacement prevention and generation configuration
+still require implementation and staging validation.

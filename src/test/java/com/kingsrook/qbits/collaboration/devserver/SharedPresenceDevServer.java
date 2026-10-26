@@ -65,6 +65,7 @@ public class SharedPresenceDevServer
          .filter(CollaborationQBitConfig.class::isInstance).map(CollaborationQBitConfig.class::cast)
          .findFirst().orElseThrow().withRedisPresence(new RedisPresenceConfig().withConnectionName("presence")
             .withDeployment("acceptance").withApplication("collaboration")
+            .withRecoveryGeneration(System.getProperty("collab.dev.recoveryGeneration", "initial"))
             .withScopeProvider(new QCodeReference(SingleTenant.class)));
       var redis = new RedisRuntimeService();
       var transport = new RedisRealtimeRuntimeService();
