@@ -1,0 +1,317 @@
+{
+  "status": "PASS",
+  "samples": [
+    {
+      "field": "lastName",
+      "propagation_ms": 37.25770000000011
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.14499999999998
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 32.40950000000021
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.52500000000009
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.228200000000015
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 30.430999999999585
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.493199999999888
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.14539999999988
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 32.11259999999993
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.23129999999992
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.06800000000021
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 30.109199999999873
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.534299999999803
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.770800000000236
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.654199999999946
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.31700000000001
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 33.108600000000024
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.27370000000019
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.452499999999873
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.86220000000003
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.734399999999823
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.04489999999987
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.051899999999932
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 30.876300000000356
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.56970000000001
+    }
+  ],
+  "streams": [
+    {
+      "user": "alice",
+      "status": 200,
+      "type": "text/event-stream;charset=utf-8"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "type": "text/event-stream;charset=utf-8"
+    },
+    {
+      "user": "alice",
+      "status": 200,
+      "type": "text/event-stream;charset=utf-8"
+    }
+  ],
+  "requests": [
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    }
+  ],
+  "errors": [],
+  "scope": "Chromium focus-to-remote-DOM observation, including automation and UI debounce; no concurrent load",
+  "reconnect": {
+    "status": "PASS",
+    "missed_changes": 3,
+    "disconnected_streams": 1,
+    "stream_failure": "net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+    "recovery_ms": 1858.2972000000004
+  },
+  "percentiles_ms": {
+    "p50": 31.86220000000003,
+    "p95": 33.770800000000236,
+    "p99": 37.25770000000011,
+    "max": 37.25770000000011
+  },
+  "frontend_jar_sha256": "c9fa2eb2381a47c8104f82f4e940d2bfa8ba67e2341298dde0de4e21ad3ff1ab",
+  "fixture_cleanup": true,
+  "backend_source": "Published core cc3981bb3/collaboration ecff347/Redis7fe5492 snapshots; two independent JVMs, mock identities and memory records.",
+  "fixture_checks": [
+    "browser-six-presence",
+    "browser-redis-admin",
+    "browser-presence-latency"
+  ]
+}

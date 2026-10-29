@@ -87,6 +87,7 @@ public class CapacityPresenceDevServer
             values.put("cpuNanos", ProcessHandle.current().info().totalCpuDuration().map(java.time.Duration::toNanos).orElse(-1L));
             values.put("heapUsedBytes", heap.getUsed());
             values.put("heapCommittedBytes", heap.getCommitted());
+            values.put("residentBytes", residentBytes());
             values.put("poolActive", pool.active());
             values.put("poolIdle", pool.idle());
             values.put("poolWaiting", pool.waiting());
@@ -107,6 +108,28 @@ public class CapacityPresenceDevServer
          redis.stop();
          redis.afterApplicationStop();
       }
+   }
+
+   /***************************************************************************
+    ** Read Linux process resident memory; unsupported platforms report -1.
+    ***************************************************************************/
+   private static long residentBytes()
+   {
+      try
+      {
+         for(String line : java.nio.file.Files.readAllLines(java.nio.file.Path.of("/proc/self/status")))
+         {
+            if(line.startsWith("VmRSS:"))
+            {
+               return (Long.parseLong(line.trim().split("\\s+")[1]) * 1024L);
+            }
+         }
+      }
+      catch(java.io.IOException | NumberFormatException e)
+      {
+         return (-1L);
+      }
+      return (-1L);
    }
 
    /***************************************************************************

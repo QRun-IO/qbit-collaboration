@@ -271,7 +271,14 @@ def main():
             for section in ("cpu", "memory", "commandstats", "stats"):
                 value = subprocess.check_output(["docker", "exec", container, "redis-cli", "INFO", section], text=True, timeout=10)
                 (output / f"redis-{section}.txt").write_text(value)
-        except (subprocess.SubprocessError, ValueError) as error:
+                parsed = dict(line.split(":", 1) for line in value.splitlines() if ":" in line and not line.startswith("#"))
+                if section == "memory":
+                    result["redis_memory"] = {key: int(parsed[key]) for key in
+                                              ("used_memory", "used_memory_peak", "used_memory_rss")}
+                if section == "cpu":
+                    result["redis_cpu_seconds_since_start"] = {key: float(parsed[key]) for key in
+                                                               ("used_cpu_sys", "used_cpu_user")}
+        except (subprocess.SubprocessError, ValueError, KeyError) as error:
             result["redis_diagnostic_error"] = type(error).__name__
         node_cleanup = True
         for node_container in node_containers:
@@ -304,10 +311,16 @@ def main():
                                   "cpu_seconds": cpu_ns / 1e9 if first["cpuNanos"] >= 0 else None,
                                   "cpu_core_equivalents": cpu_ns / (wall_ms * 1e6) if wall_ms > 0 and first["cpuNanos"] >= 0 else None,
                                   **{key + "_sampled_max": max(sample[key] for sample in samples)
-                                     for key in ("heapUsedBytes", "heapCommittedBytes", "poolActive", "poolIdle", "poolWaiting", "poolMaximum")}})
+                                     for key in ("heapUsedBytes", "heapCommittedBytes", "poolActive", "poolIdle", "poolWaiting", "poolMaximum")},
+                                  "residentBytes_sampled_max": max(sample["residentBytes"] for sample in samples)
+                                  if all(sample.get("residentBytes", -1) >= 0 for sample in samples) else None})
                 if any(sample["poolActive"] > sample["poolMaximum"] for sample in samples):
                     result.update(status="FAIL", error="Sampled pool active count exceeded configured maximum")
         result["resources"] = resources
+        if result["status"] == "PASS" and args.node_image and any(node["residentBytes_sampled_max"] is None for node in resources):
+            result.update(status="FAIL", error="Linux resident-memory samples missing")
+        if result["status"] == "PASS" and any(key not in result for key in ("redis_memory", "redis_cpu_seconds_since_start")):
+            result.update(status="FAIL", error="Redis memory/CPU diagnostics missing")
         if result["status"] == "PASS" and len(resources) != args.nodes:
             result.update(status="FAIL", error="Missing resource samples for a node")
         if result["status"] == "PASS" and args.pause_redis and not any(node["poolWaiting_sampled_max"] > 0 for node in resources):
