@@ -252,7 +252,7 @@
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-collab-33464d37e-SNAPSHOT</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>
