@@ -39,6 +39,44 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RedisPresenceStoreTest
 {
    /***************************************************************************
+    ** Prime cold fixture namespaces together, using actual server readiness.
+    ***************************************************************************/
+   private static void awaitReady(RedisPresenceStore... stores) throws Exception
+   {
+      for(RedisPresenceStore store : stores)
+      {
+         try
+         {
+            assertThat(store.snapshot("orders", null)).isEmpty();
+         }
+         catch(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException expected)
+         {
+            // The first read initializes the shared recovery interval.
+         }
+      }
+      long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+      for(RedisPresenceStore store : stores)
+      {
+         while(true)
+         {
+            try
+            {
+               assertThat(store.snapshot("orders", null)).isEmpty();
+               break;
+            }
+            catch(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException expected)
+            {
+               if(System.nanoTime() >= deadline)
+               {
+                  throw (new AssertionError("Fixture recovery did not finish", expected));
+               }
+               Thread.sleep(20);
+            }
+         }
+      }
+   }
+
+   /***************************************************************************
     ** Server-issued leases cross nodes but cannot survive departure or data loss.
     ***************************************************************************/
    @Test
@@ -53,8 +91,9 @@ class RedisPresenceStoreTest
              var second = new RedisConnection(address, config, 2, Duration.ofMillis(500)))
          {
             var scope = new RedisNamespace("test", "app", "issued", "presence");
-            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(45), 10);
-            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(45), 10);
+            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(2), 10);
+            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(2), 10);
+            awaitReady(a);
             String lease = a.openLease("one", "One", "orders", "1");
             assertThat(lease).startsWith("lease:");
             assertThat(b.snapshot("orders", "1")).isEmpty();
@@ -85,7 +124,8 @@ class RedisPresenceStoreTest
                .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
             assertThatThrownBy(() -> b.heartbeat("one", "One", replacement, "orders", "1", "VIEWING", null, 2L))
                .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
-            assertThat(first.client().dbSize()).isZero();
+            assertThat(first.client().dbSize()).isEqualTo(1);
+            assertThat(first.client().keys("*:recovery")).hasSize(1);
          }
       }
    }
@@ -103,6 +143,7 @@ class RedisPresenceStoreTest
             DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
          {
             var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "issued-expiry", "presence"), Duration.ofMillis(150), 1);
+            awaitReady(store);
             String pending = store.openLease("one", "One", "orders", "1");
             assertThat(store.openLease("two", "Two", "orders", "2")).isNull();
             assertThat(store.snapshot("orders", null)).isEmpty();
@@ -128,11 +169,11 @@ class RedisPresenceStoreTest
    }
 
    /***************************************************************************
-    ** Characterize the open recovery gap: all projections lost together look new.
-    ** This is evidence for #1295, not an assertion of the desired final contract.
+    ** Total loss stays unknown even when the internal legacy API repopulates it.
+    ** The shared HTTP service requires server-issued leases instead of this API.
     ***************************************************************************/
    @Test
-   void completeDataLossCurrentlyAcceptsDelayedHeartbeat() throws Exception
+   void totalLossIsRecoveringEvenForLegacyHeartbeat() throws Exception
    {
       try(GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379))
       {
@@ -143,8 +184,9 @@ class RedisPresenceStoreTest
              var second = new RedisConnection(address, config, 2, Duration.ofMillis(500)))
          {
             var scope = new RedisNamespace("test", "app", "recovery", "presence");
-            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(45), 10);
-            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(45), 10);
+            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(2), 10);
+            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(2), 10);
+            awaitReady(a);
             a.heartbeat("active", "Active", "active-tab", "orders", "1", "VIEWING", null, 1L);
             a.heartbeat("departed", "Departed", "old-tab", "orders", "1", "EDITING", null, 1L);
             b.leave("departed", "old-tab", "orders", "1", 3L);
@@ -152,10 +194,13 @@ class RedisPresenceStoreTest
 
             // Only this disposable test server is cleared. Both clients stay alive.
             first.client().flushDB();
-            assertThat(b.snapshot("orders", "1")).isEmpty();
+            assertThatThrownBy(() -> b.snapshot("orders", "1"))
+               .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException.class);
             assertThat(a.heartbeat("departed", "Departed", "old-tab", "orders", "1", "EDITING", null, 2L)).isTrue();
-            assertThat(b.snapshot("orders", "1")).extracting("userId").containsExactly("departed");
-            assertThat(b.snapshot("orders", null)).extracting("userId").containsExactly("departed");
+            assertThatThrownBy(() -> b.snapshot("orders", "1"))
+               .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException.class);
+            assertThatThrownBy(() -> b.snapshot("orders", null))
+               .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException.class);
          }
       }
    }
@@ -173,14 +218,16 @@ class RedisPresenceStoreTest
          try(var connection = new RedisConnection(new HostAndPort(redis.getHost(), redis.getMappedPort(6379)),
             DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
          {
-            var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "late", "presence"), Duration.ofMillis(150), 10);
+            var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "late", "presence"), Duration.ofMillis(400), 10);
+            awaitReady(store);
             store.heartbeat("departed", "Departed", "tab", "orders", "1", "EDITING", null, 1L);
             store.leave("departed", "tab", "orders", "1", 3L);
             store.heartbeat("departed", "Departed", "tab", "orders", "1", "EDITING", null, 2L);
             assertThat(store.snapshot("orders", "1")).isEmpty();
 
-            // Longer-lived peer proves this does not depend on losing entire keys.
-            var peer = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "late", "presence"), Duration.ofSeconds(45), 10);
+            // A later renewal keeps the peer live with the same deployment TTL.
+            Thread.sleep(250);
+            var peer = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "late", "presence"), Duration.ofMillis(400), 10);
             peer.heartbeat("active", "Active", "peer-tab", "orders", "1", "VIEWING", null, 1L);
             Thread.sleep(250);
             assertThat(peer.snapshot("orders", "1")).extracting("userId").containsExactly("active");
@@ -205,8 +252,10 @@ class RedisPresenceStoreTest
              var second = new RedisConnection(address, config, 4, Duration.ofMillis(500)))
          {
             var scope = new RedisNamespace("test", "app", "tenant-a", "presence");
-            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(45), 100);
-            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(45), 100);
+            var a = new RedisPresenceStore(first.scripts(), scope, Duration.ofSeconds(2), 100);
+            var b = new RedisPresenceStore(second.scripts(), scope, Duration.ofSeconds(2), 100);
+            var tenantB = new RedisPresenceStore(second.scripts(), new RedisNamespace("test", "app", "tenant-b", "presence"), Duration.ofSeconds(2), 100);
+            awaitReady(a, tenantB);
             for(int i = 0; i < 6; i++)
             {
                assertThat((i % 2 == 0 ? a : b).heartbeat("user-" + i, "Person " + i, "tab-" + i, "orders", "123",
@@ -225,7 +274,6 @@ class RedisPresenceStoreTest
             assertThat(a.snapshot("orders", "123").getFirst().mode()).isEqualTo("VIEWING");
             assertThat(a.heartbeat("user-0", "Person 0", "tab-0", "orders", "123", "EDITING", "status", 4L)).isTrue();
             assertThat(b.snapshot("orders", "123").getFirst().mode()).isEqualTo("EDITING");
-            var tenantB = new RedisPresenceStore(second.scripts(), new RedisNamespace("test", "app", "tenant-b", "presence"), Duration.ofSeconds(45), 100);
             assertThat(tenantB.snapshot("orders", "123")).isEmpty();
             assertThat(a.snapshot("orders", "124")).isEmpty();
 
@@ -250,6 +298,7 @@ class RedisPresenceStoreTest
             assertThat(a.snapshot("orders", "124")).isEmpty();
 
             var shortLease = new RedisPresenceStore(first.scripts(), new RedisNamespace("test", "app", "short", "presence"), Duration.ofMillis(150), 10);
+            awaitReady(shortLease);
             assertThat(shortLease.heartbeat("user", "Person", "tab", "orders", "123", "EDITING", "status", 1L)).isTrue();
             long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
             while(!shortLease.snapshot("orders", "123").isEmpty() && System.nanoTime() < deadline)
@@ -278,7 +327,8 @@ class RedisPresenceStoreTest
          try(var connection = new RedisConnection(new HostAndPort(redis.getHost(), redis.getMappedPort(6379)),
             DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
          {
-            var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "capacity", "presence"), Duration.ofSeconds(45), 1);
+            var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", "capacity", "presence"), Duration.ofSeconds(2), 1);
+            awaitReady(store);
             assertThat(store.heartbeat("one", "One", "tab", "orders", "1", "VIEWING", null, 1L)).isTrue();
             assertThat(store.heartbeat("two", "Two", "tab", "orders", "2", "VIEWING", null, 1L)).isFalse();
             assertThat(store.snapshot("orders", "2")).isEmpty();
@@ -303,33 +353,49 @@ class RedisPresenceStoreTest
          try(var connection = new RedisConnection(new HostAndPort(redis.getHost(), redis.getMappedPort(6379)),
             DefaultJedisClientConfig.builder().build(), 2, Duration.ofMillis(500)))
          {
-            for(String suffix : java.util.List.of("state", "expiry"))
+            for(String lostPart : java.util.List.of("record:state", "record:expiry", "table:state", "table:expiry"))
             {
-               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", suffix, "presence"), Duration.ofSeconds(45), 10);
-               assertThat(store.heartbeat("one", "One", "tab", "orders", "1", "VIEWING", null, 1L)).isTrue();
+               String[] parts = lostPart.split(":");
+               boolean record = parts[0].equals("record");
+               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", parts[0] + parts[1], "presence"), Duration.ofSeconds(2), 10);
+               awaitReady(store);
+               String lease = store.openLease("one", "One", "orders", "1");
+               assertThat(store.renewLease("one", "One", lease, "orders", "1", "VIEWING", null, 1L)).isTrue();
                // KEYS is confined to this disposable test server, never the application path.
-               String recordKey = connection.client().keys("*:record:*:" + suffix).iterator().next();
-               String tableKey = recordKey.substring(0, recordKey.indexOf(":record:")) + ":table:state";
-               var before = connection.client().hgetAll(tableKey);
-               connection.client().del(recordKey);
+               String lostKey = connection.client().keys(record ? "*:record:*:" + parts[1] : "*:table:" + parts[1]).iterator().next();
+               String retainedState = connection.client().keys(record ? "*:table:state" : "*:record:*:state").iterator().next();
+               var before = connection.client().hgetAll(retainedState);
+               connection.client().del(lostKey);
                assertThatThrownBy(() -> store.snapshot("orders", "1"))
                   .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
-               assertThatThrownBy(() -> store.heartbeat("one", "One", "tab", "orders", "1", "EDITING", "status", 2L))
+               assertThatThrownBy(() -> store.renewLease("one", "One", lease, "orders", "1", "EDITING", "status", 2L))
                   .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
-               assertThat(connection.client().hgetAll(tableKey)).isEqualTo(before);
+               assertThat(connection.client().hgetAll(retainedState)).isEqualTo(before);
                connection.client().flushDB();
             }
             for(String room : java.util.List.of("record", "table"))
             {
-               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", room, "presence"), Duration.ofSeconds(45), 10);
-               store.heartbeat("one", "One", "tab", "orders", "1", "VIEWING", null, 1L);
-               store.leave("one", "tab", "orders", "1", 3L);
+               var store = new RedisPresenceStore(connection.scripts(), new RedisNamespace("test", "app", room, "presence"), Duration.ofSeconds(2), 10);
+               awaitReady(store);
+               String lease = store.openLease("one", "One", "orders", "1");
+               store.renewLease("one", "One", lease, "orders", "1", "VIEWING", null, 1L);
+               store.leave("one", lease, "orders", "1", 3L);
                var lostKeys = connection.client().keys(room.equals("record") ? "*:record:*" : "*:table:*");
                connection.client().del(lostKeys.toArray(String[]::new));
-               assertThatThrownBy(() -> store.snapshot("orders", "1"))
-                  .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
-               assertThatThrownBy(() -> store.heartbeat("one", "One", "tab", "orders", "1", "EDITING", null, 2L))
-                  .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
+               if(room.equals("record"))
+               {
+                  assertThatThrownBy(() -> store.snapshot("orders", "1"))
+                     .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
+                  assertThatThrownBy(() -> store.renewLease("one", "One", lease, "orders", "1", "EDITING", null, 2L))
+                     .isInstanceOf(redis.clients.jedis.exceptions.JedisException.class).hasMessageContaining("incomplete");
+               }
+               else
+               {
+                  assertThatThrownBy(() -> store.snapshot("orders", "1"))
+                     .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceRecoveringException.class);
+                  assertThatThrownBy(() -> store.renewLease("one", "One", lease, "orders", "1", "EDITING", null, 2L))
+                     .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+               }
                assertThat(connection.client().keys(room.equals("record") ? "*:record:*" : "*:table:*")).isEmpty();
                connection.client().flushDB();
             }

@@ -145,6 +145,10 @@ public class RedisPresenceBackend implements PresenceBackend
       {
          return (store.snapshot(table, pk));
       }
+      catch(PresenceRecoveringException recovering)
+      {
+         throw (new QServiceUnavailableException("Presence is recovering; active viewers are rejoining. Please retry."));
+      }
       catch(RuntimeException failure)
       {
          throw (unavailable());
