@@ -746,3 +746,19 @@ entries:
   summary: "Choose the record feature you want to configure."
 - key: possibleValueSource:collaboration_permission_mode;slot:help
   summary: "Choose whether a feature accepts editing permission or requires an explicit feature permission."
+- key: table:collaboration_attachment_cleanup;slot:help
+  summary: "Review storage cleanup waiting to finish after an attachment was deleted."
+  content: |
+    **How rows get created:** Authorized attachment deletion creates these records automatically. The attachment disappears from the record immediately; its file is removed after the database commits. Successful cleanup removes this entry. If storage is unavailable, the entry remains for the scheduled retry. Administrators can inspect pending work; these records cannot be edited directly.
+- key: table:collaboration_attachment_cleanup;field:attachmentId
+  summary: "The deleted attachment, when known; failed uploads may have no committed attachment ID."
+- key: table:collaboration_attachment_cleanup;field:bucketName
+  summary: "The storage bucket containing the file awaiting cleanup."
+- key: table:collaboration_attachment_cleanup;field:storageKey
+  summary: "The immutable file location retained until cleanup succeeds."
+- key: table:collaboration_attachment_cleanup;field:nextAttemptAt
+  summary: "Failed cleanup waits at least one minute before another scheduled attempt."
+- key: process:collaborationRetryAttachmentCleanup;slot:help
+  summary: "Retry pending attachment file cleanup after storage or database recovery."
+  content: |
+    Processes up to 100 committed cleanup requests. Completed entries are removed; failures remain available for retry. Runs every minute when the host configures a collaboration scheduler. Manual execution requires collaboration administrator access.

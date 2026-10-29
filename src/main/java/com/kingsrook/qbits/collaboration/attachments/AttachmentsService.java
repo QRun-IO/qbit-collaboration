@@ -138,10 +138,23 @@ public class AttachmentsService
          {
             storage.put(bucket, PutRequest.of(key, upload).withContentLength(size).withContentType(type).withContentDisposition("inline"));
          }
+         catch(IOException | RuntimeException failure)
+         {
+            try
+            {
+               new AttachmentCleanupQueue(storage).compensateUpload(bucket, key);
+            }
+            catch(RuntimeException cleanupFailure)
+            {
+               failure.addSuppressed(cleanupFailure);
+            }
+            throw (failure);
+         }
          if(transaction != null)
          {
             var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
-            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context, () -> storage.delete(bucket, key)));
+            transaction.addAfterRollbackCallback(() -> QContext.withTemporaryContext(context,
+               () -> new AttachmentCleanupQueue(storage).compensateUpload(bucket, key)));
          }
          boolean rowSaved = false;
          try
@@ -164,7 +177,7 @@ public class AttachmentsService
             {
                if(!rowSaved)
                {
-                  storage.delete(bucket, key);
+                  new AttachmentCleanupQueue(storage).compensateUpload(bucket, key);
                }
             }
             catch(RuntimeException cleanupFailure)
@@ -301,7 +314,7 @@ public class AttachmentsService
    }
 
    /*******************************************************************************
-    ** Delete storage first so a provider failure leaves a retryable row.
+    ** Atomically remove metadata and retain a durable storage cleanup request.
     *******************************************************************************/
    void deleteStoredRow(QRecord row) throws QException
    {
@@ -313,27 +326,7 @@ public class AttachmentsService
     *******************************************************************************/
    void deleteStoredRow(QRecord row, boolean cleanup) throws QException
    {
-      if(QContext.getQBackendTransaction() != null)
-      {
-         var context = new com.kingsrook.qqq.backend.core.context.CapturedContext(QContext.getQInstance(), QContext.getQSession());
-         QContext.getQBackendTransaction().addAfterCommitCallback(() ->
-         {
-            try
-            {
-               QContext.withTemporaryContext(context, () -> deleteStoredRow(row, cleanup));
-            }
-            catch(QException e)
-            {
-               throw (new IllegalStateException("Attachment deletion requires retry", e));
-            }
-         });
-         return;
-      }
-      storage.delete(row.getValueString("bucketName"), row.getValueString("storageKey"));
-      DeleteInput input = new DeleteInput(CollaborationTables.ATTACHMENT).withTransaction(QContext.getQBackendTransaction()).withPrimaryKeys(List.of(row.getValue("id")));
-      input.setTableMetaData(cleanup ? com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupMetadata(CollaborationTables.ATTACHMENT) : AttachmentRecords.storageTable());
-      input.withPermissionBypass("Attachment service authorized deletion, or trusted parent cleanup selected this row.");
-      AttachmentRecords.checkErrors(new DeleteAction().execute(input).getRecordsWithErrors());
+      new AttachmentCleanupQueue(storage).delete(row, cleanup);
    }
 
    /*******************************************************************************
