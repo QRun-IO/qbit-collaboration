@@ -65,12 +65,13 @@ public class SharedPresenceDevServer
          .filter(CollaborationQBitConfig.class::isInstance).map(CollaborationQBitConfig.class::cast)
          .findFirst().orElseThrow().withRedisPresence(new RedisPresenceConfig().withConnectionName("presence")
             .withDeployment("acceptance").withApplication("collaboration")
+            .withRecoveryGeneration(System.getProperty("collab.dev.recoveryGeneration", "initial"))
             .withScopeProvider(new QCodeReference(SingleTenant.class)));
       var redis = new RedisRuntimeService();
       var transport = new RedisRealtimeRuntimeService();
       new com.kingsrook.qqq.backend.core.health.HealthMetaDataProvider().defineAll(instance, "memory", null);
       var health = new com.kingsrook.qqq.backend.core.health.HealthRunner(instance, "acceptance-" + port, java.time.Clock.systemUTC());
-      var server = CollaborationDevServer.server(instance, port, false);
+      var server = CollaborationDevServer.server(instance, port, Boolean.getBoolean("collab.dev.frontend"));
       try
       {
          redis.start(instance);

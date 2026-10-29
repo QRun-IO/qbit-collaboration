@@ -44,8 +44,8 @@ import com.kingsrook.qqq.backend.core.utils.JsonUtils;
  *******************************************************************************/
 public final class RedisPresenceStore
 {
-   private static final RedisScript MUTATE = new RedisScript(resource("redis-mutate.lua"));
-   private static final RedisScript SNAPSHOT = new RedisScript(resource("redis-snapshot.lua"));
+   private static final RedisScript MUTATE = new RedisScript(resource("redis-recovery.lua") + "\n" + resource("redis-mutate.lua"));
+   private static final RedisScript SNAPSHOT = new RedisScript(resource("redis-recovery.lua") + "\n" + resource("redis-snapshot.lua"));
    private final RedisScriptExecutor client;
    private final RedisNamespace namespace;
    private final long ttlMillis;
@@ -123,7 +123,12 @@ public final class RedisPresenceStore
    public List<PresenceRegistry.Viewer> snapshot(String table, String pk)
    {
       List<String> keys = roomKeys(table, pk, true);
-      Object result = client.execute(SNAPSHOT, keys, List.of(pk == null ? "" : ":" + encode(pk, 1024)));
+      Object result = client.execute(SNAPSHOT, keys, List.of(pk == null ? "" : ":" + encode(pk, 1024),
+         Long.toString(ttlMillis), java.util.UUID.randomUUID().toString()));
+      if(result instanceof Number number && number.longValue() == -2)
+      {
+         throw (new PresenceRecoveringException());
+      }
       Map<String, Stored> users = new TreeMap<>();
       for(Object value : (List<?>) result)
       {
@@ -160,9 +165,10 @@ public final class RedisPresenceStore
       {
          throw (new IllegalArgumentException("Presence sequence must be a nonnegative safe integer"));
       }
-      Stored value = new Stored(user, displayName, mode, pk == null ? null : field, 0, sequence, departed, false, false);
+      Stored value = new Stored(user, displayName, mode, pk == null ? null : field, 0, sequence, departed, false, false, null);
       Object result = client.execute(MUTATE, roomKeys(table, pk, true), List.of(member, JsonUtils.toJson(value),
-         sequence == null ? "" : sequence.toString(), departed ? "1" : "0", Long.toString(ttlMillis), Integer.toString(capacity), pk == null ? "1" : "0", operation));
+         sequence == null ? "" : sequence.toString(), departed ? "1" : "0", Long.toString(ttlMillis), Integer.toString(capacity), pk == null ? "1" : "0", operation,
+         java.util.UUID.randomUUID().toString()));
       if(((Number) result).longValue() == -1)
       {
          throw (new PresenceLeaseExpiredException());
@@ -175,7 +181,7 @@ public final class RedisPresenceStore
     ***************************************************************************/
    private List<String> roomKeys(String table, String pk, boolean includeTable)
    {
-      String base = "qqq:presence:{" + digest("SHA-256", namespace.key(table)) + "}";
+      String base = "qqq:presence:v2:{" + digest("SHA-256", namespace.key(table)) + "}";
       List<String> keys = new ArrayList<>();
       if(pk != null)
       {
@@ -188,6 +194,7 @@ public final class RedisPresenceStore
          keys.add(base + ":table:expiry");
          keys.add(base + ":table:state");
       }
+      keys.add(base + ":recovery");
       return (keys);
    }
 
@@ -240,7 +247,7 @@ public final class RedisPresenceStore
    /***************************************************************************
     ** Internal lease data, never returned directly to a browser.
     ***************************************************************************/
-   public record Stored(String userId, String displayName, String mode, String fieldName, long at, Long sequence, boolean departed, boolean pending, boolean leased)
+   public record Stored(String userId, String displayName, String mode, String fieldName, long at, Long sequence, boolean departed, boolean pending, boolean leased, String generation)
    {
    }
 

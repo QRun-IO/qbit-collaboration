@@ -23,6 +23,7 @@ package com.kingsrook.qbits.collaboration;
 
 import com.kingsrook.qbits.collaboration.presence.PresenceScopeProvider;
 import com.kingsrook.qbits.collaboration.presence.PresenceService;
+import com.kingsrook.qbits.collaboration.presence.RedisPresenceBackend;
 import com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig;
 import com.kingsrook.qbits.redis.RedisConnectionConfig;
 import com.kingsrook.qbits.redis.RedisQBitConfig;
@@ -72,6 +73,7 @@ class RedisPresenceServiceTest extends PersonalServiceFixture
          }
          firstRuntime.start(instance);
          secondRuntime.start(second.instance);
+         warmScopes(instance);
          firstTransport.start(instance);
          secondTransport.start(second.instance);
          org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(5), () ->
@@ -240,13 +242,14 @@ class RedisPresenceServiceTest extends PersonalServiceFixture
          redis.start();
          new RedisQBitProducer().withQBitConfig(new RedisQBitConfig().withConnection("presence",
             new RedisConnectionConfig().withHost(redis.getHost()).withPort(redis.getMappedPort(6379)).withTls(false)
-               .withConnectionTimeoutMillis(200).withSocketTimeoutMillis(200))).produce(instance);
+               .withConnectionTimeoutMillis(200).withSocketTimeoutMillis(1000))).produce(instance);
          config.withRedisPresence(new RedisPresenceConfig().withConnectionName("presence").withDeployment("test")
             .withApplication("fixture").withScopeProvider(new QCodeReference(TenantScope.class)));
          var runtime = new RedisRuntimeService();
          try
          {
             runtime.start(instance);
+            warmScopes(instance);
             var service = new PresenceService();
             String aliceLease;
             try(var hub = new com.kingsrook.qqq.middleware.javalin.realtime.RealtimeHub(instance))
@@ -316,6 +319,64 @@ class RedisPresenceServiceTest extends PersonalServiceFixture
             runtime.stop();
             runtime.afterApplicationStop();
          }
+      }
+   }
+
+   /***************************************************************************
+    ** Wait for every dashboard table in both authenticated tenant namespaces.
+    ** No Redis fixture writes bypass the production cold-recovery contract.
+    ***************************************************************************/
+   private static void warmScopes(com.kingsrook.qqq.backend.core.model.metadata.QInstance node) throws Exception
+   {
+      var previousInstance = QContext.getQInstance();
+      var previousSession = QContext.getQSession();
+      var a = session("warm-a");
+      var b = session("warm-b");
+      b.clearSecurityKeyValues();
+      b.withSecurityKeyValue("tenant", "b");
+      var sessions = java.util.List.of(a, b);
+      try
+      {
+         for(var user : sessions)
+         {
+            QContext.init(node, user);
+            var backend = new RedisPresenceBackend(RedisPresenceConfig.forInstance(node));
+            for(String table : node.getTables().keySet())
+            {
+               assertThatThrownBy(() -> backend.snapshot(table, null))
+                  .isInstanceOf(QServiceUnavailableException.class).hasMessageContaining("recovering");
+            }
+         }
+         long deadline = System.nanoTime() + java.time.Duration.ofSeconds(50).toNanos();
+         for(var user : sessions)
+         {
+            QContext.init(node, user);
+            var backend = new RedisPresenceBackend(RedisPresenceConfig.forInstance(node));
+            for(String table : node.getTables().keySet())
+            {
+               while(true)
+               {
+                  try
+                  {
+                     assertThat(backend.snapshot(table, null)).isEmpty();
+                     break;
+                  }
+                  catch(QServiceUnavailableException recovering)
+                  {
+                     assertThat(recovering).hasMessageContaining("recovering");
+                     if(System.nanoTime() >= deadline)
+                     {
+                        throw (new AssertionError("Service recovery did not finish", recovering));
+                     }
+                     Thread.sleep(50);
+                  }
+               }
+            }
+         }
+      }
+      finally
+      {
+         QContext.init(previousInstance, previousSession);
       }
    }
 
