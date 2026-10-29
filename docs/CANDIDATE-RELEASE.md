@@ -1,5 +1,15 @@
 # Coordinated collaboration snapshot
 
+## Combined integration follow-up under qualification
+
+PR #51 combines current attachment settlement, My Work, presence recovery,
+contributed-field and capacity follow-ups. Its source inventory and gate history
+are in [INTEGRATION-20261029.md](INTEGRATION-20261029.md). The candidate selects
+verified published Redis `0.1.0-redis-integration-20261029-551f1d5-SNAPSHOT` and
+the existing core `4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT`.
+The combined collaboration artifact is not yet published. Historical snapshot
+and acceptance evidence below is not proof of this candidate's deployment.
+
 ## Selectable-field follow-up snapshot
 
 The following focused upgrade is published for QQQ #1196:

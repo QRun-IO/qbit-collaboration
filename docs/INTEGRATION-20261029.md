@@ -17,9 +17,12 @@ All five heads are ancestors of integration commit
 branches did not contain the latest heads of their base PRs, so those base
 heads were merged explicitly as well. No production source was rewritten during
 integration. The core prerequisite remains
-`4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT`; Redis remains the existing
-published `0.1.0-redis-7fe5492-SNAPSHOT` until its coordinated update is published
-and independently verified.
+`4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT`. The candidate now selects
+published Redis `0.1.0-redis-integration-20261029-551f1d5-SNAPSHOT` after native
+publisher job42 succeeded and independent timestamped POM/JAR downloads matched
+their declared version and repository checksums. The timestamp is
+`20261029.165102-1`; JAR SHA256 is
+`385f69c5d84362dbab40a3044261fb9820e25126785d7f22901121302e6ce076`.
 
 The caller and manifest both select released `kingsrook/qqq-orb@0.8`. The
 canonical validator extracted from released 0.8.32 and CircleCI schema validation
@@ -33,6 +36,15 @@ fixture. Docker Desktop's published-port path has independently exhibited
 This observation is not proof of every failure's cause. No timeout, assertion,
 security boundary, or quality gate was weakened. Native hosted Linux results
 are required before publication; the local run is **not** a passing gate.
+
+Native CircleCI job192 subsequently passed the full verification at integration
+head `02085baff928c374e3b0d77367fbcc8182f81f93`; CodeQL also passed. Those checks
+used the earlier Redis pin. The new published Redis pin above requires its own
+current-head native verification before this collaboration artifact is published.
+Use an explicit short feature branch (`feature/collab-int-20261029`) and dry-run
+the released version calculator: generated help-bundle versions must remain at
+most 50 characters. The longer `collaboration-integration-20261029` name would
+produce 57 characters and is not a valid publication route.
 
 The successful earlier combined-source checks remain historical evidence only.
 Host TLS/ACL, actual identity/proxy/provider acceptance, maintenance/restore
