@@ -1,6 +1,41 @@
 # Coordinated collaboration snapshot
 
-The main-line candidate is published. Use these versions together:
+## Combined integration follow-up under qualification
+
+PR #51 combines current attachment settlement, My Work, presence recovery,
+contributed-field and capacity follow-ups. Its source inventory and gate history
+are in [INTEGRATION-20261029.md](INTEGRATION-20261029.md). The candidate selects
+verified published Redis `0.1.0-redis-integration-20261029-551f1d5-SNAPSHOT` and
+the existing core `4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT`.
+The combined collaboration artifact is not yet published. Historical snapshot
+and acceptance evidence below is not proof of this candidate's deployment.
+
+## Selectable-field follow-up snapshot
+
+The following focused upgrade is published for QQQ #1196:
+
+| Component | Version |
+| --- | --- |
+| QQQ BOM and modules | `4.1.0-virtual-field-values-1196-cc3981bb3-SNAPSHOT` |
+| qbit-collaboration | `0.1.0-field-values-1196-ecff347-SNAPSHOT` |
+| qbit-redis (unchanged prerequisite) | `0.1.0-redis-7fe5492-SNAPSHOT` |
+
+Import this QQQ BOM in the consuming host. Collaboration publisher 168 passed
+from `ecff347efe2bb84949b8452a3383e3fdeb4bcede`; its POM and JAR resolve to
+timestamp `20261026.133203-1`. Full collaboration verification against the
+published core passed 198 tests with no failures, errors or skips, plus packaging
+and coverage gates. An independent empty-cache Java 21 consumer downloaded the
+pair and compiled both collaboration value providers against the core API.
+See [the upgrade evidence](VIRTUAL-FIELD-UPGRADE.md) for checksums and scope.
+
+This is not a combined release of the separate attachment, My Work and presence
+recovery follow-ups, nor a Kof22 deployment. The earlier candidate's browser
+acceptance below must not be treated as browser qualification of this new pair.
+A compatible packaged frontend and host staging qualification remain required.
+
+## Earlier main-line candidate
+
+The earlier main-line candidate is published. Its coordinated versions are:
 
 | Component | Version |
 | --- | --- |

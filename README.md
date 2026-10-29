@@ -408,7 +408,7 @@ size, pending suggestions, and the five most-used approved tags.
 
 `collaborationTags` is a virtual STRING field labeled Tags with possible-value source `collaboration_tag`. `TagCriteriaExpander` supports IN, NOT_IN, EQUALS, NOT_EQUALS, IS_BLANK, IS_NOT_BLANK and CONTAINS_ALL using core `QSubQuery` membership filters. Ordinary quick search matches labels; `#name` matches normalized names. Numeric criteria are tag IDs; string criteria are names. The old ID materializer is removed. Core owns SQL execution or bounded cross-backend materialization; its bound applies to inner rows, not final parent matches.
 
-The runtime provider adds this field and its search entry where TAGS is enabled. It is queryable but not selectable: the overlay has no virtual-field post-query hook and existing host customizers must be preserved.
+The runtime provider adds this field and its search entry where TAGS is enabled. With the coordinated core value-provider API, it is selectable in queries, record reads and exports. Labels are sorted, deduplicated and joined with a comma and space; the picker still uses tag IDs. The provider runs after the host post-query customizer without replacing it. This is an unreleased source change: see [virtual-field upgrade status](docs/VIRTUAL-FIELD-UPGRADE.md) before building or adopting this branch.
 
 ## UI API
 
@@ -683,8 +683,9 @@ metadata.
 Memory uses core `JsonPathStorage`. PostgreSQL uses it after a cached
 `SELECT qqq_custom_fields FROM <backend table> LIMIT 0` probe succeeds. Missing columns and
 unsupported backends get read-only EAV virtual filters over `collaboration_field_value`, with
-typed `QSubQuery` criteria. These fields are not query-selectable; EAV value writes and projection
-are outside this version. `statusMessage` records the fallback reason. After adding a missing
+typed `QSubQuery` criteria. The coordinated value-provider API also makes existing EAV values
+selectable in queries, record reads and exports, with their declared types and possible-value
+labels. EAV writes remain unsupported. See [virtual-field upgrade status](docs/VIRTUAL-FIELD-UPGRADE.md). `statusMessage` records the fallback reason. After adding a missing
 column, call `CustomFieldStorage.invalidate(instance, tableName)` and refresh the overlay.
 
 ### PostgreSQL setup and indexes

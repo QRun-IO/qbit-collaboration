@@ -74,6 +74,126 @@ public class TagsServiceTest extends PersonalServiceFixture
 
 
    /*******************************************************************************
+    ** Tag labels are selectable while the ID-based filter picker remains intact.
+    *******************************************************************************/
+   @Test
+   void selectsTagLabelsWithoutTranslatingThemAsIds() throws Exception
+   {
+      TagEntry beta = tags.create("document", "Beta", null);
+      TagEntry alpha = tags.create("document", "Alpha", null);
+      tags.apply("document", 1, List.of(beta.id(), alpha.id()), List.of());
+      com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay.refresh(instance);
+      var field = instance.getTable("document").getVirtualField("collaborationTags");
+      assertThat(field.getIsQuerySelectable()).isTrue();
+      assertThat(field.getPossibleValueSourceName()).isEqualTo(CollaborationTables.TAG);
+      var rows = new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("collaborationTags"))
+         .withShouldTranslatePossibleValues(true).withShouldGenerateDisplayValues(true)).getRecords();
+      assertThat(rows).hasSize(2);
+      assertThat(rows).allSatisfy(row -> assertThat(row.getValues()).containsOnlyKeys("collaborationTags"));
+      assertThat(rows).extracting(row -> row.getValueString("collaborationTags")).containsExactlyInAnyOrder("Alpha, Beta", null);
+      assertThat(rows).filteredOn(row -> row.getValue("collaborationTags") != null)
+         .allSatisfy(row -> assertThat(row.getDisplayValue("collaborationTags")).isEqualTo("Alpha, Beta"));
+      assertThat(new QueryAction().execute(new QueryInput("document").withFilter(new QQueryFilter()
+         .withCriteria("collaborationTags", QCriteriaOperator.EQUALS, alpha.id()))).getRecords())
+         .extracting(row -> row.getValueInteger("id")).containsExactly(1);
+   }
+
+   /*******************************************************************************
+    ** Exported labels obey parent visibility and vocabulary approval, with CSV quoting.
+    *******************************************************************************/
+   @Test
+   void tagLabelsRespectPrivacyAndExportQuoting() throws Exception
+   {
+      TagEntry visible = tags.create("document", "Needs, review", null);
+      TagEntry secret = tags.create("document", "Secret label", null);
+      tags.apply("document", 1, List.of(visible.id()), List.of());
+      QContext.getQSession().withSecurityKeyValue("allTenants", true);
+      tags.apply("document", 3, List.of(secret.id()), List.of());
+      config.withDefaultTagMode("APPROVED_ONLY");
+      TagEntry pending = tags.create("document", "Pending label", null);
+      assertThat(pending.approved()).isFalse();
+      // A stale assignment must not turn a pending suggestion into a visible label.
+      CollaborationRecords.insert(CollaborationTables.RECORD_TAG, new QRecord().withValue("tableName", "document")
+         .withValue("recordId", "1").withValue("tagId", pending.id()).withValue("createdByUserId", "alice").withValue("parentDeleted", false));
+      login("alice");
+      com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay.refresh(instance);
+      var input = new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("collaborationTags"));
+      assertThat(new QueryAction().execute(input).getRecords()).extracting(row -> row.getValueString("collaborationTags"))
+         .containsExactlyInAnyOrder("Needs, review", null);
+
+      java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+      var export = new com.kingsrook.qqq.backend.core.model.actions.reporting.ExportInput();
+      export.setTableName("document");
+      export.setFieldNames(List.of("collaborationTags"));
+      export.setReportDestination(new com.kingsrook.qqq.backend.core.model.actions.reporting.ReportDestination()
+         .withReportFormat(com.kingsrook.qqq.backend.core.model.actions.reporting.ReportFormat.CSV).withReportOutputStream(output));
+      new com.kingsrook.qqq.backend.core.actions.reporting.ExportAction().execute(export);
+      String csv = output.toString(java.nio.charset.StandardCharsets.UTF_8);
+      assertThat(csv).doesNotContain("Secret label", "Pending label");
+      try(var parser = org.apache.commons.csv.CSVParser.parse(csv, org.apache.commons.csv.CSVFormat.DEFAULT.withFirstRecordAsHeader()))
+      {
+         assertThat(parser.getHeaderNames()).containsExactly("Tags");
+         assertThat(parser.getRecords()).extracting(row -> row.get("Tags")).containsExactlyInAnyOrder("Needs, review", "");
+      }
+      QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("b"));
+      assertThat(new QueryAction().execute(input).getRecords()).extracting(row -> row.getValueString("collaborationTags")).containsExactly("Secret label");
+      login("alice");
+      assertThat(new QueryAction().execute(input).getRecords()).extracting(row -> row.getValueString("collaborationTags"))
+         .containsExactlyInAnyOrder("Needs, review", null);
+   }
+
+   /*******************************************************************************
+    ** A page spanning the provider's batch boundary retains its last parent values.
+    *******************************************************************************/
+   @Test
+   void tagLabelsSpanMultipleParentBatches() throws Exception
+   {
+      java.util.List<QRecord> parents = new java.util.ArrayList<>();
+      for(int id = 4; id <= 504; id++)
+      {
+         parents.add(new QRecord().withValue("id", id).withValue("title", "Document " + id).withValue("tenant", "a"));
+      }
+      assertThat(new InsertAction().execute(new InsertInput("document").withRecords(parents)).getRecords())
+         .allSatisfy(row -> assertThat(row.getErrors()).isNullOrEmpty());
+      TagEntry tag = tags.create("document", "Boundary", null);
+      tags.apply("document", 1, List.of(tag.id()), List.of());
+      tags.apply("document", 504, List.of(tag.id()), List.of());
+      com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay.refresh(instance);
+      var rows = new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("id", "collaborationTags"))).getRecords();
+      assertThat(rows).hasSize(503);
+      assertThat(rows).filteredOn(row -> row.getValue("collaborationTags") != null).extracting(row -> row.getValueInteger("id"))
+         .containsExactlyInAnyOrder(1, 504);
+      assertThat(rows).filteredOn(row -> row.getValue("collaborationTags") != null)
+         .allSatisfy(row -> assertThat(row.getValueString("collaborationTags")).isEqualTo("Boundary"));
+   }
+
+   /*******************************************************************************
+    ** Stale links cannot expose merged vocabulary, other-table tags, or deleted links.
+    *******************************************************************************/
+   @Test
+   void tagLabelsExcludeStaleAndOutOfScopeAssignments() throws Exception
+   {
+      login("admin", TagsService.MANAGE);
+      TagEntry global = tags.create(null, "Global", null);
+      TagEntry current = tags.create("document", "Current", null);
+      TagEntry merged = tags.create("document", "Merged old label", null);
+      TagEntry deleted = tags.create("document", "Deleted link label", null);
+      TagEntry other = tags.create("document", "Other table label", null);
+      CollaborationRecords.update(CollaborationTables.TAG, new QRecord().withValue("id", merged.id()).withValue("mergedIntoTagId", current.id()));
+      CollaborationRecords.update(CollaborationTables.TAG, new QRecord().withValue("id", other.id()).withValue("tableName", "different_table"));
+      for(TagEntry tag : List.of(global, current, merged, deleted, other))
+      {
+         CollaborationRecords.insert(CollaborationTables.RECORD_TAG, new QRecord().withValue("tableName", "document").withValue("recordId", "1")
+            .withValue("tagId", tag.id()).withValue("createdByUserId", "admin").withValue("parentDeleted", tag.id().equals(deleted.id())));
+      }
+      login("alice");
+      com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay.refresh(instance);
+      var rows = new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("collaborationTags"))).getRecords();
+      assertThat(rows).extracting(row -> row.getValueString("collaborationTags")).containsExactlyInAnyOrder("Current, Global", null);
+      assertThat(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData.of(instance.getTable(CollaborationTables.RECORD_TAG))).isNotNull();
+   }
+
+   /*******************************************************************************
     ** Natural keys are locale-independent and validate after collapsing whitespace.
     *******************************************************************************/
    @Test

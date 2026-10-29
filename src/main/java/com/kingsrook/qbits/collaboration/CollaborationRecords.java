@@ -23,6 +23,7 @@ package com.kingsrook.qbits.collaboration;
 
 import java.io.Serializable;
 import java.util.List;
+import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
@@ -74,7 +75,15 @@ public final class CollaborationRecords
     *******************************************************************************/
    public static List<QRecord> query(String table, QQueryFilter filter) throws QException
    {
-      QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(QContext.getQBackendTransaction());
+      return (query(table, filter, QContext.getQBackendTransaction()));
+   }
+
+   /*******************************************************************************
+    ** Provider reads participate in the originating query's explicit transaction.
+    *******************************************************************************/
+   public static List<QRecord> query(String table, QQueryFilter filter, QBackendTransaction transaction) throws QException
+   {
+      QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(transaction);
       input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service performs parent/ownership authorization.");
       return (new QueryAction().execute(input).getRecords().stream().map(QRecord::new).toList());

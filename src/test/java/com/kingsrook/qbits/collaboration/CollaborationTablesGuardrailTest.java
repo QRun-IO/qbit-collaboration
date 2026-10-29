@@ -65,6 +65,7 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
       Map.entry("collaboration_favorite", "user content: a person stars something"),
       Map.entry("collaboration_recent", "runtime: a person opens a record"),
       Map.entry("collaboration_attachment", "user content: a person uploads a file"),
+      Map.entry("collaboration_attachment_cleanup", "runtime: authorized deletion queues durable storage cleanup"),
       Map.entry("collaboration_comment", "user content: a person comments"),
       Map.entry("collaboration_comment_revision", "runtime: a comment is edited"),
       Map.entry("collaboration_mention", "runtime: a comment mentions someone"),
@@ -183,7 +184,7 @@ class CollaborationTablesGuardrailTest extends PersonalServiceFixture
    private List<String> collaborationTables()
    {
       List<String> tables = instance.getTables().values().stream().map(QTableMetaData::getName).filter(n -> n.startsWith("collaboration_")).sorted().toList();
-      assertThat(tables).hasSize(19);
+      assertThat(tables).hasSize(20);
       return (tables);
    }
 
