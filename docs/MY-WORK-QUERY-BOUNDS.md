@@ -73,3 +73,20 @@ This confirms linear distinct-parent authorization work remains despite bounded
 row retention. The existing exact-count semantics still require examining every
 matching task. No runtime optimization or production-capacity claim follows from
 this fixture measurement alone.
+
+## Compatibility with the later attachment changes
+
+On October 26, an isolated source export combined attachment commit
+`dc65a826ce362416d55d91136fa39225f4a7cf94` with the four My Work files from
+`2ac067bea4af199486f90e2dc5212baf8910b8fb`. Both branches share base
+`15cb8cbf72aa9a5e033280cf5a38384d1295fc7d`; their changed files do not overlap.
+This was a source-overlay verification, not a branch merge or publication.
+
+Java 21 `./mvnw.cmd verify -Dqqq.mywork.load=true` passed all 209 tests with zero
+failures, errors or skips, including the 29 attachment transaction tests.
+Packaging and JaCoCo gates passed. The optional PostgreSQL workload retained the
+same visible-count, top-ten, query-budget and pool assertions. Shared-parent
+p50/max were 76.301/96.044 ms; distinct-parent p50/max were 939.896/1035.402 ms.
+SQL counts remained 113 and 2013 per summary. These local measurements preserve
+the limitations above; they do not qualify an integrated published artifact or
+Kof22 deployment. The eventual integrated branch still needs its own CI gates.
