@@ -5,6 +5,7 @@ target/recovery-process-classpath.txt. Uses only disposable loopback fixtures.
 """
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -76,14 +77,27 @@ def main():
     parser.add_argument("--java", required=True)
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--frontend-repo", type=Path)
+    parser.add_argument("--frontend-jar", type=Path, help="Serve this packaged frontend instead of a local export")
+    parser.add_argument("--backend-jar", type=Path, help="Use this backend artifact instead of target/classes")
     parser.add_argument("--browser-profile", choices=("chromium", "firefox", "webkit", "mobile", "tablet"), default="chromium")
     args = parser.parse_args()
     repo = args.repo.resolve()
     output = repo / "target" / ("recovery-processes-" + uuid.uuid4().hex[:10])
     output.mkdir()
-    classpath = os.pathsep.join([str(repo / "target/test-classes"), str(repo / "target/classes"),
-                                (repo / "target/recovery-process-classpath.txt").read_text().strip()])
-    if args.frontend_repo:
+    if args.frontend_jar and not args.frontend_repo:
+        parser.error("frontend-jar requires frontend-repo for browser tooling")
+    dependencies = (repo / "target/recovery-process-classpath.txt").read_text().strip().split(os.pathsep)
+    assert not any(Path(item).name.startswith(("qbit-collaboration-", "qqq-frontend-next-")) for item in dependencies)
+    backend = args.backend_jar.resolve(strict=True) if args.backend_jar else repo / "target/classes"
+    classpath = os.pathsep.join([str(repo / "target/test-classes"), str(backend), *dependencies])
+    evidence = {"status": "FAIL", "browser_profile": args.browser_profile, "cleanup": False}
+    if args.backend_jar:
+        evidence["backend_jar_sha256"] = hashlib.sha256(backend.read_bytes()).hexdigest()
+    if args.frontend_jar:
+        frontend = args.frontend_jar.resolve(strict=True)
+        evidence["frontend_jar_sha256"] = hashlib.sha256(frontend.read_bytes()).hexdigest()
+        classpath = str(frontend) + os.pathsep + classpath
+    elif args.frontend_repo:
         shutil.copytree(args.frontend_repo.resolve() / "out", output / "next-dashboard")
         classpath = str(output) + os.pathsep + classpath
     container = "qqq-recovery-" + uuid.uuid4().hex[:12]
@@ -112,6 +126,7 @@ def main():
         if args.frontend_repo:
             subprocess.run(["node", str(repo / "docs/acceptance/presence_recovery_browser.mjs"),
                             str(args.frontend_repo.resolve()), str(ports[0]), str(ports[1]), container, str(output), args.browser_profile], check=True)
+            evidence["status"] = "PASS"
             return
         def join():
             """Acquire each person's new lease on a different node."""
@@ -130,6 +145,10 @@ def main():
         assert all(replacement[user] != original[user] for user in original)
         settle(ports, replacement)
         print(f"PASS: two independent JVMs recovered two viewers after Redis loss. Logs: {output}")
+        evidence["status"] = "PASS"
+    except Exception as error:
+        evidence["failure"] = str(error)
+        raise
     finally:
         for process in processes:
             process.terminate()
@@ -141,7 +160,12 @@ def main():
                 process.wait(timeout=10)
         for log in logs:
             log.close()
-        subprocess.run(["docker", "rm", "-f", container], capture_output=True, check=False)
+        cleanup = subprocess.run(["docker", "rm", "-f", container], capture_output=True, check=False)
+        evidence["cleanup"] = cleanup.returncode == 0 and all(process.poll() is not None for process in processes)
+        (output / "result.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+        print(output, flush=True)
+        if evidence["status"] == "PASS" and not evidence["cleanup"]:
+            raise RuntimeError("Recovery passed but owned fixture cleanup failed")
 
 
 if __name__ == "__main__":

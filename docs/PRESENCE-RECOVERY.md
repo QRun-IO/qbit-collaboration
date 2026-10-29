@@ -153,3 +153,27 @@ python docs/acceptance/presence_restore_processes.py --java /path/to/java --repo
 This is a protocol acceptance fixture, not host maintenance automation. Actual
 host admission closure, replacement prevention and generation configuration
 still require implementation and staging validation.
+
+To qualify a packaged backend, add `--backend-jar /path/to/qbit-collaboration.jar`.
+This excludes production `target/classes` from the JVM classpath, rejects a
+duplicate collaboration dependency JAR, and records the artifact SHA-256 in
+`target/restore-processes-*/result.json`. The receipt includes the elapsed time
+for rejection of old leases (required to remain below their normal expiry),
+the restore/rejoin checks and fixture cleanup. Cleanup failure fails the run.
+The test repository still supplies compiled fixture classes and its dependency
+classpath; this is not a standalone production launcher.
+
+## Packaged browser qualification
+
+The process harness accepts `--backend-jar` and `--frontend-jar` for artifact
+verification. With a backend JAR, production `target/classes` is omitted from the
+runtime classpath; test classes provide only the disposable server fixture. The
+frontend JAR is served directly instead of copying a local `out` export.
+`--frontend-repo` remains required for Playwright tooling. Dependency classpaths
+must not contain a second collaboration or frontend artifact.
+
+Each run writes `result.json` with the selected artifact SHA-256 hashes, browser
+profile, result and cleanup outcome. A successful test with failed fixture cleanup
+exits unsuccessfully. This records local artifact qualification, not publication
+or deployment provenance. Supply `--browser-profile` to qualify each required
+browser independently.
