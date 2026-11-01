@@ -267,15 +267,19 @@ public final class CollaborationHome
       List<Map<String, Object>> rows = new ArrayList<>();
       if(admin)
       {
-         PresenceRegistry.get(QContext.getQInstance()).counts().forEach((table, viewers) ->
+         var registry = PresenceRegistry.get(QContext.getQInstance());
+         Map<String, Integer> connections = registry.connectionCounts();
+         registry.counts().forEach((table, viewers) ->
          {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("table", tableLabel(table));
             row.put("viewers", viewers);
+            row.put("connections", connections.getOrDefault(table, viewers));
             rows.add(row);
          });
       }
-      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "left"), column("People", "viewers", "right")));
+      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "left"), column("People", "viewers", "right"),
+         column("Connections", "connections", "right")));
    }
 
 

@@ -64,7 +64,7 @@ class PresenceTest extends PersonalServiceFixture
          assertThat(second.snapshot("document", "1")).hasSize(1);
          clock.advance(1000);
          second.heartbeat("alice", "Alice", "two", "document", "1", "EDITING", "title");
-         assertThat(first.snapshot("document", "1")).containsExactly(new PresenceRegistry.Viewer("alice", "Alice", "EDITING", "title"));
+         assertThat(first.snapshot("document", "1")).containsExactly(new PresenceRegistry.Viewer("alice", "Alice", "EDITING", "title", 2));
          assertThat(first.snapshot("document", null).getFirst().fieldName()).isNull();
          int changes = (int) events.stream().filter(event -> event.getEvent().equals("presence.changed")).count();
          clock.advance(20000);
@@ -131,6 +131,137 @@ class PresenceTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** Two leases of one user merge into one viewer with connections = 2; per
+    ** connection they are two viewers with opaque ids, modes, fields and starts.
+    ** Counts keep counting users; connectionCounts counts leases (#54).
+    *******************************************************************************/
+   @Test
+   void perConnectionViewersAndCounts() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES);
+          var second = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
+      {
+         first.heartbeat("admin", "Admin", "terminal-1", "session-a", "person", "7", "VIEWING", null);
+         clock.advance(1000);
+         second.heartbeat("admin", "Admin", "terminal-2", "session-b", "person", "7", "EDITING", "name");
+         first.heartbeat("bob", "Bob", "tab", "session-c", "person", "7", "VIEWING", null);
+
+         assertThat(first.snapshot("person", "7")).containsExactly(
+            new PresenceRegistry.Viewer("admin", "Admin", "EDITING", "name", 2),
+            new PresenceRegistry.Viewer("bob", "Bob", "VIEWING", null, 1));
+
+         List<PresenceRegistry.Viewer> connections = second.connections("person", "7");
+         assertThat(connections).hasSize(3);
+         assertThat(connections.subList(0, 2)).extracting(PresenceRegistry.Viewer::userId, PresenceRegistry.Viewer::mode, PresenceRegistry.Viewer::fieldName, PresenceRegistry.Viewer::connections)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("admin", "VIEWING", null, 1), org.assertj.core.groups.Tuple.tuple("admin", "EDITING", "name", 1));
+         assertThat(connections.getFirst().connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("admin", "terminal-1")).startsWith("c").hasSize(17);
+         assertThat(connections.getFirst().since()).isEqualTo("2026-10-13T12:00:00Z");
+         assertThat(connections.get(1).since()).isEqualTo("2026-10-13T12:00:01Z");
+
+         ////////////////////////////////////////////////////////////////////
+         // renewals keep the lease start; the session uuid replicates     //
+         ////////////////////////////////////////////////////////////////////
+         clock.advance(20000);
+         first.heartbeat("admin", "Admin", "terminal-1", "session-a", "person", "7", "VIEWING", null);
+         assertThat(second.connections("person", "7").getFirst().since()).isEqualTo("2026-10-13T12:00:00Z");
+         assertThat(second.connections("person", "7")).extracting(PresenceRegistry.Viewer::sessionId)
+            .containsExactly(PresenceRegistry.opaqueSessionId("session-a"), PresenceRegistry.opaqueSessionId("session-b"), PresenceRegistry.opaqueSessionId("session-c"));
+         assertThat(PresenceRegistry.opaqueSessionId("session-a")).startsWith("s").hasSize(17).isNotEqualTo(PresenceRegistry.opaqueSessionId("session-b"));
+
+         ////////////////////////////////////////////////////////////////////
+         // table snapshots and counts: users vs leases                    //
+         ////////////////////////////////////////////////////////////////////
+         assertThat(first.snapshot("person", null)).extracting(PresenceRegistry.Viewer::connections).containsExactly(2, 1);
+         assertThat(first.connections("person", null)).extracting(PresenceRegistry.Viewer::fieldName).containsOnlyNulls();
+         assertThat(first.counts()).containsExactly(java.util.Map.entry("person", 2));
+         assertThat(first.connectionCounts()).containsExactly(java.util.Map.entry("person", 3));
+
+         second.leave("admin", "terminal-2", "person", "7");
+         assertThat(first.snapshot("person", "7").getFirst()).isEqualTo(new PresenceRegistry.Viewer("admin", "Admin", "VIEWING", null, 1));
+      }
+   }
+
+   /*******************************************************************************
+    ** Session uuids are bearer credentials: no bus message (internal replication
+    ** or client event) and no snapshot carries one, only the opaque session id.
+    *******************************************************************************/
+   @Test
+   void rawSessionUuidIsNeverPublished() throws Exception
+   {
+      var clock = new MutableClock();
+      String sessionUuid = "7d1c2a9e-secret-session-uuid";
+      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES);
+          var second = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "VIEWING", null);
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "EDITING", "name");
+         first.leave("admin", "terminal-1", "person", "7");
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", null, "VIEWING", null);
+         assertThat(events).isNotEmpty().anySatisfy(event -> assertThat(event.getChannel()).isEqualTo(PresenceRegistry.INTERNAL_CHANNEL));
+         for(RealtimeMessage event : events)
+         {
+            assertThat(JsonUtils.toJson(new LinkedHashMap<>(event.getData()))).doesNotContain(sessionUuid);
+         }
+         assertThat(events).filteredOn(event -> event.getChannel().equals(PresenceRegistry.INTERNAL_CHANNEL) && !Boolean.TRUE.equals(event.getData().get("leave")))
+            .allSatisfy(event -> assertThat(event.getData().get("sessionId")).isEqualTo(PresenceRegistry.opaqueSessionId(sessionUuid)));
+         var snapshot = new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("person", null, second.snapshot("person", null), 1, second.connections("person", null));
+         String json = JsonUtils.toJson(snapshot);
+         assertThat(json).doesNotContain(sessionUuid).contains(PresenceRegistry.opaqueSessionId(sessionUuid));
+      }
+   }
+
+   /*******************************************************************************
+    ** presence.changed carries connections per merged viewer, a lease count and
+    ** one lease entry per connection; a second terminal of one user is a change.
+    *******************************************************************************/
+   @Test
+   void changedEventCarriesConnections() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         registry.heartbeat("admin", "Admin", "terminal-1", "person", "7", "VIEWING", null);
+         int before = recordEvents(events).size();
+         registry.heartbeat("admin", "Admin", "terminal-2", "person", "7", "VIEWING", null);
+         List<RealtimeMessage> after = recordEvents(events);
+         assertThat(after).hasSize(before + 1);
+
+         var json = JsonUtils.toJSONObject(JsonUtils.toJson(new LinkedHashMap<>(after.getLast().getData())));
+         assertThat(json.getJSONArray("viewers").length()).isEqualTo(1);
+         assertThat(json.getJSONArray("viewers").getJSONObject(0).getInt("connections")).isEqualTo(2);
+         assertThat(json.getJSONArray("viewers").getJSONObject(0).has("connectionId")).isFalse();
+         assertThat(json.getInt("leaseCount")).isEqualTo(2);
+         assertThat(json.getJSONArray("leases").length()).isEqualTo(2);
+         var lease = json.getJSONArray("leases").getJSONObject(1);
+         assertThat(lease.getString("userId")).isEqualTo("admin");
+         assertThat(lease.getString("mode")).isEqualTo("VIEWING");
+         assertThat(lease.getInt("connections")).isEqualTo(1);
+         assertThat(lease.getString("connectionId")).startsWith("c");
+         assertThat(lease.getString("since")).isEqualTo("2026-10-13T12:00:00Z");
+         assertThat(json.toString()).doesNotContain("terminal-");
+
+         registry.leave("admin", "terminal-1", "person", "7");
+         registry.leave("admin", "terminal-2", "person", "7");
+         var last = JsonUtils.toJSONObject(JsonUtils.toJson(new LinkedHashMap<>(recordEvents(events).getLast().getData())));
+         assertThat(last.getInt("leaseCount")).isZero();
+         assertThat(last.getJSONArray("leases").length()).isZero();
+      }
+   }
+
+   /*******************************************************************************
+    ** Record-channel presence.changed events so far.
+    *******************************************************************************/
+   private static List<RealtimeMessage> recordEvents(List<RealtimeMessage> events)
+   {
+      return (events.stream().filter(event -> event.getChannel().equals("record:person:7") && event.getEvent().equals("presence.changed")).toList());
+   }
+
+   /*******************************************************************************
     ** At capacity, existing leases renew while new targets are refused on both pods.
     *******************************************************************************/
    @Test
@@ -160,7 +291,15 @@ class PresenceTest extends PersonalServiceFixture
    void accessFeatureAndSnapshot() throws Exception
    {
       var service = new PresenceService();
+      QContext.getQSession().setUuid("session-uuid-alice");
       assertThat(service.heartbeat("one", "document", "01", "EDITING", "title")).hasSize(1);
+      assertThat(service.connections("document", "1")).singleElement().satisfies(viewer ->
+      {
+         assertThat(viewer.connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("alice", "one"));
+         assertThat(viewer.sessionId()).isEqualTo(PresenceRegistry.opaqueSessionId("session-uuid-alice"));
+         assertThat(JsonUtils.toJson(new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("document", "1", service.snapshot("document", "1"), 1, service.connections("document", "1"))))
+            .doesNotContain("session-uuid-alice");
+      });
       assertThat(service.snapshot("document", "1")).extracting(PresenceRegistry.Viewer::userId).containsExactly("alice");
       assertThat(service.snapshot("document", null)).hasSize(1);
       assertThatThrownBy(() -> service.heartbeat("one", "document", "3", "VIEWING", null)).isInstanceOf(QNotFoundException.class);
@@ -180,6 +319,7 @@ class PresenceTest extends PersonalServiceFixture
       admin();
       assertThat(CollaborationHome.presence().getRows()).extracting(row -> row.get("table")).containsExactly("Documents");
       assertThat(CollaborationHome.presence().getRows().getFirst().get("viewers")).isEqualTo(1);
+      assertThat(CollaborationHome.presence().getRows().getFirst().get("connections")).isEqualTo(1);
       login("alice");
       assertThat(CollaborationHome.presence().getRows()).isEmpty();
       assertThat(CollaborationHome.presence().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.PRESENCE_ADMIN_ONLY);

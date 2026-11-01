@@ -23,6 +23,7 @@ package com.kingsrook.qbits.collaboration.api;
 
 import java.util.List;
 import com.kingsrook.qbits.collaboration.presence.PresenceService;
+import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.middleware.javalin.specs.BasicOperation;
 import com.kingsrook.qqq.openapi.model.HttpMethod;
 import com.kingsrook.qqq.openapi.model.Parameter;
@@ -48,7 +49,7 @@ public class GetPresenceSpec extends CollaborationJsonSpec
    @Override
    public List<Parameter> defineRequestParameters()
    {
-      return (parameters("table!", "pk"));
+      return (parameters("table!", "pk", "perConnection"));
    }
 
    /*******************************************************************************
@@ -68,6 +69,14 @@ public class GetPresenceSpec extends CollaborationJsonSpec
    {
       String table = required(input.getQueryParam("table"), "table");
       String pk = input.getQueryParam("pk");
-      return (new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1(table, pk, new PresenceService().snapshot(table, pk)));
+      String perConnection = input.getQueryParam("perConnection");
+      if(perConnection != null && !perConnection.equalsIgnoreCase("true") && !perConnection.equalsIgnoreCase("false"))
+      {
+         throw (new QBadRequestException("perConnection must be true or false"));
+      }
+      var service = new PresenceService();
+      var viewers = service.snapshot(table, pk);
+      var leases = service.connections(table, pk);
+      return (new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1(table, pk, viewers, leases.size(), "true".equalsIgnoreCase(perConnection) ? leases : null));
    }
 }

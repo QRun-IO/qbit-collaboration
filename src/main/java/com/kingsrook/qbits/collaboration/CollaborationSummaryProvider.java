@@ -56,6 +56,7 @@ public class CollaborationSummaryProvider implements RecordFeatureSummaryProvide
             entry.put("displayName", viewer.displayName());
             entry.put("mode", viewer.mode());
             entry.put("fieldName", viewer.fieldName());
+            entry.put("connections", viewer.connections());
             return (entry);
          }).toList());
       }

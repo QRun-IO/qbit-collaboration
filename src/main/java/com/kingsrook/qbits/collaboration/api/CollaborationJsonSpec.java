@@ -161,13 +161,14 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
          case "cursor" -> "Opaque nextCursor returned by the previous page; omit for the first page.";
          case "before" -> "Timeline continuation token; alias for cursor. Supply only one.";
          case "includeDone" -> "Include completed and cancelled tasks; default false.";
+         case "perConnection" -> "Also return one viewer per live connection (lease) in leases; default false. Since collaboration 1.2.0.";
          case "status" -> "Task status: OPEN (default), DONE or CANCELLED.";
          case "types" -> "Comma-separated AUDIT, ACTIVITY or activity type names (for example COMMENTED).";
          case "q" -> "Text to search in display names or vocabulary.";
          default -> name;
       };
       return (new Parameter().withName(name).withIn(location).withRequired(required).withDescription(description)
-         .withSchema(new Schema().withType(name.equals("limit") ? Type.INTEGER : name.equals("includeDone") ? Type.BOOLEAN : Type.STRING)));
+         .withSchema(new Schema().withType(name.equals("limit") ? Type.INTEGER : name.equals("includeDone") || name.equals("perConnection") ? Type.BOOLEAN : Type.STRING)));
    }
 
    /*******************************************************************************

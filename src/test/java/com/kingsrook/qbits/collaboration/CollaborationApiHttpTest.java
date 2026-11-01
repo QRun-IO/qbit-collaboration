@@ -223,6 +223,21 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertThat(ok("POST", "/presence", body).get("viewers")).hasSize(1);
       assertThat(ok("GET", "/presence?table=document&pk=1", null).at("/viewers/0/mode").asText()).isEqualTo("EDITING");
       assertThat(ok("GET", "/presence?table=document", null).at("/viewers/0/fieldName").isNull()).isTrue();
+      ok("POST", "/presence", body.replace("tab-one", "tab-two").replace("EDITING", "VIEWING"));
+      JsonNode merged = ok("GET", "/presence?table=document&pk=1", null);
+      assertThat(merged.get("viewers")).hasSize(1);
+      assertThat(merged.at("/viewers/0/connections").asInt()).isEqualTo(2);
+      assertThat(merged.get("leaseCount").asInt()).isEqualTo(2);
+      assertThat(merged.has("leases")).isFalse();
+      JsonNode perConnection = ok("GET", "/presence?table=document&pk=1&perConnection=true", null);
+      assertThat(perConnection.get("viewers")).hasSize(1);
+      assertThat(perConnection.get("leases")).hasSize(2);
+      assertThat(perConnection.at("/leases/0/connectionId").asText()).startsWith("c").doesNotContain("tab-");
+      assertThat(perConnection.at("/leases/0/since").asText()).isNotBlank();
+      assertThat(perConnection.at("/leases/0/sessionId").asText()).startsWith("s");
+      assertThat(perConnection.toString()).doesNotContain("alice" + sessionSuffix).doesNotContain(sessionSuffix);
+      assertError(400, "GET", "/presence?table=document&perConnection=maybe", null, "alice");
+      ok("DELETE", "/presence", "{\"connectionId\":\"tab-two\",\"table\":\"document\",\"pk\":\"1\"}");
       assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
       assertError(404, "POST", "/presence", body, "outsider");
       assertError(400, "POST", "/presence", "{\"connectionId\":\"x\",\"table\":\"document\",\"mode\":\"BAD\"}", "alice");
@@ -509,7 +524,7 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode version = json(client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/qqq/v1/version")).GET().build(),
          HttpResponse.BodyHandlers.ofString()), 200);
       assertThat(version.at("/extensions/0/name").asText()).isEqualTo("collaboration");
-      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.1.0");
+      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.2.0");
    }
 
    /*******************************************************************************

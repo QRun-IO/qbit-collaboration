@@ -62,7 +62,7 @@ public class PresenceService
          throw (new QBadRequestException("Unknown focused field"));
       }
       String name = QContext.getQSession().getUser().getFullName();
-      if(!registry().heartbeat(user, name == null || name.isBlank() ? user : name, connection, table, pk, mode, field))
+      if(!registry().heartbeat(user, name == null || name.isBlank() ? user : name, connection, QContext.getQSession().getUuid(), table, pk, mode, field))
       {
          throw (new QBadRequestException("Presence capacity reached; retry later"));
       }
@@ -87,6 +87,15 @@ public class PresenceService
    {
       PersonalRecords.currentUserId();
       return (registry().snapshot(table, authorize(table, pk)));
+   }
+
+   /*******************************************************************************
+    ** One viewer per live lease, behind the same access boundary as snapshot.
+    *******************************************************************************/
+   public List<PresenceRegistry.Viewer> connections(String table, String pk) throws QException
+   {
+      PersonalRecords.currentUserId();
+      return (registry().connections(table, authorize(table, pk)));
    }
 
    /*******************************************************************************

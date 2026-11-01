@@ -84,8 +84,19 @@ public final class CollaborationPresenceSchemas
     ** The snapshot is also the data shape of presence.changed events. Viewers are
     ** included even when empty, whatever inclusion the serializer defaults to.
     *******************************************************************************/
-   public record CollaborationPresenceSnapshotV1(String table, String pk, @JsonInclude(JsonInclude.Include.ALWAYS) List<PresenceRegistry.Viewer> viewers) implements ToSchema
+   public record CollaborationPresenceSnapshotV1(String table, String pk, @JsonInclude(JsonInclude.Include.ALWAYS) List<PresenceRegistry.Viewer> viewers,
+                                                 Integer leaseCount, @JsonInclude(JsonInclude.Include.NON_NULL) List<PresenceRegistry.Viewer> leases) implements ToSchema
    {
+      /*******************************************************************************
+       ** The merged snapshot without per-connection detail.
+       *******************************************************************************/
+      public CollaborationPresenceSnapshotV1(String table, String pk, List<PresenceRegistry.Viewer> viewers)
+      {
+         this(table, pk, viewers, null, null);
+      }
+
+
+
       /*******************************************************************************
        ** A table snapshot deliberately excludes record ids and focused field names.
        *******************************************************************************/
@@ -95,14 +106,17 @@ public final class CollaborationPresenceSchemas
          return (new Schema().withType(Type.OBJECT).withDescription("Live viewers, merged across tabs; presence.changed uses this payload.")
             .withProperties(new TreeMap<>(Map.of(
                "table", text("Parent table name.", false), "pk", text("Record key; absent for table events.", true),
-               "viewers", new Schema().withType(Type.ARRAY).withDescription("Live viewers; always present, empty once the last viewer leaves.").withNullable(false).withItems(new Schema().withRefToSchema("CollaborationPresenceViewerV1"))))));
+               "viewers", new Schema().withType(Type.ARRAY).withDescription("Live viewers; always present, empty once the last viewer leaves.").withNullable(false).withItems(new Schema().withRefToSchema("CollaborationPresenceViewerV1")),
+               "leaseCount", new Schema().withType(Type.INTEGER).withDescription("Live connections (leases) behind viewers; a user with two terminals counts twice. Since 1.2.0.").withNullable(true),
+               "leases", new Schema().withType(Type.ARRAY).withDescription("One viewer per live connection, with connectionId and since. On GET only with perConnection=true; always on presence.changed. Since 1.2.0.")
+                  .withNullable(true).withItems(new Schema().withRefToSchema("CollaborationPresenceViewerV1"))))));
       }
    }
 
    /*******************************************************************************
     ** Only public identity and focus are carried, never field contents.
     *******************************************************************************/
-   public record CollaborationPresenceViewerV1(String userId, String displayName, String mode, String fieldName) implements ToSchema
+   public record CollaborationPresenceViewerV1(String userId, String displayName, String mode, String fieldName, Integer connections, String connectionId, String sessionId, String since) implements ToSchema
    {
       /*******************************************************************************
        ** Editing takes precedence when one user has several open tabs.
@@ -110,10 +124,14 @@ public final class CollaborationPresenceSchemas
       @Override
       public Schema toSchema()
       {
-         return (new Schema().withType(Type.OBJECT).withDescription("One user merged across live tabs; EDITING takes precedence.")
+         return (new Schema().withType(Type.OBJECT).withDescription("One user merged across live tabs (EDITING takes precedence), or one live connection in leases.")
             .withProperties(new TreeMap<>(Map.of(
                "userId", text("Stable user identity.", false), "displayName", text("Session display name.", false),
-               "mode", text("VIEWING or EDITING.", false).withEnumValues(List.of("VIEWING", "EDITING")), "fieldName", text("Focused field; null on table snapshots.", true)))));
+               "mode", text("VIEWING or EDITING.", false).withEnumValues(List.of("VIEWING", "EDITING")), "fieldName", text("Focused field; null on table snapshots.", true),
+               "connections", new Schema().withType(Type.INTEGER).withDescription("Live connections (tabs, terminals) merged into this viewer; 1 in leases. Since 1.2.0.").withNullable(true),
+               "connectionId", text("Opaque per-connection id, only in leases: c + the first 16 hex digits of SHA-256(userId + newline + connectionId). Since 1.2.0.", true),
+               "sessionId", text("Opaque id of the signed-in session behind this connection, only in leases (HMAC of the server session; never the session itself). Since 1.2.0.", true),
+               "since", text("When this connection's lease started (ISO-8601), only in leases. Since 1.2.0.", true).withFormat("date-time")))));
       }
    }
 
