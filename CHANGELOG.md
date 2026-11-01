@@ -27,6 +27,7 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 ### Fixed
 
 - QBit metadata reports the Maven artifact version from a filtered resource, including release versions.
+- `presence.changed` events and presence snapshots always carry `viewers`, sending `[]` once the last viewer leaves, as the schema requires (#52).
 
 - Timeline audit summaries read "Edited by Alice Morgan: Title, Total" or "Created by Alice Morgan" instead of "Record was Edited"; detail rows are unchanged.
 - The demo server chooses its user per browser session (`?user=bob`, remembered in a cookie) instead of once per JVM, and sends the person's name to the frontend so it no longer shows Anonymous.

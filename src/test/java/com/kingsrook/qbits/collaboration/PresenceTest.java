@@ -24,8 +24,10 @@ package com.kingsrook.qbits.collaboration;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import com.kingsrook.qbits.collaboration.api.CollaborationPresenceSchemas;
 import com.kingsrook.qbits.collaboration.presence.PresenceRegistry;
 import com.kingsrook.qbits.collaboration.presence.PresenceService;
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
@@ -36,6 +38,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData;
 import com.kingsrook.qqq.backend.core.realtime.InMemoryRealtimeBus;
 import com.kingsrook.qqq.backend.core.realtime.RealtimeMessage;
+import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +87,46 @@ class PresenceTest extends PersonalServiceFixture
             assertThat(event.getChannel()).isEqualTo("instance:presence");
          });
          assertThat(events.stream().filter(event -> event.getChannel().equals("table:document"))).allSatisfy(event -> assertThat(event.getData()).doesNotContainKey("pk"));
+      }
+   }
+
+   /*******************************************************************************
+    ** The last leave still sends viewers: the SSE writer and the HTTP snapshot must
+    ** both carry an empty array, never omit the field (#52).
+    *******************************************************************************/
+   @Test
+   void lastLeaveSendsEmptyViewers() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         registry.heartbeat("bob", "Bob", "one", "person", null, "VIEWING", null);
+         registry.heartbeat("bob", "Bob", "one", "person", "7", "EDITING", "name");
+         registry.leave("bob", "one", "person", null);
+         registry.leave("bob", "one", "person", "7");
+         assertThat(registry.snapshot("person", null)).isEmpty();
+
+         for(String channel : List.of("table:person", "record:person:7"))
+         {
+            RealtimeMessage last = events.stream().filter(event -> event.getChannel().equals(channel) && event.getEvent().equals("presence.changed")).reduce((first, second) -> second).orElseThrow();
+            assertThat(last.getData()).containsKey("viewers");
+            assertThat((List<?>) last.getData().get("viewers")).isEmpty();
+
+            ///////////////////////////////////////////////////////////////////////
+            // the realtime hub copies the data map and writes it with toJson,   //
+            // whose NON_EMPTY inclusion used to drop the empty viewers list     //
+            ///////////////////////////////////////////////////////////////////////
+            String json = JsonUtils.toJson(new LinkedHashMap<>(last.getData()));
+            assertThat(JsonUtils.toJSONObject(json).getJSONArray("viewers").length()).isZero();
+         }
+
+         String occupied = JsonUtils.toJson(events.stream().filter(event -> event.getChannel().equals("record:person:7")).findFirst().orElseThrow().getData());
+         assertThat(JsonUtils.toJSONObject(occupied).getJSONArray("viewers").getJSONObject(0).getString("fieldName")).isEqualTo("name");
+
+         var snapshot = new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("person", null, registry.snapshot("person", null));
+         assertThat(JsonUtils.toJSONObject(JsonUtils.toJson(snapshot)).getJSONArray("viewers").length()).isZero();
       }
    }
 

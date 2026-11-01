@@ -21,6 +21,7 @@
 
 package com.kingsrook.qbits.collaboration.presence;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -33,6 +34,10 @@ import java.util.WeakHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.realtime.RealtimeBus;
@@ -323,7 +328,7 @@ public final class PresenceRegistry implements AutoCloseable
       {
          data.put("pk", pk);
       }
-      ArrayList<LinkedHashMap<String, Serializable>> viewers = new ArrayList<>();
+      Viewers viewers = new Viewers();
       synchronized(this)
       {
          for(Viewer viewer : snapshotInternal(table, pk))
@@ -339,6 +344,61 @@ public final class PresenceRegistry implements AutoCloseable
       data.put("viewers", viewers);
       bus.publish(new RealtimeMessage().withChannel(channel).withEvent("presence.changed").withData(data));
    }
+
+   /*******************************************************************************
+    ** Event viewers list that is never omitted: the SSE writer serializes event data
+    ** with NON_EMPTY inclusion, which would drop an empty list, but the schema
+    ** declares viewers a required array, so the last leave must send [] (#52).
+    *******************************************************************************/
+   @JsonSerialize(using = ViewersSerializer.class)
+   public static final class Viewers extends ArrayList<LinkedHashMap<String, Serializable>>
+   {
+   }
+
+
+
+   /*******************************************************************************
+    ** Writes each viewer with the caller's mapper settings and reports never empty.
+    *******************************************************************************/
+   public static final class ViewersSerializer extends StdSerializer<Viewers>
+   {
+      /*******************************************************************************
+       ** Jackson instantiates the serializer reflectively.
+       *******************************************************************************/
+      public ViewersSerializer()
+      {
+         super(Viewers.class);
+      }
+
+
+
+      /*******************************************************************************
+       ** Always an array, including the empty array after the last viewer leaves.
+       *******************************************************************************/
+      @Override
+      public void serialize(Viewers viewers, JsonGenerator generator, SerializerProvider provider) throws IOException
+      {
+         generator.writeStartArray(viewers, viewers.size());
+         for(LinkedHashMap<String, Serializable> viewer : viewers)
+         {
+            provider.defaultSerializeValue(viewer, generator);
+         }
+         generator.writeEndArray();
+      }
+
+
+
+      /*******************************************************************************
+       ** NON_EMPTY inclusion consults this; an empty viewer list is still a value.
+       *******************************************************************************/
+      @Override
+      public boolean isEmpty(SerializerProvider provider, Viewers viewers)
+      {
+         return (false);
+      }
+   }
+
+
 
    /*******************************************************************************
     ** Release listeners and timer on host shutdown or in tests.
