@@ -24,6 +24,7 @@ package com.kingsrook.qbits.collaboration.api;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.kingsrook.qbits.collaboration.presence.PresenceRegistry;
 import com.kingsrook.qqq.middleware.javalin.schemabuilder.ToSchema;
 import com.kingsrook.qqq.openapi.model.Schema;
@@ -80,9 +81,10 @@ public final class CollaborationPresenceSchemas
    }
 
    /*******************************************************************************
-    ** The snapshot is also the data shape of presence.changed events.
+    ** The snapshot is also the data shape of presence.changed events. Viewers are
+    ** included even when empty, whatever inclusion the serializer defaults to.
     *******************************************************************************/
-   public record CollaborationPresenceSnapshotV1(String table, String pk, List<PresenceRegistry.Viewer> viewers) implements ToSchema
+   public record CollaborationPresenceSnapshotV1(String table, String pk, @JsonInclude(JsonInclude.Include.ALWAYS) List<PresenceRegistry.Viewer> viewers) implements ToSchema
    {
       /*******************************************************************************
        ** A table snapshot deliberately excludes record ids and focused field names.
@@ -93,7 +95,7 @@ public final class CollaborationPresenceSchemas
          return (new Schema().withType(Type.OBJECT).withDescription("Live viewers, merged across tabs; presence.changed uses this payload.")
             .withProperties(new TreeMap<>(Map.of(
                "table", text("Parent table name.", false), "pk", text("Record key; absent for table events.", true),
-               "viewers", new Schema().withType(Type.ARRAY).withItems(new Schema().withRefToSchema("CollaborationPresenceViewerV1"))))));
+               "viewers", new Schema().withType(Type.ARRAY).withDescription("Live viewers; always present, empty once the last viewer leaves.").withNullable(false).withItems(new Schema().withRefToSchema("CollaborationPresenceViewerV1"))))));
       }
    }
 

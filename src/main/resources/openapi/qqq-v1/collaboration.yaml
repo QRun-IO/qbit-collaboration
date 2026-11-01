@@ -758,8 +758,10 @@ components:
           nullable: false
           type: "string"
         viewers:
+          description: "Live viewers; always present, empty once the last viewer leaves."
           items:
             $ref: "#/components/schemas/CollaborationPresenceViewerV1"
+          nullable: false
           type: "array"
       type: "object"
     CollaborationPresenceViewerV1:
