@@ -717,7 +717,7 @@ public final class CollaborationSchemas
       schemas.put("CollaborationPresenceRequestV1", new CollaborationPresenceSchemas.CollaborationPresenceRequestV1(null, null, null, null, null).toSchema());
       schemas.put("CollaborationPresenceLeaveV1", new CollaborationPresenceSchemas.CollaborationPresenceLeaveV1(null, null, null).toSchema());
       schemas.put("CollaborationPresenceSnapshotV1", new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1(null, null, null).toSchema());
-      schemas.put("CollaborationPresenceViewerV1", new CollaborationPresenceSchemas.CollaborationPresenceViewerV1(null, null, null, null).toSchema());
+      schemas.put("CollaborationPresenceViewerV1", new CollaborationPresenceSchemas.CollaborationPresenceViewerV1(null, null, null, null, null, null, null).toSchema());
       schemas.putAll(CollaborationWorkSchemas.components());
       return (schemas);
    }

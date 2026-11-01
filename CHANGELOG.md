@@ -13,6 +13,7 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Changed
 
+- UI API extension collaboration 1.2.0, additive (#54): presence viewers carry `connections` (live leases merged into the viewer), snapshots carry `leaseCount`, and `GET /presence?perConnection=true` adds `leases`, one viewer per connection with an opaque `connectionId`, `mode`, `fieldName` and `since`. `presence.changed` events always carry `leaseCount` and `leases`. Leases record the server-side session uuid. `PresenceRegistry.connectionCounts()` counts leases next to the unchanged user `counts()`; the Who's here card shows both.
 - UI API extension collaboration 1.1.0 (requires QQQ 4.1.0-RC.15, UI API 1.6.0): operationIds, standard error responses with BasicErrorResponseV1, extension tags and published presence request/snapshot/viewer schemas to resolve dangling references. Retain CollaborationErrorV1 as deprecated.
 
 - Upgrade the default QQQ BOM to `4.1.0-RC.7` from Maven Central.

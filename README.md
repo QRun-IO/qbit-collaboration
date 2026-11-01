@@ -410,7 +410,7 @@ The runtime provider adds this field and its search entry where TAGS is enabled.
 
 ## UI API
 
-The producer registers extension `collaboration` version `1.1.0` at
+The producer registers extension `collaboration` version `1.2.0` at
 `/qqq/v1/qbit/collaboration`. It uses the signed-in user's session and existing
 services. Disable registration with `new CollaborationQBitConfig().withUiApi(false)`.
 Requires QQQ `4.1.0-RC.15` and UI API `1.6.0`. Operations carry stable operationIds,
@@ -721,7 +721,7 @@ Enable `RecordFeature.PRESENCE` on the table. The typed endpoints below
 | --- | --- |
 | `POST /presence` | `{connectionId, table, pk?, mode: "VIEWING"|"EDITING", fieldName?}` |
 | `DELETE /presence` | `{connectionId, table, pk?}` |
-| `GET /presence?table=...&pk=...` | Omit pk for a table snapshot |
+| `GET /presence?table=...&pk=...&perConnection=true` | Omit pk for a table snapshot; `perConnection` is optional |
 
 Session identity supplies userId and displayName. Every call rechecks table READ and record
 GetAction visibility. Disabled features and denied/missing parents return the same 404. A
@@ -733,6 +733,15 @@ sweep and expiry checks on reads. The cap is 50,000 leases per pod: new targets 
 a warning while existing leases can renew. Tabs merge per user; EDITING wins and the latest
 editor supplies focus. Nothing is persisted, including directory rows.
 
+Per-connection presence (extension 1.2.0, #54): each merged viewer carries `connections`, the
+number of live leases (tabs, terminals) behind it, and every snapshot carries `leaseCount`, so
+two terminals of one user read as one person with two connections. `perConnection=true` adds
+`leases`, one viewer per lease with an opaque `connectionId` (`c` and the first 16 hex digits of
+SHA-256 of `userId`, a newline and the client connection id), its `mode`, `fieldName` (record
+targets only) and `since`, the lease start. `presence.changed` events always carry `leaseCount`
+and `leases`. Each lease also records the caller's server-side session uuid (never sent to
+clients). `PresenceRegistry.counts()` still counts users; `connectionCounts()` counts leases.
+
 Every heartbeat/leave replicates over core's bus on `instance:presence`, a channel refused by
 core client subscriptions. `presence.changed` is emitted to record and table channels. Table
 snapshots aggregate users without record ids or focused field names; those stay on record
@@ -741,5 +750,5 @@ refetch after reconnecting.
 
 The initial overlay refresh starts the registry on every pod, including those without local
 viewers. Endpoints also initialize it lazily. At shutdown call `PresenceRegistry.close(instance)`
-before `RealtimeBus.close(instance)`. The admin-only **Who's here** home card shows user counts
-per table, and core record-feature summaries include the presence snapshot.
+before `RealtimeBus.close(instance)`. The admin-only **Who's here** home card shows user and
+connection counts per table, and core record-feature summaries include the presence snapshot.
