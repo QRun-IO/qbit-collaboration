@@ -806,6 +806,12 @@ components:
           - "EDITING"
           nullable: false
           type: "string"
+        sessionId:
+          description: "Opaque id of the signed-in session behind this connection,\
+            \ only in leases (HMAC of the server session; never the session itself).\
+            \ Since 1.2.0."
+          nullable: true
+          type: "string"
         since:
           description: "When this connection's lease started (ISO-8601), only in leases.\
             \ Since 1.2.0."

@@ -21,11 +21,15 @@
 
 package com.kingsrook.qbits.collaboration.presence;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,6 +64,7 @@ public final class PresenceRegistry implements AutoCloseable
    public static final long TTL_MILLIS = 45000;
    public static final int MAX_ENTRIES = 50000;
    private static final QLogger LOG = QLogger.getLogger(PresenceRegistry.class);
+   private static final byte[] SESSION_SECRET = sessionSecret();
    private static final Map<QInstance, PresenceRegistry> REGISTRIES = new WeakHashMap<>();
    private final Map<Key, Entry> entries = new HashMap<>();
    private final RealtimeBusInterface bus;
@@ -129,37 +134,31 @@ public final class PresenceRegistry implements AutoCloseable
 
    /*******************************************************************************
     ** Each tab has its own lease; user views merge the live leases. The lease
-    ** keeps the server-side session uuid next to the client-chosen connection id
-    ** and the time it started (renewals keep it), never record values.
+    ** keeps an opaque id of the server-side session (never the session uuid,
+    ** which is a bearer credential) and the time it started (renewals keep it).
     *******************************************************************************/
-   private record Entry(String displayName, String mode, String fieldName, long at, String sessionUuid, long since)
+   private record Entry(String displayName, String mode, String fieldName, long at, String sessionId, long since)
    {
    }
 
    /*******************************************************************************
     ** Transport-independent snapshot entry, never a persisted directory row.
     ** Merged per user, connections counts the live leases behind it; per
-    ** connection (connections = 1), connectionId is an opaque per-lease id and
-    ** since the lease start (ISO-8601). Neither is set on merged viewers.
+    ** connection (connections = 1), connectionId is an opaque per-lease id,
+    ** sessionId an opaque id of the signed-in session (HMAC, never reversible to
+    ** the session uuid) and since the lease start (ISO-8601). None of the three
+    ** is set on merged viewers.
     *******************************************************************************/
    public record Viewer(String userId, String displayName, String mode, String fieldName, Integer connections, @JsonInclude(JsonInclude.Include.NON_NULL) String connectionId,
-                        @JsonInclude(JsonInclude.Include.NON_NULL) String since) implements Serializable
+                        @JsonInclude(JsonInclude.Include.NON_NULL) String sessionId, @JsonInclude(JsonInclude.Include.NON_NULL) String since) implements Serializable
    {
       /*******************************************************************************
        ** A merged viewer behind a number of live leases.
        *******************************************************************************/
       public Viewer(String userId, String displayName, String mode, String fieldName, Integer connections)
       {
-         this(userId, displayName, mode, fieldName, connections, null, null);
+         this(userId, displayName, mode, fieldName, connections, null, null, null);
       }
-   }
-
-   /*******************************************************************************
-    ** Server-side view of one live lease, including the session uuid. Never sent
-    ** to clients as is: per-connection viewers carry an opaque connection id.
-    *******************************************************************************/
-   public record Lease(String userId, String connectionId, String sessionUuid, String mode, String fieldName, long since, long renewedAt)
-   {
    }
 
    /*******************************************************************************
@@ -171,14 +170,15 @@ public final class PresenceRegistry implements AutoCloseable
    }
 
    /*******************************************************************************
-    ** Renew a lease that records the server-side session uuid of the caller.
+    ** Renew a lease tied to the caller's server-side session. Only an opaque HMAC
+    ** of the session uuid is kept and replicated; the uuid itself is dropped here.
     *******************************************************************************/
    public boolean heartbeat(String user, String displayName, String connection, String sessionUuid, String table, String pk, String mode, String fieldName)
    {
       expire();
       var key = new Key(user, connection, table, pk);
       long now = clock.millis();
-      var entry = new Entry(displayName, mode, fieldName, now, sessionUuid, now);
+      var entry = new Entry(displayName, mode, fieldName, now, opaqueSessionId(sessionUuid), now);
       if(!apply(key, entry, false))
       {
          return (false);
@@ -213,7 +213,7 @@ public final class PresenceRegistry implements AutoCloseable
       data.put("mode", entry.mode());
       data.put("fieldName", entry.fieldName());
       data.put("at", entry.at());
-      data.put("sessionUuid", entry.sessionUuid());
+      data.put("sessionId", entry.sessionId());
       data.put("leave", leave);
       bus.publish(new RealtimeMessage().withChannel(INTERNAL_CHANNEL).withEvent("presence.heartbeat").withData(data));
    }
@@ -240,7 +240,7 @@ public final class PresenceRegistry implements AutoCloseable
          return;
       }
       apply(new Key(user, connection, table, (String) data.get("pk")),
-         new Entry((String) data.get("displayName"), (String) data.get("mode"), (String) data.get("fieldName"), receivedAt, (String) data.get("sessionUuid"), receivedAt), Boolean.TRUE.equals(data.get("leave")));
+         new Entry((String) data.get("displayName"), (String) data.get("mode"), (String) data.get("fieldName"), receivedAt, (String) data.get("sessionId"), receivedAt), Boolean.TRUE.equals(data.get("leave")));
    }
 
    /*******************************************************************************
@@ -270,12 +270,12 @@ public final class PresenceRegistry implements AutoCloseable
          {
             /////////////////////////////////////////////////////////////////
             // a renewal keeps the lease start (pods may differ by a little: //
-            // the earliest start wins) and a known session uuid             //
+            // the earliest start wins) and the first known session id       //
             /////////////////////////////////////////////////////////////////
             if(old != null)
             {
                entry = new Entry(entry.displayName(), entry.mode(), entry.fieldName(), entry.at(),
-                  entry.sessionUuid() != null ? entry.sessionUuid() : old.sessionUuid(), Math.min(old.since(), entry.since()));
+                  old.sessionId() != null ? old.sessionId() : entry.sessionId(), Math.min(old.since(), entry.since()));
             }
             entries.put(key, entry);
          }
@@ -346,7 +346,7 @@ public final class PresenceRegistry implements AutoCloseable
    {
       return (live(table, pk).stream()
          .map(row -> new Viewer(row.getKey().user(), row.getValue().displayName(), row.getValue().mode(), pk == null ? null : row.getValue().fieldName(), 1,
-            opaqueConnectionId(row.getKey().user(), row.getKey().connection()), Instant.ofEpochMilli(row.getValue().since()).toString()))
+            opaqueConnectionId(row.getKey().user(), row.getKey().connection()), row.getValue().sessionId(), Instant.ofEpochMilli(row.getValue().since()).toString()))
          .sorted(java.util.Comparator.comparing(Viewer::userId).thenComparing(Viewer::since).thenComparing(Viewer::connectionId))
          .toList());
    }
@@ -402,6 +402,52 @@ public final class PresenceRegistry implements AutoCloseable
    }
 
    /*******************************************************************************
+    ** Opaque session id: "s" and the first 16 hex digits of
+    ** HMAC-SHA256(secret, sessionUuid), or null without a session. The secret is
+    ** QQQ_PRESENCE_SESSION_SECRET (system property or environment; share it across
+    ** pods for ids that agree between pods) or else random per process. Session
+    ** uuids are bearer credentials and must never be stored or published.
+    *******************************************************************************/
+   public static String opaqueSessionId(String sessionUuid)
+   {
+      if(sessionUuid == null || sessionUuid.isBlank())
+      {
+         return (null);
+      }
+      try
+      {
+         Mac mac = Mac.getInstance("HmacSHA256");
+         mac.init(new SecretKeySpec(SESSION_SECRET, "HmacSHA256"));
+         byte[] digest = mac.doFinal(sessionUuid.getBytes(StandardCharsets.UTF_8));
+         StringBuilder result = new StringBuilder("s");
+         for(int i = 0; i < 8; i++)
+         {
+            result.append(String.format("%02x", digest[i]));
+         }
+         return (result.toString());
+      }
+      catch(NoSuchAlgorithmException | InvalidKeyException e)
+      {
+         throw (new IllegalStateException("HmacSHA256 is unavailable", e));
+      }
+   }
+
+   /*******************************************************************************
+    ** Configured shared secret, or 32 random bytes for this process.
+    *******************************************************************************/
+   private static byte[] sessionSecret()
+   {
+      String configured = System.getProperty("QQQ_PRESENCE_SESSION_SECRET", System.getenv("QQQ_PRESENCE_SESSION_SECRET"));
+      if(configured != null && !configured.isBlank())
+      {
+         return (configured.getBytes(StandardCharsets.UTF_8));
+      }
+      byte[] random = new byte[32];
+      new SecureRandom().nextBytes(random);
+      return (random);
+   }
+
+   /*******************************************************************************
     ** One viewer per live lease (opt-in per-connection presence, #54).
     *******************************************************************************/
    public List<Viewer> connections(String table, String pk)
@@ -410,19 +456,6 @@ public final class PresenceRegistry implements AutoCloseable
       synchronized(this)
       {
          return (connectionsInternal(table, pk));
-      }
-   }
-
-   /*******************************************************************************
-    ** Server-side lease detail, including session uuids; not for client output.
-    *******************************************************************************/
-   public List<Lease> leases(String table, String pk)
-   {
-      expire();
-      synchronized(this)
-      {
-         return (live(table, pk).stream().map(row -> new Lease(row.getKey().user(), row.getKey().connection(), row.getValue().sessionUuid(),
-            row.getValue().mode(), row.getValue().fieldName(), row.getValue().since(), row.getValue().at())).toList());
       }
    }
 
@@ -505,6 +538,10 @@ public final class PresenceRegistry implements AutoCloseable
       if(viewer.connectionId() != null)
       {
          value.put("connectionId", viewer.connectionId());
+         if(viewer.sessionId() != null)
+         {
+            value.put("sessionId", viewer.sessionId());
+         }
          value.put("since", viewer.since());
       }
       return (value);

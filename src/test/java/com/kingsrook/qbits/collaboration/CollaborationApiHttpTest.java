@@ -234,6 +234,8 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertThat(perConnection.get("leases")).hasSize(2);
       assertThat(perConnection.at("/leases/0/connectionId").asText()).startsWith("c").doesNotContain("tab-");
       assertThat(perConnection.at("/leases/0/since").asText()).isNotBlank();
+      assertThat(perConnection.at("/leases/0/sessionId").asText()).startsWith("s");
+      assertThat(perConnection.toString()).doesNotContain("alice" + sessionSuffix).doesNotContain(sessionSuffix);
       assertError(400, "GET", "/presence?table=document&perConnection=maybe", null, "alice");
       ok("DELETE", "/presence", "{\"connectionId\":\"tab-two\",\"table\":\"document\",\"pk\":\"1\"}");
       assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");

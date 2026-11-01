@@ -116,7 +116,7 @@ public final class CollaborationPresenceSchemas
    /*******************************************************************************
     ** Only public identity and focus are carried, never field contents.
     *******************************************************************************/
-   public record CollaborationPresenceViewerV1(String userId, String displayName, String mode, String fieldName, Integer connections, String connectionId, String since) implements ToSchema
+   public record CollaborationPresenceViewerV1(String userId, String displayName, String mode, String fieldName, Integer connections, String connectionId, String sessionId, String since) implements ToSchema
    {
       /*******************************************************************************
        ** Editing takes precedence when one user has several open tabs.
@@ -130,6 +130,7 @@ public final class CollaborationPresenceSchemas
                "mode", text("VIEWING or EDITING.", false).withEnumValues(List.of("VIEWING", "EDITING")), "fieldName", text("Focused field; null on table snapshots.", true),
                "connections", new Schema().withType(Type.INTEGER).withDescription("Live connections (tabs, terminals) merged into this viewer; 1 in leases. Since 1.2.0.").withNullable(true),
                "connectionId", text("Opaque per-connection id, only in leases: c + the first 16 hex digits of SHA-256(userId + newline + connectionId). Since 1.2.0.", true),
+               "sessionId", text("Opaque id of the signed-in session behind this connection, only in leases (HMAC of the server session; never the session itself). Since 1.2.0.", true),
                "since", text("When this connection's lease started (ISO-8601), only in leases. Since 1.2.0.", true).withFormat("date-time")))));
       }
    }

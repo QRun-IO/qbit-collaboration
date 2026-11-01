@@ -738,9 +738,11 @@ number of live leases (tabs, terminals) behind it, and every snapshot carries `l
 two terminals of one user read as one person with two connections. `perConnection=true` adds
 `leases`, one viewer per lease with an opaque `connectionId` (`c` and the first 16 hex digits of
 SHA-256 of `userId`, a newline and the client connection id), its `mode`, `fieldName` (record
-targets only) and `since`, the lease start. `presence.changed` events always carry `leaseCount`
-and `leases`. Each lease also records the caller's server-side session uuid (never sent to
-clients). `PresenceRegistry.counts()` still counts users; `connectionCounts()` counts leases.
+targets only), `sessionId` and `since`, the lease start. `presence.changed` events always carry
+`leaseCount` and `leases`. Session uuids are bearer credentials, so a lease never stores or
+publishes one: it keeps `sessionId`, `s` and the first 16 hex digits of HMAC-SHA256 of the
+session uuid under `QQQ_PRESENCE_SESSION_SECRET` (system property or environment; set the same
+value on every pod so ids agree) or else a random per-process secret. `PresenceRegistry.counts()` still counts users; `connectionCounts()` counts leases.
 
 Every heartbeat/leave replicates over core's bus on `instance:presence`, a channel refused by
 core client subscriptions. `presence.changed` is emitted to record and table channels. Table

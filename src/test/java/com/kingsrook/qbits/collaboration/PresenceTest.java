@@ -165,12 +165,9 @@ class PresenceTest extends PersonalServiceFixture
          clock.advance(20000);
          first.heartbeat("admin", "Admin", "terminal-1", "session-a", "person", "7", "VIEWING", null);
          assertThat(second.connections("person", "7").getFirst().since()).isEqualTo("2026-10-13T12:00:00Z");
-         assertThat(second.leases("person", "7")).filteredOn(lease -> lease.connectionId().equals("terminal-1"))
-            .singleElement().satisfies(lease ->
-            {
-               assertThat(lease.sessionUuid()).isEqualTo("session-a");
-               assertThat(lease.userId()).isEqualTo("admin");
-            });
+         assertThat(second.connections("person", "7")).extracting(PresenceRegistry.Viewer::sessionId)
+            .containsExactly(PresenceRegistry.opaqueSessionId("session-a"), PresenceRegistry.opaqueSessionId("session-b"), PresenceRegistry.opaqueSessionId("session-c"));
+         assertThat(PresenceRegistry.opaqueSessionId("session-a")).startsWith("s").hasSize(17).isNotEqualTo(PresenceRegistry.opaqueSessionId("session-b"));
 
          ////////////////////////////////////////////////////////////////////
          // table snapshots and counts: users vs leases                    //
@@ -182,6 +179,37 @@ class PresenceTest extends PersonalServiceFixture
 
          second.leave("admin", "terminal-2", "person", "7");
          assertThat(first.snapshot("person", "7").getFirst()).isEqualTo(new PresenceRegistry.Viewer("admin", "Admin", "VIEWING", null, 1));
+      }
+   }
+
+   /*******************************************************************************
+    ** Session uuids are bearer credentials: no bus message (internal replication
+    ** or client event) and no snapshot carries one, only the opaque session id.
+    *******************************************************************************/
+   @Test
+   void rawSessionUuidIsNeverPublished() throws Exception
+   {
+      var clock = new MutableClock();
+      String sessionUuid = "7d1c2a9e-secret-session-uuid";
+      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES);
+          var second = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "VIEWING", null);
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "EDITING", "name");
+         first.leave("admin", "terminal-1", "person", "7");
+         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", null, "VIEWING", null);
+         assertThat(events).isNotEmpty().anySatisfy(event -> assertThat(event.getChannel()).isEqualTo(PresenceRegistry.INTERNAL_CHANNEL));
+         for(RealtimeMessage event : events)
+         {
+            assertThat(JsonUtils.toJson(new LinkedHashMap<>(event.getData()))).doesNotContain(sessionUuid);
+         }
+         assertThat(events).filteredOn(event -> event.getChannel().equals(PresenceRegistry.INTERNAL_CHANNEL) && !Boolean.TRUE.equals(event.getData().get("leave")))
+            .allSatisfy(event -> assertThat(event.getData().get("sessionId")).isEqualTo(PresenceRegistry.opaqueSessionId(sessionUuid)));
+         var snapshot = new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("person", null, second.snapshot("person", null), 1, second.connections("person", null));
+         String json = JsonUtils.toJson(snapshot);
+         assertThat(json).doesNotContain(sessionUuid).contains(PresenceRegistry.opaqueSessionId(sessionUuid));
       }
    }
 
@@ -265,9 +293,13 @@ class PresenceTest extends PersonalServiceFixture
       var service = new PresenceService();
       QContext.getQSession().setUuid("session-uuid-alice");
       assertThat(service.heartbeat("one", "document", "01", "EDITING", "title")).hasSize(1);
-      assertThat(PresenceRegistry.get(QContext.getQInstance()).leases("document", "1")).singleElement()
-         .satisfies(lease -> assertThat(lease.sessionUuid()).isEqualTo("session-uuid-alice"));
-      assertThat(service.connections("document", "1")).singleElement().satisfies(viewer -> assertThat(viewer.connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("alice", "one")));
+      assertThat(service.connections("document", "1")).singleElement().satisfies(viewer ->
+      {
+         assertThat(viewer.connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("alice", "one"));
+         assertThat(viewer.sessionId()).isEqualTo(PresenceRegistry.opaqueSessionId("session-uuid-alice"));
+         assertThat(JsonUtils.toJson(new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("document", "1", service.snapshot("document", "1"), 1, service.connections("document", "1"))))
+            .doesNotContain("session-uuid-alice");
+      });
       assertThat(service.snapshot("document", "1")).extracting(PresenceRegistry.Viewer::userId).containsExactly("alice");
       assertThat(service.snapshot("document", null)).hasSize(1);
       assertThatThrownBy(() -> service.heartbeat("one", "document", "3", "VIEWING", null)).isInstanceOf(QNotFoundException.class);
