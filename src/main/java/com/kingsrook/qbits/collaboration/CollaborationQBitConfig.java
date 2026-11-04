@@ -64,6 +64,7 @@ public class CollaborationQBitConfig implements QBitConfig
    private Boolean adminApp = true;
    private Boolean uiApi = true;
    private QCodeReference attachmentStorage = new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentStorage.class);
+   private QCodeReference attachmentLifecycle = new QCodeReference(com.kingsrook.qbits.collaboration.attachments.AttachmentLifecyclePolicy.class);
    private Integer recentsPerUser = 200;
    private String attachmentsBucketName = "collaboration";
    private Long defaultMaxBytes = 100L * 1024 * 1024;
@@ -100,6 +101,23 @@ public class CollaborationQBitConfig implements QBitConfig
    public CollaborationQBitConfig withAttachmentStorage(QCodeReference attachmentStorage)
    {
       this.attachmentStorage = attachmentStorage;
+      return (this);
+   }
+
+   /*******************************************************************************
+    ** Trusted host policy for retained attachments and access auditing.
+    *******************************************************************************/
+   public QCodeReference getAttachmentLifecycle()
+   {
+      return (attachmentLifecycle);
+   }
+
+   /*******************************************************************************
+    ** Configure lifecycle enforcement without coupling to a consuming qbit.
+    *******************************************************************************/
+   public CollaborationQBitConfig withAttachmentLifecycle(QCodeReference attachmentLifecycle)
+   {
+      this.attachmentLifecycle = java.util.Objects.requireNonNull(attachmentLifecycle, "attachmentLifecycle");
       return (this);
    }
 

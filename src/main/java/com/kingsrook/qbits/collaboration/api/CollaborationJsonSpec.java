@@ -214,6 +214,19 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
    protected static <T> Page<T> page(JsonInput input, List<T> values) throws QBadRequestException
    {
       int limit = limit(input);
+      PagePosition position = pagePosition(input);
+      int start = Math.min(position.offset(), values.size());
+      int end = start + Math.min(limit, values.size() - start);
+      String next = end < values.size() ? position.cursor(end) : null;
+      return (new Page<>(values.subList(start, end), next));
+   }
+
+   /*******************************************************************************
+    ** Shared existing offset cursor contract, also used by bounded native lists.
+    ** Scope is a routing check, never authorization or a signed capability.
+    *******************************************************************************/
+   protected static PagePosition pagePosition(JsonInput input) throws QBadRequestException
+   {
       int offset = 0;
       String scope = input.getSpec().defineBasicOperation().getPath() + input.getPathParams().toString()
          + ":" + input.getQueryParam("table") + ":" + input.getQueryParam("pk") + ":" + input.getQueryParam("q");
@@ -239,10 +252,25 @@ abstract class CollaborationJsonSpec extends AbstractJsonEndpointSpec
             throw (new QBadRequestException("Invalid cursor"));
          }
       }
-      int start = Math.min(offset, values.size());
-      int end = start + Math.min(limit, values.size() - start);
-      String next = end < values.size() ? Base64.getUrlEncoder().withoutPadding().encodeToString((prefix + end).getBytes(StandardCharsets.UTF_8)) : null;
-      return (new Page<>(values.subList(start, end), next));
+      return (new PagePosition(offset, prefix));
+   }
+
+   /*******************************************************************************
+    ** Same version, scope and offset bytes as previously emitted by page().
+    *******************************************************************************/
+   protected record PagePosition(int offset, String prefix)
+   {
+      /*******************************************************************************
+       ** Encode only a representable nonnegative continuation offset.
+       *******************************************************************************/
+      String cursor(long next) throws QBadRequestException
+      {
+         if(next < 0 || next > Integer.MAX_VALUE)
+         {
+            throw (new QBadRequestException("Invalid cursor"));
+         }
+         return (Base64.getUrlEncoder().withoutPadding().encodeToString((prefix + next).getBytes(StandardCharsets.UTF_8)));
+      }
    }
 
    /*******************************************************************************

@@ -6,6 +6,8 @@ All notable changes are documented here, following [Keep a Changelog](https://ke
 
 ### Added
 
+- Attachment lifecycle SPI (`AttachmentLifecyclePolicy`, `CollaborationQBitConfig.withAttachmentLifecycle`) for retention, registration and mandatory access events; durable upload journal (`collaboration_upload_journal`, H2/MySQL/PostgreSQL), upload recovery and existing-attachment adoption processes, durable cleanup queue with operator settlement, verified/authenticated delivery (`AttachmentDownload`, `AttachmentContentIntegrityException`), media policy, aggregate guard and bounded attachment pagination. See `docs/ATTACHMENT-LIFECYCLE.md`, `docs/ATTACHMENT-RECOVERY.md`, `docs/RETAINED-UPLOAD-JOURNAL.md`, `docs/ATTACHMENT-PAGINATION.md`.
+- Requires a core whose `QBackendTransaction` provides `supportsRollbackCallbacks()` and `addAfterRollbackCallback(Runnable)` (not in 4.1.0-RC.21); see `docs/CORE-DEPENDENCY.md`.
 - Feature Settings table action **Create rows from configuration**: writes the code configuration out as editable `collaboration_feature_setting` rows (insert-only, only when the table is empty, no change in behavior).
 - Setup card on the Collaboration home: each record feature, whether it is on, for which tables, and where that comes from.
 - Host-neutral QBIT help bundle covering tables, fields, sections, built-in actions, the app, widgets and possible-value sources; core registration and `HelpBundleAssertions` coverage replace the temporary help loader.

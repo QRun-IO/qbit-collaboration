@@ -70,8 +70,17 @@ public final class CollaborationSchemas
    /*******************************************************************************
     ** An attachment visible through its parent record; no storage coordinates are exposed.
     *******************************************************************************/
-   public record CollaborationAttachmentV1(Integer id, String tableName, String recordId, String fileName, String contentType, Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete, String createdByDisplayName) implements ToSchema
+   public record CollaborationAttachmentV1(Integer id, String tableName, String recordId, String fileName, String contentType, Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete, String createdByDisplayName, Boolean canEdit) implements ToSchema
    {
+      /*******************************************************************************
+       ** Preserve construction compatibility with the earlier attachment body.
+       *******************************************************************************/
+      public CollaborationAttachmentV1(Integer id, String tableName, String recordId, String fileName, String contentType,
+         Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete, String createdByDisplayName)
+      {
+         this(id, tableName, recordId, fileName, contentType, sizeBytes, sha256, description, createdByUserId, createDate, canDelete, createdByDisplayName, canDelete);
+      }
+
       /*******************************************************************************
        ** Describe this versioned body for generated clients.
        *******************************************************************************/
@@ -89,7 +98,8 @@ public final class CollaborationSchemas
             Map.entry("description", new Schema().withType(Type.STRING).withDescription("Optional description.").withNullable(true)),
             Map.entry("createdByUserId", new Schema().withType(Type.STRING).withDescription("Uploader identity.").withNullable(true)),
             Map.entry("createDate", new Schema().withType(Type.STRING).withFormat("date-time").withDescription("Upload time.").withNullable(true)),
-            Map.entry("canDelete", new Schema().withType(Type.BOOLEAN).withDescription("Whether the caller may change or delete this attachment.").withNullable(true)),
+            Map.entry("canDelete", new Schema().withType(Type.BOOLEAN).withDescription("Whether the caller may delete this attachment; retained files cannot be deleted.").withNullable(true)),
+            Map.entry("canEdit", new Schema().withType(Type.BOOLEAN).withDescription("Whether the caller may change the attachment filename or description.").withNullable(true)),
             Map.entry("createdByDisplayName", new Schema().withType(Type.STRING).withDescription("Uploader display name.").withNullable(true))))));
       }
    }
@@ -490,8 +500,16 @@ public final class CollaborationSchemas
    /*******************************************************************************
     ** Temporary access to file bytes. Clients follow url.
     *******************************************************************************/
-   public record CollaborationDownloadV1(String url) implements ToSchema
+   public record CollaborationDownloadV1(String url, String delivery) implements ToSchema
    {
+      /***************************************************************************
+       ** Existing callers retain the storage URL contract.
+       ***************************************************************************/
+      public CollaborationDownloadV1(String url)
+      {
+         this(url, "SIGNED_URL");
+      }
+
       /*******************************************************************************
        ** Describe this versioned body for generated clients.
        *******************************************************************************/
@@ -499,7 +517,8 @@ public final class CollaborationSchemas
       public Schema toSchema()
       {
          return (new Schema().withType(Type.OBJECT).withDescription("Temporary access to file bytes. Clients follow url.").withProperties(new TreeMap<>(Map.ofEntries(
-            Map.entry("url", new Schema().withType(Type.STRING).withDescription("Presigned URL, valid for five minutes. Clients follow url; never persist it.").withNullable(true))))));
+            Map.entry("url", new Schema().withType(Type.STRING).withDescription("Temporary delivery URL; never persist it.").withNullable(true)),
+            Map.entry("delivery", new Schema().withType(Type.STRING).withDescription("SIGNED_URL or AUTHENTICATED_FETCH. Authenticated fetch requires the trusted native API transport and a durable receipt check.").withNullable(true))))));
       }
    }
 

@@ -22,13 +22,17 @@
 package com.kingsrook.qbits.collaboration.attachments;
 
 import java.net.URL;
+import java.util.Optional;
 import java.util.UUID;
 import com.kingsrook.qbits.objectstorage.api.DeleteMode;
 import com.kingsrook.qbits.objectstorage.api.DeleteRequest;
 import com.kingsrook.qbits.objectstorage.api.ObjectStorage;
+import com.kingsrook.qbits.objectstorage.api.ObjectStream;
 import com.kingsrook.qbits.objectstorage.api.PresignGet;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
+import com.kingsrook.qbits.objectstorage.api.Range;
 import com.kingsrook.qbits.objectstorage.api.StorageBucket;
+import com.kingsrook.qbits.objectstorage.api.StoredObject;
 
 /*******************************************************************************
  ** Narrow storage boundary. The caller must check collaboration access first.
@@ -63,6 +67,22 @@ public class AttachmentStorage
    }
 
    /*******************************************************************************
+    ** Open content for an already-authorized caller. The service owns closing it.
+    *******************************************************************************/
+   public ObjectStream open(String name, String key)
+   {
+      return (bucket(name).get(key, Range.all()));
+   }
+
+   /*******************************************************************************
+    ** Inspect a deterministic intake key after uncertain conditional creation.
+    *******************************************************************************/
+   public Optional<StoredObject> head(String name, String key)
+   {
+      return (bucket(name).head(key));
+   }
+
+   /*******************************************************************************
     ** Prefer soft deletion; allow permanent deletion only where no soft mode exists.
     *******************************************************************************/
    public void delete(String name, String key)
@@ -71,6 +91,18 @@ public class AttachmentStorage
       {
          throw (new IllegalStateException("Object retention prevents attachment deletion."));
       }
+   }
+
+   /*******************************************************************************
+    ** Remove failed-upload bytes and report whether no earlier PUT can still finish.
+    ** Generic object storage cannot prove remote settlement after a timeout. Keep
+    ** its durable locator for later sweeps. Adapters may return true only with an
+    ** authoritative completion/cancellation guarantee, never from object absence.
+    *******************************************************************************/
+   public boolean cleanupUpload(String name, String key)
+   {
+      delete(name, key);
+      return (false);
    }
 
    /*******************************************************************************

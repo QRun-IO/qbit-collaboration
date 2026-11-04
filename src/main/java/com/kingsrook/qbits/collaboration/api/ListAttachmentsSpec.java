@@ -68,7 +68,10 @@ public class ListAttachmentsSpec extends CollaborationJsonSpec
    @Override
    protected Object handle(JsonInput input) throws Exception
    {
-      var page = page(input, new AttachmentsService().list(table(input), pk(input)));
-      return (new CollaborationAttachmentListV1(CollaborationViews.attachments(page.items()), page.nextCursor()));
+      int limit = limit(input);
+      var position = pagePosition(input);
+      var page = new AttachmentsService().listPage(table(input), pk(input), position.offset(), limit);
+      String next = page.hasMore() ? position.cursor((long) position.offset() + page.items().size()) : null;
+      return (new CollaborationAttachmentListV1(CollaborationViews.attachments(page.items()), next));
    }
 }

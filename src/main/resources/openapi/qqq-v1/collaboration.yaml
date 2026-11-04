@@ -202,7 +202,12 @@ components:
         \ are exposed."
       properties:
         canDelete:
-          description: "Whether the caller may change or delete this attachment."
+          description: "Whether the caller may delete this attachment; retained files\
+            \ cannot be deleted."
+          nullable: true
+          type: "boolean"
+        canEdit:
+          description: "Whether the caller may change the attachment filename or description."
           nullable: true
           type: "boolean"
         contentType:
@@ -404,9 +409,13 @@ components:
     CollaborationDownloadV1:
       description: "Temporary access to file bytes. Clients follow url."
       properties:
+        delivery:
+          description: "SIGNED_URL or AUTHENTICATED_FETCH. Authenticated fetch requires\
+            \ the trusted native API transport and a durable receipt check."
+          nullable: true
+          type: "string"
         url:
-          description: "Presigned URL, valid for five minutes. Clients follow url;\
-            \ never persist it."
+          description: "Temporary delivery URL; never persist it."
           nullable: true
           type: "string"
       type: "object"

@@ -183,6 +183,10 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
          com.kingsrook.qbits.collaboration.tags.TagProcesses.processesFor(table).forEach(output::add);
       }
       output.add(DeleteAttachmentsProcess.metadata());
+      output.add(com.kingsrook.qbits.collaboration.attachments.RetryAttachmentCleanupProcess.metadata(qBitConfig));
+      output.add(com.kingsrook.qbits.collaboration.attachments.ResolveAttachmentUploadProcess.metadata());
+      output.add(com.kingsrook.qbits.collaboration.attachments.RecoverRetainedUploadProcess.metadata());
+      output.add(com.kingsrook.qbits.collaboration.attachments.AdoptRetainedAttachmentProcess.metadata());
       output.add(FeatureSettingsDefaultsProcess.process());
       for(QPossibleValueSource source : CollaborationTables.possibleValueSources())
       {

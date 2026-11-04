@@ -46,13 +46,13 @@ public class AttachmentPreviewCustomizer implements TableCustomizerInterface
    @Override
    public List<QRecord> postQuery(QueryOrGetInputInterface input, List<QRecord> records) throws QException
    {
-      return (filter(records, input instanceof GetInput, new AttachmentsService()));
+      return (filter(records, input instanceof GetInput, input.getShouldGenerateDisplayValues(), new AttachmentsService()));
    }
 
    /*******************************************************************************
     ** Keep filtering every row even when the preview generation cap is reached.
     *******************************************************************************/
-   List<QRecord> filter(List<QRecord> records, boolean isGet, AttachmentsService service) throws QException
+   List<QRecord> filter(List<QRecord> records, boolean isGet, boolean generateUrls, AttachmentsService service) throws QException
    {
       List<QRecord> visible = new ArrayList<>();
       for(QRecord record : records)
@@ -77,15 +77,21 @@ public class AttachmentPreviewCustomizer implements TableCustomizerInterface
          QRecord row = new QRecord(record);
          row.setValue("previewUrl", null);
          row.setValue("downloadUrl", null);
+         row.setValue("previewDelivery", null);
+         row.setValue("downloadDelivery", null);
          row.withDisplayValue("downloadUrl", null).withDisplayValue("downloadUrl:downloadUrlDynamic", null);
          visible.add(row);
-         if(visible.size() <= 200)
+         if(generateUrls && visible.size() <= 200)
          {
             try
             {
-               row.setValue("previewUrl", service.url(row, true).toString());
-               String downloadUrl = service.url(row, false).toString();
+               AttachmentDownload preview = service.delivery(row, true);
+               AttachmentDownload download = service.delivery(row, false);
+               row.setValue("previewUrl", preview.url().toString());
+               row.setValue("previewDelivery", preview.authenticated() ? "AUTHENTICATED_FETCH" : "SIGNED_URL");
+               String downloadUrl = download.url().toString();
                row.setValue("downloadUrl", downloadUrl);
+               row.setValue("downloadDelivery", download.authenticated() ? "AUTHENTICATED_FETCH" : "SIGNED_URL");
                row.withDisplayValue("downloadUrl", row.getValueString("fileName"))
                   .withDisplayValue("downloadUrl:downloadUrlDynamic", downloadUrl);
             }

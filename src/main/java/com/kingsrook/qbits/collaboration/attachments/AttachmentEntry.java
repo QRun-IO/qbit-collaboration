@@ -27,6 +27,14 @@ import java.time.Instant;
  ** Panel DTO. Storage locations and ephemeral signed URLs stay server-side.
  *******************************************************************************/
 public record AttachmentEntry(Integer id, String tableName, String recordId, String fileName, String contentType,
-   Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete)
+   Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete, Boolean canEdit)
 {
+   /*******************************************************************************
+    ** Preserve source compatibility for callers using the earlier DTO constructor.
+    *******************************************************************************/
+   public AttachmentEntry(Integer id, String tableName, String recordId, String fileName, String contentType,
+      Long sizeBytes, String sha256, String description, String createdByUserId, Instant createDate, Boolean canDelete)
+   {
+      this(id, tableName, recordId, fileName, contentType, sizeBytes, sha256, description, createdByUserId, createDate, canDelete, canDelete);
+   }
 }

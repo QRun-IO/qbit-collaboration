@@ -68,6 +68,7 @@ public class PreviewAttachmentSpec extends CollaborationJsonSpec
    @Override
    protected Object handle(JsonInput input) throws Exception
    {
-      return (new CollaborationDownloadV1(new AttachmentsService().downloadUrl(id(input), true).toExternalForm()));
+      var delivery = new AttachmentsService().downloadDelivery(id(input), true);
+      return (new CollaborationDownloadV1(delivery.url().toExternalForm(), delivery.authenticated() ? "AUTHENTICATED_FETCH" : "SIGNED_URL"));
    }
 }

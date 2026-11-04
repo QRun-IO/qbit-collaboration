@@ -66,7 +66,8 @@ public class AttachmentCleanup
       while(true)
       {
          List<QRecord> rows = com.kingsrook.qbits.collaboration.CollaborationRecords.cleanupQuery(com.kingsrook.qbits.collaboration.model.CollaborationTables.ATTACHMENT, new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, table)
-            .withCriteria("recordId", QCriteriaOperator.IN, ids.stream().map(Object::toString).toList()).withLimit(200));
+            .withCriteria("recordId", QCriteriaOperator.IN, ids.stream().map(Object::toString).toList())
+            .withCriteria("parentDeleted", QCriteriaOperator.NOT_EQUALS, true).withLimit(200));
          if(rows.isEmpty())
          {
             return;

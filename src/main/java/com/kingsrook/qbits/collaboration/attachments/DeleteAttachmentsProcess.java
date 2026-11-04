@@ -140,7 +140,7 @@ public final class DeleteAttachmentsProcess
          {
             try
             {
-               QRecord checked = service().requireMutable(row.getValue("id"));
+               QRecord checked = service().requireDeletable(row.getValue("id"));
                output.getRecords().add(checked);
                selected.incrementCountAndAddPrimaryKey(checked.getValue("id"));
             }
