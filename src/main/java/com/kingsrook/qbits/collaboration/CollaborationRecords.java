@@ -143,7 +143,10 @@ public final class CollaborationRecords
    public static QTableMetaData cleanupMetadata(String table)
    {
       QTableMetaData metadata = serviceMetadata(table);
-      metadata.getSupplementalMetaData().remove(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData.NAME);
+      if(metadata.getSupplementalMetaData() != null)
+      {
+         metadata.getSupplementalMetaData().remove(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData.NAME);
+      }
       metadata.setRecordSecurityLocks(null);
       return (metadata);
    }

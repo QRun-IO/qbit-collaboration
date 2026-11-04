@@ -1,6 +1,6 @@
 # QBit Collaboration
 
-> **This branch contains paused, unfinished QBit integration work (2026-11-04).** Read the [current integration status](docs/QBIT-RELEASE-STATUS.md) and [known issues](docs/QBIT-KNOWN-ISSUES.md) before building or adopting it. No completed release or deployment is claimed.
+> **Core integration verified locally (2026-11-04).** All 269 Collaboration tests pass against the matching Core snapshot, including attachment recovery and both journal providers. See [current integration status](docs/QBIT-RELEASE-STATUS.md), [dependency setup](docs/CORE-DEPENDENCY.md) and [remaining release requirements](docs/QBIT-KNOWN-ISSUES.md). This feature branch is not a published release.
 
 
 Record collaboration for QQQ: attachments, tags, custom fields, comments with mentions, presence, sharing, favorites, follow, timeline and tasks. **Implemented now:** feature settings and people tables, favorites and recents services (phase b), per-user security, daily recents retention, phase-c attachments (upload/list/download/rename/delete, previews and parent cleanup), and the Collaboration app home with real session-scoped counts. Phase e adds comments/mentions, follow actions and digests, the audit/activity timeline, and automatic people-directory updates. Phase d adds tags, vocabulary policies, management and bulk actions, and core-integrated tag filtering/search. Phases h/i add sharing/access requests, tasks/reminders, assignments and My work services. Phases f/g add the custom-field designer and ephemeral replicated presence. Runtime overrides and TAGS mode settings resolve through core.
@@ -31,10 +31,10 @@ Comment parents list the selected thread's root and replies. Feature-setting sco
 ## Requirements
 
 - Java 21.
-- QQQ `4.1.0-RC.7` from Maven Central; middleware Javalin is a compile dependency.
-- A configured QQQ backend supporting query, get, insert, update, delete, count and aggregate actions. PostgreSQL 15+ is the intended persistent store (the generated personal-target indexes use `NULLS NOT DISTINCT`); tests use the memory backend.
+- QQQ `4.1.0-SNAPSHOT` built from the compatible Core integration branch; see [Core dependency setup](docs/CORE-DEPENDENCY.md). Middleware Javalin is a compile dependency. Public RC.21 lacks the required rollback API.
+- A configured QQQ backend supporting query, get, insert, update, delete, count and aggregate actions. PostgreSQL 15+ is the intended persistent store (the generated personal-target indexes use `NULLS NOT DISTINCT`); tests use memory, H2 and disposable PostgreSQL/MySQL containers.
 - Attachments require `qbit-object-storage:0.1.0-RC.2` (a pinned dependency), installed with a PRIVATE bucket alias matching `attachmentsBucketName`. Configure its connection and credentials in the host; this qbit does not provision buckets.
-- Core feature resolution, permissions, reference security, summaries, query expansion and realtime use QQQ `4.1.0-RC.7`.
+- Core feature resolution, permissions, reference security, summaries, query expansion and realtime use the same matching Core snapshot.
 
 ## Followers and secured data
 
@@ -57,7 +57,7 @@ Comment bodies remain user content; realtime field-name filtering is handled by 
 ## Demo server
 
 `CollaborationDevServer` is a disposable, memory-backed Sales CRM for trying the
-Next dashboard and taking screenshots. It needs Java 21 and QQQ `4.1.0-RC.7` from Maven Central. No database, Docker or MinIO is needed. It binds
+Next dashboard and taking screenshots. It needs Java 21 and the matching Core integration snapshot. No database, Docker or MinIO is needed. It binds
 to `127.0.0.1`; stopping the JVM discards edits and uploaded attachments.
 
 Build the Next static export in `qqq-frontend-next`:
