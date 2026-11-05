@@ -84,7 +84,8 @@ class CoreContractsTest extends PersonalServiceFixture
       RuntimeMetaDataOverlay.refresh(instance);
       long generation = RuntimeMetaDataOverlay.getGeneration(instance);
       assertThat(instance.getTable("document").getVirtualFields()).containsKey("collaborationTags");
-      assertThat(instance.getTable("document").getVirtualField("collaborationTags").getIsQuerySelectable()).isFalse();
+      assertThat(instance.getTable("document").getVirtualField("collaborationTags").getIsQuerySelectable()).isTrue();
+      assertThat(instance.getTable("document").getVirtualField("collaborationTags").getValueProvider()).isNotNull();
       QBackendTransaction tx = new QBackendTransaction();
       var row = new InsertAction().execute(new InsertInput(CollaborationTables.FEATURE_SETTING).withTransaction(tx).withRecords(List.of(
          new QRecord().withValue("scopeType", "TABLE").withValue("scopeName", "document").withValue("feature", "TAGS")

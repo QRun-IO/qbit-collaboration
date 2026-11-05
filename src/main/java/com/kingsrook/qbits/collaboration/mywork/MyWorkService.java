@@ -23,18 +23,19 @@ package com.kingsrook.qbits.collaboration.mywork;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.kingsrook.qbits.collaboration.CollaborationRecords;
 import com.kingsrook.qbits.collaboration.PersonalRecords;
-import com.kingsrook.qbits.collaboration.assignment.AssignmentService;
 import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qbits.collaboration.security.ParentRecordAccess;
-import com.kingsrook.qbits.collaboration.tasks.TasksService;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 
@@ -43,18 +44,94 @@ import com.kingsrook.qqq.backend.core.model.data.QRecord;
  *******************************************************************************/
 public class MyWorkService
 {
+   private static final int PAGE_SIZE = 200;
+   private static final Comparator<QRecord> TASK_ORDER = Comparator.comparing((QRecord row) -> row.getValueInstant("dueAt"), Comparator.nullsLast(Comparator.naturalOrder()))
+      .thenComparing(row -> row.getValueInteger("id"));
+
    /*******************************************************************************
     ** Open task count and first ten, assigned record counts, and unread mentions.
     *******************************************************************************/
    public Summary summary() throws QException
    {
-      List<QRecord> tasks = new TasksService().mineRows("OPEN");
+      String user = PersonalRecords.currentUserId();
+      List<QRecord> tasks = new ArrayList<>();
+      long taskCount = scanVisible(CollaborationTables.TASK, new QQueryFilter()
+         .withCriteria("assigneeUserId", QCriteriaOperator.EQUALS, user)
+         .withCriteria("status", QCriteriaOperator.EQUALS, "OPEN"), row ->
+         {
+            tasks.add(row);
+            tasks.sort(TASK_ORDER);
+            if(tasks.size() > 10)
+            {
+               tasks.removeLast();
+            }
+         });
       Map<String, Long> assignments = new LinkedHashMap<>();
-      for(QRecord row : new AssignmentService().mineRows(null, true))
+      scanVisible(CollaborationTables.RECORD_ASSIGNMENT, new QQueryFilter()
+         .withCriteria("assigneeUserId", QCriteriaOperator.EQUALS, user),
+         row -> assignments.merge(row.getValueString("tableName"), 1L, Long::sum));
+      long mentions = scanVisible(CollaborationTables.MENTION, new QQueryFilter()
+         .withCriteria("mentionedUserId", QCriteriaOperator.EQUALS, user)
+         .withCriteria("notifiedAt", QCriteriaOperator.IS_NOT_BLANK).withCriteria("readAt", QCriteriaOperator.IS_BLANK), row ->
+         {
+            // Only the visible count is needed for mentions.
+         });
+      return (new Summary(taskCount, List.copyOf(tasks), assignments, mentions));
+   }
+
+   /*******************************************************************************
+    ** Bound retained rows and visibility decisions to one page. A starting high
+    ** watermark prevents concurrent inserts from extending this scan indefinitely.
+    ** Counts remain exact for visible rows scanned; no cross-request auth cache.
+    *******************************************************************************/
+   private long scanVisible(String table, QQueryFilter filter, java.util.function.Consumer<QRecord> consumer) throws QException
+   {
+      filter.withCriteria("parentDeleted", QCriteriaOperator.EQUALS, false);
+      List<QRecord> last = CollaborationRecords.query(table, filter.clone().withOrderBy(new QFilterOrderBy("id", false)).withLimit(1));
+      if(last.isEmpty())
       {
-         assignments.merge(row.getValueString("tableName"), 1L, Long::sum);
+         return (0);
       }
-      return (new Summary((long) tasks.size(), tasks.stream().limit(10).toList(), assignments, (long) unread().size()));
+      int maximum = last.getFirst().getValueInteger("id");
+      Integer cursor = null;
+      long count = 0;
+      while(true)
+      {
+         QQueryFilter pageFilter = filter.clone().withCriteria("id", QCriteriaOperator.LESS_THAN_OR_EQUALS, maximum)
+            .withOrderBy(new QFilterOrderBy("id")).withLimit(PAGE_SIZE);
+         if(cursor != null)
+         {
+            pageFilter.withCriteria("id", QCriteriaOperator.GREATER_THAN, cursor);
+         }
+         List<QRecord> rows = CollaborationRecords.query(table, pageFilter);
+         Map<List<String>, Boolean> parents = new HashMap<>();
+         for(QRecord row : rows)
+         {
+            List<String> parent = java.util.Arrays.asList(row.getValueString("tableName"), row.getValueString("recordId"));
+            if(!parents.containsKey(parent))
+            {
+               try
+               {
+                  ParentRecordAccess.requireVisibleParent(parent.get(0), parent.get(1));
+                  parents.put(parent, true);
+               }
+               catch(QNotFoundException expected)
+               {
+                  parents.put(parent, false);
+               }
+            }
+            if(parents.get(parent))
+            {
+               consumer.accept(row);
+               count++;
+            }
+         }
+         if(rows.size() < PAGE_SIZE || rows.getLast().getValueInteger("id") >= maximum)
+         {
+            return (count);
+         }
+         cursor = rows.getLast().getValueInteger("id");
+      }
    }
 
    /*******************************************************************************

@@ -2,7 +2,7 @@
 
 The Collaboration-owned journal is wired into retained `AttachmentsService` upload and recovery. It persists candidate metadata before object creation, owns the attachment/checkpoint transaction, and exposes native read-only recovery navigation. It has no Record Files dependency and stores no second copy of file bytes.
 
-Historical private-cohort evidence (superseded by [current verification](QBIT-RELEASE-STATUS.md)): the integrated owner snapshot passed all **214 tests**, including 10 real MySQL provider cases and 11 H2 journal regressions, and was installed under `0.1.0-record-files-SNAPSHOT`. The subsequent doublewrite/session-read-only delta compiles and awaits its provider rerun. This document does not qualify Aurora, other SQL vendors, external object storage, disks, backups, or a host deployment.
+The integrated owner snapshot passed all **214 tests**, including 10 real MySQL provider cases and 11 H2 journal regressions, and was installed under `0.1.0-record-files-SNAPSHOT`. The subsequent doublewrite/session-read-only delta compiles and awaits its provider rerun. This document does not qualify Aurora, other SQL vendors, external object storage, disks, backups, or a host deployment.
 
 ## Ownership and recovery
 
@@ -25,8 +25,7 @@ Both owner tables must use the same QQQ backend. Hosts apply DDL through their m
 | --- | --- | --- |
 | File H2 | Native `h2`, `jdbc:h2:file:`, actual configured connection, writable real transaction, live `WRITE_DELAY=0` | `UploadJournalTable.h2Script()` |
 | MySQL 8.4 | Native `mysql`, actual MySQL 8.4 product/version, exact configured URL target and catalog, writable real transaction, both owner tables InnoDB, fixed owner table mappings, journal `utf8mb4_0900_bin` columns/table, single-column unique locator/intake indexes, synchronous commit settings | `UploadJournalTable.mysqlScript()` |
-| PostgreSQL 17 | Native `postgres` backend, configured database, permanent owner tables, deterministic comparison, READ COMMITTED, UTC, 1–5000 ms lock timeout, synchronous commits with fsync/full_page_writes enabled | `UploadJournalTable.postgresScript()` |
-| Aurora MySQL, MariaDB, other versions/providers | Refused; no inferred compatibility or durability claim | None |
+| Aurora MySQL, MariaDB, PostgreSQL, other versions/providers | Refused; no inferred compatibility or durability claim | None |
 
 The MySQL adapter resolves explicit or native-generated URLs through QQQ `ConnectionManager`. It accepts a single ordinary `jdbc:mysql://host:port/catalog` target with a simple catalog identifier. Proxy/load-balancing URLs, alternate catalogs or table remapping fail closed. Error messages do not echo URLs or credentials. Driver options remain host-owned; TLS and credentials are not changed by the journal.
 
@@ -36,14 +35,14 @@ The MySQL journal uses millisecond timestamps with explicit UTC JDBC calendars, 
 
 ## Reproducible tests
 
-Use Java 21, the Maven wrapper and the matching Core integration snapshot. Docker is required by the attachment transaction tests. Enable both additional journal-provider fixtures for complete verification:
+Use the repository Maven wrapper and the same revision/QQQ dependency overrides as the integrated build. The default suite remains Docker-independent; explicitly enable the provider fixture:
 
 ```powershell
-.\mvnw.cmd '-DmysqlJournalTests=true' '-DpostgresJournalTests=true' '-Dexec.skip=true' verify
+.\mvnw.cmd '-Drevision=0.1.0-record-files-SNAPSHOT' '-DmysqlJournalTests=true' '-Dtest=MySqlUploadJournalTest,UploadJournalTest' test
 ```
 
 `MySqlUploadJournalTest` creates only its own Testcontainers MySQL 8.4.13 container, random synthetic credentials and private anonymous data volume, and destroys that container on completion. It does not use existing host services. The image is pinned to `mysql@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7`. Credentials are not printed by the fixture.
 
 The eleven provider cases cover acknowledged prepare surviving a real database process restart, attachment/checkpoint rollback and completion replay, simultaneous prepare/lease fencing, wrong backend/catalog/mapping/ambient/Aurora refusal, actual non-durable server settings and MyISAM refusal, binary identifier comparisons and native write denial, actual lock-timeout/BUSY behavior, column/index drift and immutable conflict, and lease instants across differing JVM default zones, preservation/refusal of host session lock-timeout settings, and refusal of detect-only doublewrite/read-only sessions without changing their settings. The attachment schema in this suite is deliberately a minimal transaction fixture; this is not an end-to-end MySQL object-storage or tenant/archive qualification. Record Files owns its separate provider integration tests.
 
-First provider run compiled but failed its restart fixture because Docker reassigned the dynamic port and Testcontainers retained a cached mapping; two subsequent setup errors followed that stale endpoint. The fixture now refreshes the inspected binding after restart and uses bounded JDBC readiness checks. Docker wire logs are suppressed before container creation. Expanded snapshot verification: **20 tests passed (9 MySQL, 11 H2), zero failures/errors/skips**, `target/mysql-journal-focused-verification.log`, completed 2026-10-31 00:01:44. The tenth provider case and full 214-test owner quality gates subsequently passed; the corrected development-GAV artifact SHA-256 is `72D6E36E77B92BE3ECFE9BE7042D292C76B308AA05A9E43BD490B229BD1A75E2`. Fresh verification on 2026-11-04 passed all 269 tests, including all 11 MySQL journal cases, 12 PostgreSQL journal cases and 29 PostgreSQL attachment transaction cases. Checkstyle and coverage gates passed against Core commit `551397c7c59b0f77833fc81e195f4c01cb1c282f`; no provider cases were skipped.
+First provider run compiled but failed its restart fixture because Docker reassigned the dynamic port and Testcontainers retained a cached mapping; two subsequent setup errors followed that stale endpoint. The fixture now refreshes the inspected binding after restart and uses bounded JDBC readiness checks. Docker wire logs are suppressed before container creation. Expanded snapshot verification: **20 tests passed (9 MySQL, 11 H2), zero failures/errors/skips**, `target/mysql-journal-focused-verification.log`, completed 2026-10-31 00:01:44. The tenth provider case and full 214-test owner quality gates subsequently passed; the corrected development-GAV artifact SHA-256 is `72D6E36E77B92BE3ECFE9BE7042D292C76B308AA05A9E43BD490B229BD1A75E2`. The eleventh provider regression and doublewrite/read-only delta await fresh verification.

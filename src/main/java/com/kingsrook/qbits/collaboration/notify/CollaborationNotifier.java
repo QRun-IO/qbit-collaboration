@@ -31,4 +31,13 @@ public interface CollaborationNotifier
     ** Deliver a recipient-authorized notification.
     *******************************************************************************/
    void notify(CollaborationNotification n);
+
+   /*******************************************************************************
+    ** Legacy transports signal failure by throwing; adapters may explicitly refuse.
+    *******************************************************************************/
+   default boolean deliver(CollaborationNotification notification)
+   {
+      notify(notification);
+      return (true);
+   }
 }

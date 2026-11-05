@@ -60,7 +60,7 @@ class CollaborationApiContractTest
       assertThat(model.getComponents().getSchemas().keySet()).allMatch(name -> name.startsWith("Collaboration") || name.equals(BasicErrorResponseV1.class.getSimpleName()));
       assertThat(model.getPaths().keySet()).allMatch(pathName -> pathName.startsWith("/qqq/v1/qbit/collaboration/"));
       assertThat(generated).contains("multipart/form-data", "format: \"binary\"", "clients follow url", "nextCursor");
-      assertThat(extension.getSpecs()).hasSize(45);
+      assertThat(extension.getSpecs()).hasSize(48);
    }
 
    /*******************************************************************************

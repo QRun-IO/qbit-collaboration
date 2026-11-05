@@ -1,0 +1,285 @@
+{
+  "status": "PASS",
+  "samples": [
+    {
+      "field": "lastName",
+      "propagation_ms": 36.092099999999846
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.51870000000008
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.758600000000115
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.090299999999843
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.64980000000014
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.648199999999633
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.395500000000084
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.36750000000029
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.601799999999912
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.90599999999995
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.44150000000036
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.186699999999746
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.115800000000036
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.539400000000114
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.188000000000102
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 33.021200000000135
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 33.07759999999962
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.7176000000004
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.457300000000032
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 32.920900000000074
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.89130000000023
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 30.847200000000157
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 30.158300000000054
+    },
+    {
+      "field": "firstName",
+      "propagation_ms": 31.48239999999987
+    },
+    {
+      "field": "lastName",
+      "propagation_ms": 31.337600000000293
+    }
+  ],
+  "streams": [
+    {
+      "user": "alice",
+      "status": 200,
+      "type": "text/event-stream;charset=utf-8"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "type": "text/event-stream;charset=utf-8"
+    }
+  ],
+  "requests": [
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "alice",
+      "status": 200,
+      "node": "first"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    },
+    {
+      "user": "admin",
+      "status": 200,
+      "node": "second"
+    }
+  ],
+  "errors": [],
+  "scope": "Chromium focus-to-remote-DOM observation, including automation and UI debounce; no concurrent load",
+  "percentiles_ms": {
+    "p50": 31.648199999999633,
+    "p95": 33.07759999999962,
+    "p99": 36.092099999999846,
+    "max": 36.092099999999846
+  },
+  "frontend_jar_sha256": "c9fa2eb2381a47c8104f82f4e940d2bfa8ba67e2341298dde0de4e21ad3ff1ab",
+  "fixture_cleanup": true,
+  "backend_source": "Published core cc3981bb3/collaboration ecff347/Redis7fe5492 snapshots; two independent JVMs, mock identities and memory records."
+}

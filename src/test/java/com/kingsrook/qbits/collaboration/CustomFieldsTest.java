@@ -51,6 +51,9 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -243,6 +246,59 @@ public class CustomFieldsTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** Typed EAV storage returns the declared Java value through an actual query.
+    *******************************************************************************/
+   @ParameterizedTest
+   @MethodSource("eavValueTypes")
+   void eavValueTypes(String type, String column, java.io.Serializable stored, java.io.Serializable expected) throws Exception
+   {
+      admin();
+      instance.addBackend(new RDBMSBackendMetaData().withName("fallback").withVendor("h2"));
+      instance.getTable("document").setBackendName("fallback");
+      QRecord draft = new QRecord().withValue("tableName", "document").withValue("name", "typed").withValue("label", "Typed").withValue("type", type);
+      if(List.of("SELECT", "MULTI_SELECT").contains(type))
+      {
+         draft.withValue("options", "[{\"id\":\"x\",\"label\":\"Choice X\"}]");
+      }
+      if("RECORD_LINK".equals(type))
+      {
+         draft.withValue("linkTableName", CollaborationTables.USER);
+      }
+      QRecord definition = new InsertAction().execute(new InsertInput(CollaborationTables.FIELD_DEFINITION).withRecords(List.of(draft))).getRecords().getFirst();
+      assertThat(definition.getErrors()).isNullOrEmpty();
+      FieldDefinitions.apply(definition.getValue("id"), "Publish");
+      instance.getTable("document").setBackendName("memory");
+      CollaborationRecords.insert(CollaborationTables.FIELD_VALUE, new QRecord().withValue("tableName", "document").withValue("recordId", "1")
+         .withValue("fieldName", "typed").withValue(column, stored).withValue("parentDeleted", false));
+      login("alice");
+      var records = new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("cf_typed"))).getRecords();
+      assertThat(records).hasSize(2);
+      assertThat(records).allSatisfy(record -> assertThat(record.getValues()).containsOnlyKeys("cf_typed"));
+      assertThat(records).extracting(record -> record.getValue("cf_typed")).containsExactlyInAnyOrder(expected, null);
+      Object actual = records.stream().map(record -> record.getValue("cf_typed")).filter(java.util.Objects::nonNull).findFirst().orElseThrow();
+      assertThat(actual).isExactlyInstanceOf(expected.getClass());
+   }
+
+   /*******************************************************************************
+    ** Keep expectations independent of the provider's column-mapping helper.
+    *******************************************************************************/
+   static java.util.stream.Stream<Arguments> eavValueTypes()
+   {
+      return (java.util.stream.Stream.of(
+         Arguments.of("INTEGER", "valueNumber", new BigDecimal("7.0"), 7),
+         Arguments.of("DECIMAL", "valueNumber", new BigDecimal("12.345"), new BigDecimal("12.345")),
+         Arguments.of("BOOLEAN", "valueBoolean", false, false),
+         Arguments.of("DATE", "valueDate", java.time.LocalDate.of(2026, 10, 22), java.time.LocalDate.of(2026, 10, 22)),
+         Arguments.of("DATE_TIME", "valueDateTime", java.time.Instant.parse("2026-10-22T12:34:56Z"), java.time.Instant.parse("2026-10-22T12:34:56Z")),
+         Arguments.of("SELECT", "valueText", "x", "x"),
+         Arguments.of("MULTI_SELECT", "valueText", "[\"x\"]", "[\"x\"]"),
+         Arguments.of("USER", "valueText", "alice", "alice"),
+         Arguments.of("RECORD_LINK", "valueText", "alice", "alice"),
+         Arguments.of("STRING", "valueText", "A, B", "A, B"),
+         Arguments.of("TEXT", "valueText", "First\nSecond", "First\nSecond")));
+   }
+
+   /*******************************************************************************
     ** An unsupported JSON backend gets typed, read-only subquery filters.
     *******************************************************************************/
    @Test
@@ -256,18 +312,50 @@ public class CustomFieldsTest extends PersonalServiceFixture
       instance.getTable("document").setBackendName("memory");
       var virtual = instance.getTable("document").getVirtualField("cf_rating");
       assertThat(virtual).isNotNull();
-      assertThat(virtual.getIsQuerySelectable()).isFalse();
+      assertThat(virtual.getIsQuerySelectable()).isTrue();
       assertThat(virtual.getIsEditable()).isFalse();
       assertThat(FieldDefinitions.get(definition.getValue("id")).getValueString("storage")).isEqualTo("EAV");
       CollaborationRecords.insert(CollaborationTables.FIELD_VALUE, new QRecord().withValue("tableName", "document").withValue("recordId", "1")
          .withValue("fieldName", "rating").withValue("valueNumber", new BigDecimal("7")).withValue("parentDeleted", false));
+      QContext.getQSession().withSecurityKeyValue("allTenants", true);
+      CollaborationRecords.insert(CollaborationTables.FIELD_VALUE, new QRecord().withValue("tableName", "document").withValue("recordId", "3")
+         .withValue("fieldName", "rating").withValue("valueNumber", new BigDecimal("99")).withValue("parentDeleted", false));
       login("alice");
+      var selected = new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("cf_rating"))).getRecords();
+      assertThat(selected).hasSize(2);
+      assertThat(selected).allSatisfy(row -> assertThat(row.getValues()).containsOnlyKeys("cf_rating"));
+      assertThat(selected).extracting(row -> row.getValue("cf_rating")).containsExactlyInAnyOrder(7, null);
       assertThat(query("cf_rating", QCriteriaOperator.GREATER_THAN, 5)).extracting(row -> row.getValueInteger("id")).containsExactly(1);
       assertThat(query("cf_rating", QCriteriaOperator.NOT_EQUALS, 7)).extracting(row -> row.getValueInteger("id")).containsExactly(2);
       assertThat(new QueryAction().execute(new QueryInput("document").withFilter(new QQueryFilter().withCriteria("cf_rating", QCriteriaOperator.IS_BLANK))).getRecords())
          .extracting(row -> row.getValueInteger("id")).containsExactly(2);
+      // Reuse the same session and query to prove results are not cached across access changes.
+      QueryInput projected = new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("cf_rating"));
+      QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("b"));
+      assertThat(new QueryAction().execute(projected).getRecords()).extracting(row -> row.getValue("cf_rating")).containsExactly(99);
+      QContext.getQSession().getSecurityKeyValues().put("tenant", List.of("a"));
+      assertThat(new QueryAction().execute(projected).getRecords()).extracting(row -> row.getValue("cf_rating")).containsExactlyInAnyOrder(7, null);
+      QContext.getQSession().setPermissions(java.util.Set.of());
+      assertThatThrownBy(() -> new QueryAction().execute(projected)).isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException.class);
+      login("alice");
+      assertThat(com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData.of(instance.getTable(CollaborationTables.FIELD_VALUE))).isNotNull();
+      assertThat(new QueryAction().execute(new QueryInput(CollaborationTables.FIELD_VALUE)
+         .withFilter(new QQueryFilter().withCriteria("tableName", QCriteriaOperator.EQUALS, "document")
+            .withCriteria("recordId", QCriteriaOperator.IN, List.of("1", "3")))).getRecords())
+         .extracting(row -> row.getValueString("recordId")).containsExactly("1");
+      virtual.setIsHidden(true);
+      assertThat(new QueryAction().execute(new QueryInput("document")).getRecords()).allSatisfy(row -> assertThat(row.getValues()).doesNotContainKey("cf_rating"));
+      virtual.setIsHidden(false);
       admin();
-      assertThat(FieldDefinitions.valueCount(FieldDefinitions.get(definition.getValue("id")))).isEqualTo(1);
+      QContext.getQSession().withSecurityKeyValue("allTenants", true);
+      assertThat(FieldDefinitions.valueCount(FieldDefinitions.get(definition.getValue("id")))).isEqualTo(2);
+      QRecord deleted = CollaborationRecords.insert(CollaborationTables.FIELD_VALUE, new QRecord().withValue("tableName", "document").withValue("recordId", "2")
+         .withValue("fieldName", "rating").withValue("valueNumber", new BigDecimal("88")).withValue("parentDeleted", true));
+      assertThat(deleted.getValueBoolean("parentDeleted")).isTrue();
+      login("alice");
+      assertThat(new QueryAction().execute(new QueryInput("document").withFieldNamesToInclude(java.util.Set.of("cf_rating"))).getRecords())
+         .extracting(row -> row.getValue("cf_rating")).containsExactlyInAnyOrder(7, null);
+      admin();
       var expander = new com.kingsrook.qbits.collaboration.customfields.FieldCriteriaExpander();
       assertThat(expander.expandSearchTerm(instance.getTable("document"), "text", com.kingsrook.qqq.backend.core.actions.tables.query.SearchTermKind.TEXT, null)).isNotNull();
       assertThat(com.kingsrook.qbits.collaboration.customfields.FieldCriteriaExpander.valueColumn("DATE")).isEqualTo("valueDate");

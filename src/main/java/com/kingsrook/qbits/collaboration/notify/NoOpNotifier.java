@@ -34,4 +34,13 @@ public class NoOpNotifier implements CollaborationNotifier
    public void notify(CollaborationNotification n)
    {
    }
+
+   /*******************************************************************************
+    ** No transport cannot acknowledge delivery.
+    *******************************************************************************/
+   @Override
+   public boolean deliver(CollaborationNotification notification)
+   {
+      return (false);
+   }
 }

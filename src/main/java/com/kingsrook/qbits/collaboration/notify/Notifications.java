@@ -102,7 +102,10 @@ public final class Notifications
       if(!checkParent || new CollaborationRecordAccessChecker().canRead(notification.recipientUserId(), notification.sourceTableName(), notification.sourceRecordId()).orElse(false))
       {
          CollaborationNotifier notifier = notifier();
-         notifier.notify(notification);
+         if(!notifier.deliver(notification))
+         {
+            return;
+         }
          if(!(notifier instanceof NoOpNotifier))
          {
             try

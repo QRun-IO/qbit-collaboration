@@ -39,6 +39,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kingsrook.qbits.collaboration.attachments.AttachmentStorage;
+import com.kingsrook.qbits.collaboration.customfields.FieldDefinitions;
+import com.kingsrook.qbits.collaboration.model.CollaborationTables;
+import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
+import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
+import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaData;
 import com.kingsrook.qbits.objectstorage.api.PresignGet;
 import com.kingsrook.qbits.objectstorage.api.PutRequest;
 import com.kingsrook.qqq.backend.core.actions.collaboration.RuntimeMetaDataOverlay;
@@ -63,6 +69,86 @@ import static org.assertj.core.api.Assertions.assertThat;
  *******************************************************************************/
 class CollaborationApiHttpTest extends PersonalServiceFixture
 {
+   /***************************************************************************
+    ** Data loss is unavailable over HTTP until a fresh lease has rejoined.
+    ***************************************************************************/
+   @Test
+   void redisLossRequiresHttpRejoin() throws Exception
+   {
+      try(var redis = RedisFixtures.redis())
+      {
+         redis.start();
+         new com.kingsrook.qbits.redis.RedisQBitProducer().withQBitConfig(new com.kingsrook.qbits.redis.RedisQBitConfig()
+            .withConnection("presence", new com.kingsrook.qbits.redis.RedisConnectionConfig()
+               .withHost(RedisFixtures.host(redis)).withPort(RedisFixtures.port(redis)).withTls(false))).produce(instance);
+         config.withRedisPresence(new com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig()
+            .withConnectionName("presence").withDeployment("test").withApplication("http-recovery")
+            .withScopeProvider(new QCodeReference(RedisPresenceServiceTest.TenantScope.class)));
+         var runtime = new com.kingsrook.qbits.redis.RedisRuntimeService();
+         try
+         {
+            runtime.start(instance);
+            String original = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}").get("connectionId").asText();
+            awaitHttpPresence(original);
+            assertThat(redis.execInContainer("redis-cli", "FLUSHDB").getExitCode()).isZero();
+            assertError(503, "GET", "/presence?table=document&pk=1", null, "alice");
+            assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
+            String oldRenewal = JSON.writeValueAsString(Map.of("connectionId", original, "table", "document", "pk", "1", "mode", "VIEWING", "sequence", 1000));
+            assertThat(json(request("POST", "/presence/leases/renew", oldRenewal, "alice"), 409).path("code").asText())
+               .isEqualTo("PRESENCE_LEASE_EXPIRED");
+            assertError(404, "POST", "/presence/leases/renew", oldRenewal, "outsider");
+            String replacement = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}").get("connectionId").asText();
+            assertThat(replacement).isNotEqualTo(original);
+            awaitHttpPresence(replacement);
+            assertThat(ok("GET", "/presence?table=document&pk=1", null).path("viewers")).hasSize(1);
+         }
+         finally
+         {
+            runtime.stop();
+            runtime.afterApplicationStop();
+         }
+      }
+   }
+
+   /***************************************************************************
+    ** Keep a real HTTP lease alive while the production recovery window elapses.
+    ***************************************************************************/
+   private void awaitHttpPresence(String lease) throws Exception
+   {
+      long deadline = System.nanoTime() + Duration.ofSeconds(55).toNanos();
+      long sequence = 0;
+      while(true)
+      {
+         String body = JSON.writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "mode", "VIEWING", "sequence", ++sequence));
+         var response = request("POST", "/presence/leases/renew", body, "alice");
+         if(response.statusCode() == 200)
+         {
+            assertThat(json(response, 200).path("viewers")).hasSize(1);
+            return;
+         }
+         assertThat(json(response, 503).path("message").asText()).contains("recovering");
+         assertThat(System.nanoTime()).as("HTTP presence recovery deadline").isLessThan(deadline);
+         Thread.sleep(1000);
+      }
+   }
+
+   /***************************************************************************
+    ** Shared presence has an explicit unavailable response, never a local fallback.
+    ***************************************************************************/
+   @Test
+   void unavailablePresenceHttp() throws Exception
+   {
+      config.withRedisPresence(new com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig()
+         .withConnectionName("not-started").withDeployment("test").withApplication("fixture")
+         .withScopeProvider(new QCodeReference(RedisPresenceServiceTest.TenantScope.class)));
+      assertError(503, "GET", "/presence?table=document&pk=1", null, "alice");
+      assertError(503, "POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"1\"}", "alice");
+      assertError(503, "POST", "/presence/leases/renew", "{\"connectionId\":\"lease:missing\",\"table\":\"document\",\"pk\":\"1\",\"mode\":\"VIEWING\",\"sequence\":1}", "alice");
+      assertError(400, "POST", "/presence", "{\"connectionId\":\"tab\",\"table\":\"document\",\"pk\":\"1\",\"mode\":\"VIEWING\"}", "alice");
+      assertError(503, "DELETE", "/presence", "{\"connectionId\":\"tab\",\"table\":\"document\",\"pk\":\"1\"}", "alice");
+      assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
+   }
+
    private static final ObjectMapper JSON = new ObjectMapper();
    private final HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
    private QApplicationJavalinServer server;
@@ -113,6 +199,99 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       client.close();
       QJavalinImplementation.setSessionCookieHttpOnly(false);
       MemoryStorage.objects.clear();
+   }
+
+   /*******************************************************************************
+    ** Native record reads preserve authenticated transports and publish generic UI metadata.
+    *******************************************************************************/
+   @Test
+   void standardAttachmentRecordPreservesDeliveryModes() throws Exception
+   {
+      int id = json(upload("alice", "retained.txt", "original", "/records/document/1/attachments"), 200).get("id").asInt();
+      NativeDelivery.accessCalls = 0;
+      NativeDelivery.authenticated = true;
+      config.withAttachmentLifecycle(new QCodeReference(NativeDelivery.class));
+      MemoryStorage.lastGet = null;
+      assertThat(nativeGet("/table/collaboration_attachment/" + id, "alice").statusCode()).isEqualTo(403);
+      assertThat(NativeDelivery.accessCalls).isZero();
+      JsonNode record = json(nativeGet("/table/collaboration_attachment/" + id, "nativeview"), 200).get("record");
+      assertThat(record.at("/values/previewDelivery").asText()).isEqualTo("AUTHENTICATED_FETCH");
+      assertThat(record.at("/values/downloadDelivery").asText()).isEqualTo("AUTHENTICATED_FETCH");
+      assertThat(record.at("/values/previewUrl").asText()).contains("/qbit/record-files/files/1/downloads/");
+      assertThat(record.at("/values/downloadUrl").asText()).contains("/qbit/record-files/files/1/downloads/");
+      assertThat(MemoryStorage.lastGet).isNull();
+      assertThat(NativeDelivery.accessCalls).isEqualTo(2);
+      JsonNode metadata = json(nativeGet("/metaData/table/collaboration_attachment", "nativeview"), 200);
+      for(String field : List.of("preview", "download"))
+      {
+         boolean declared = false;
+         for(JsonNode adornment : metadata.at("/virtualFields/" + field + "Url/adornments"))
+         {
+            if("FILE_DOWNLOAD".equals(adornment.path("type").asText()))
+            {
+               assertThat(adornment.at("/values/deliveryModeField").asText()).isEqualTo(field + "Delivery");
+               declared = true;
+            }
+         }
+         assertThat(declared).as("Native %s field declares transport mode", field).isTrue();
+      }
+      assertThat(nativeGet("/table/collaboration_attachment/" + id, "nativeoutsider").statusCode()).isEqualTo(404);
+      assertThat(NativeDelivery.accessCalls).isEqualTo(2);
+      NativeDelivery.authenticated = false;
+      JsonNode signed = json(nativeGet("/table/collaboration_attachment/" + id, "nativeview"), 200).get("record");
+      assertThat(signed.at("/values/previewDelivery").asText()).isEqualTo("SIGNED_URL");
+      assertThat(signed.at("/values/downloadDelivery").asText()).isEqualTo("SIGNED_URL");
+      assertThat(signed.at("/values/downloadUrl").asText()).startsWith("https://files.example.invalid/");
+   }
+
+   /*******************************************************************************
+    ** Use the supported native record and metadata routes, with the original actor cookie.
+    *******************************************************************************/
+   private HttpResponse<String> nativeGet(String path, String caller) throws Exception
+   {
+      String serverUrl = baseUrl.substring(0, baseUrl.indexOf("/qbit/"));
+      return (client.send(HttpRequest.newBuilder(URI.create(serverUrl + path)).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=" + caller + sessionSuffix).GET().build(), HttpResponse.BodyHandlers.ofString()));
+   }
+
+   /*******************************************************************************
+    ** A trusted transport fixture proves owner metadata without a Record Files dependency.
+    *******************************************************************************/
+   public static class NativeDelivery extends com.kingsrook.qbits.collaboration.attachments.AttachmentLifecyclePolicy
+   {
+      private static int accessCalls;
+      private static boolean authenticated;
+
+      /*******************************************************************************
+       ** Access must be authorized before the transport is returned.
+       *******************************************************************************/
+      @Override
+      public void beforeAccess(com.kingsrook.qqq.backend.core.model.data.QRecord attachment, boolean inline)
+      {
+         accessCalls++;
+      }
+
+      /*******************************************************************************
+       ** The authenticated descriptor remains data, never a presigned storage capability.
+       *******************************************************************************/
+      @Override
+      public com.kingsrook.qbits.collaboration.attachments.AttachmentDownload downloadDelivery(com.kingsrook.qqq.backend.core.model.data.QRecord attachment)
+         throws com.kingsrook.qqq.backend.core.exceptions.QException
+      {
+         if(!authenticated)
+         {
+            return (null);
+         }
+         try
+         {
+            return (new com.kingsrook.qbits.collaboration.attachments.AttachmentDownload(URI.create(
+               "https://app.example/qqq/v1/qbit/record-files/files/1/downloads/00000000-0000-4000-8000-000000000001").toURL(), true));
+         }
+         catch(Exception failure)
+         {
+            throw (new com.kingsrook.qqq.backend.core.exceptions.QException("Invalid fixture URL", failure));
+         }
+      }
    }
 
    /*******************************************************************************
@@ -223,26 +402,32 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       assertThat(ok("POST", "/presence", body).get("viewers")).hasSize(1);
       assertThat(ok("GET", "/presence?table=document&pk=1", null).at("/viewers/0/mode").asText()).isEqualTo("EDITING");
       assertThat(ok("GET", "/presence?table=document", null).at("/viewers/0/fieldName").isNull()).isTrue();
-      ok("POST", "/presence", body.replace("tab-one", "tab-two").replace("EDITING", "VIEWING"));
-      JsonNode merged = ok("GET", "/presence?table=document&pk=1", null);
-      assertThat(merged.get("viewers")).hasSize(1);
-      assertThat(merged.at("/viewers/0/connections").asInt()).isEqualTo(2);
-      assertThat(merged.get("leaseCount").asInt()).isEqualTo(2);
-      assertThat(merged.has("leases")).isFalse();
-      JsonNode perConnection = ok("GET", "/presence?table=document&pk=1&perConnection=true", null);
-      assertThat(perConnection.get("viewers")).hasSize(1);
-      assertThat(perConnection.get("leases")).hasSize(2);
-      assertThat(perConnection.at("/leases/0/connectionId").asText()).startsWith("c").doesNotContain("tab-");
-      assertThat(perConnection.at("/leases/0/since").asText()).isNotBlank();
-      assertThat(perConnection.at("/leases/0/sessionId").asText()).startsWith("s");
-      assertThat(perConnection.toString()).doesNotContain("alice" + sessionSuffix).doesNotContain(sessionSuffix);
-      assertError(400, "GET", "/presence?table=document&perConnection=maybe", null, "alice");
-      ok("DELETE", "/presence", "{\"connectionId\":\"tab-two\",\"table\":\"document\",\"pk\":\"1\"}");
       assertError(404, "GET", "/presence?table=document&pk=3", null, "alice");
       assertError(404, "POST", "/presence", body, "outsider");
       assertError(400, "POST", "/presence", "{\"connectionId\":\"x\",\"table\":\"document\",\"mode\":\"BAD\"}", "alice");
       assertError(400, "GET", "/presence", null, "alice");
       assertThat(ok("DELETE", "/presence", "{\"connectionId\":\"tab-one\",\"table\":\"document\",\"pk\":\"1\"}").get("success").asBoolean()).isTrue();
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** HTTP-issued leases are invisible until activated and expire explicitly.
+    *******************************************************************************/
+   @Test
+   void issuedPresenceHttp() throws Exception
+   {
+      String lease = ok("POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"01\"}").get("connectionId").asText();
+      assertThat(lease).startsWith("lease:");
+      assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
+      String body = new ObjectMapper().writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "mode", "EDITING", "fieldName", "title", "sequence", 1));
+      assertThat(ok("POST", "/presence/leases/renew", body).get("viewers")).hasSize(1);
+      assertError(404, "POST", "/presence/leases", "{\"table\":\"document\",\"pk\":\"3\"}", "alice");
+      assertError(404, "POST", "/presence/leases/renew", body, "outsider");
+      assertError(400, "POST", "/presence/leases/renew", body.replace("\"sequence\":1", "\"sequence\":0"), "alice");
+      String leave = new ObjectMapper().writeValueAsString(Map.of("connectionId", lease, "table", "document", "pk", "1", "sequence", 2));
+      ok("DELETE", "/presence", leave);
+      var expired = json(request("POST", "/presence/leases/renew", body, "alice"), 409);
+      assertThat(expired.get("code").asText()).isEqualTo("PRESENCE_LEASE_EXPIRED");
       assertThat(ok("GET", "/presence?table=document&pk=1", null).get("viewers")).isEmpty();
    }
 
@@ -317,6 +502,36 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
    }
 
    /*******************************************************************************
+    ** Existing offset cursors retain wire scope while native lists fetch pages.
+    *******************************************************************************/
+   @Test
+   void attachmentPagesPreserveCursorScopeAndCurrentParentAccess() throws Exception
+   {
+      List<Integer> ids = new java.util.ArrayList<>();
+      for(int i = 0; i < 5; i++)
+      {
+         ids.add(json(upload("alice", "file-" + i + ".txt", "x", "/records/document/1/attachments"), 200).get("id").asInt());
+      }
+      JsonNode first = ok("GET", "/records/document/1/attachments?limit=2", null);
+      assertThat(first.get("items")).hasSize(2);
+      assertThat(first.at("/items/0/id").asInt()).isEqualTo(ids.get(4));
+      String cursor = first.get("nextCursor").asText();
+      String decoded = new String(java.util.Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+      assertThat(decoded).startsWith("1:").endsWith(":2");
+      JsonNode second = ok("GET", "/records/document/1/attachments?limit=2&cursor=" + cursor, null);
+      assertThat(second.get("items")).hasSize(2);
+      assertThat(second.at("/items/0/id").asInt()).isEqualTo(ids.get(2));
+      JsonNode last = ok("GET", "/records/document/1/attachments?limit=2&cursor=" + second.get("nextCursor").asText(), null);
+      assertThat(last.get("items")).hasSize(1);
+      assertThat(last.get("nextCursor").isNull()).isTrue();
+      assertError(400, "GET", "/records/document/2/attachments?cursor=" + cursor, null, "alice");
+      assertError(400, "GET", "/records/document/1/attachments?limit=101", null, "alice");
+      assertError(400, "GET", "/records/document/1/attachments?cursor=invalid", null, "alice");
+      assertError(404, "GET", "/records/document/1/attachments?cursor=" + cursor, null, "outsider");
+      assertThat(ok("GET", "/records/document/2/attachments", null).get("items")).isEmpty();
+   }
+
+   /*******************************************************************************
     ** Vocabulary creation and record associations preserve caller permissions.
     *******************************************************************************/
    @Test
@@ -359,6 +574,80 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
          assertThat(tagQuery("NOT_IN", "[" + idb + "]")).containsExactly(2);
       }
       assertThat(tagQuery("IN", "[\"alpha\"]")).containsExactlyInAnyOrder(1, 2);
+   }
+
+   /*******************************************************************************
+    ** EAV choices retain their stored ids and translated labels on the HTTP wire.
+    *******************************************************************************/
+   @Test
+   void customFieldValuesThroughTableReads() throws Exception
+   {
+      admin();
+      instance.addBackend(new RDBMSBackendMetaData().withName("fallback").withVendor("h2"));
+      instance.getTable("document").setBackendName("fallback");
+      QRecord definition = new InsertAction().execute(new InsertInput(CollaborationTables.FIELD_DEFINITION).withRecords(List.of(
+         new QRecord().withValue("tableName", "document").withValue("name", "choice").withValue("label", "Choice").withValue("type", "SELECT")
+            .withValue("options", "[{\"id\":\"x\",\"label\":\"Choice X\"}]")))).getRecords().getFirst();
+      assertThat(definition.getErrors()).isNullOrEmpty();
+      FieldDefinitions.apply(definition.getValue("id"), "Publish");
+      instance.getTable("document").setBackendName("memory");
+      CollaborationRecords.insert(CollaborationTables.FIELD_VALUE, new QRecord().withValue("tableName", "document").withValue("recordId", "1")
+         .withValue("fieldName", "choice").withValue("valueText", "x").withValue("parentDeleted", false));
+      login("alice");
+      String serverUrl = baseUrl.substring(0, baseUrl.indexOf("/qbit/"));
+      HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/query")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).header("Content-Type", "application/json")
+         .POST(HttpRequest.BodyPublishers.ofString("{\"filter\":{\"orderBys\":[{\"fieldName\":\"id\"}]}}")).build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode records = json(response, 200).get("records");
+      assertThat(records).hasSize(2);
+      assertThat(records.get(0).at("/values/id").asInt()).isEqualTo(1);
+      assertThat(records.get(0).at("/values/cf_choice").asText()).isEqualTo("x");
+      assertThat(records.get(0).at("/displayValues/cf_choice").asText()).isEqualTo("Choice X");
+      assertThat(records.get(1).at("/values/cf_choice").isMissingNode()).isTrue();
+
+      response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/1")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).GET().build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode record = json(response, 200).get("record");
+      assertThat(record.at("/values/cf_choice").asText()).isEqualTo("x");
+      assertThat(record.at("/displayValues/cf_choice").asText()).isEqualTo("Choice X");
+
+      response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/1")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=outsider" + sessionSuffix).GET().build(), HttpResponse.BodyHandlers.ofString());
+      assertThat(response.statusCode()).isEqualTo(404);
+      assertThat(response.body()).doesNotContain("Choice X", "First document");
+   }
+
+   /*******************************************************************************
+    ** Table reads expose tag labels while retaining parent-record authorization.
+    *******************************************************************************/
+   @Test
+   void tagValuesThroughTableReads() throws Exception
+   {
+      RuntimeMetaDataOverlay.refresh(instance);
+      int tag = ok("POST", "/tags", "{\"table\":\"document\",\"label\":\"Review, urgent\"}").get("id").asInt();
+      ok("PUT", "/records/document/1/tags", "{\"add\":[" + tag + "]}");
+      String serverUrl = baseUrl.substring(0, baseUrl.indexOf("/qbit/"));
+      HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/query")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).header("Content-Type", "application/json")
+         .POST(HttpRequest.BodyPublishers.ofString("{\"filter\":{\"orderBys\":[{\"fieldName\":\"id\"}]}}")).build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode records = json(response, 200).get("records");
+      assertThat(records).hasSize(2);
+      assertThat(records.get(0).at("/values/id").asInt()).isEqualTo(1);
+      assertThat(records.get(0).at("/values/collaborationTags").asText()).isEqualTo("Review, urgent");
+      assertThat(records.get(0).at("/displayValues/collaborationTags").asText()).isEqualTo("Review, urgent");
+      assertThat(records.get(1).at("/values/id").asInt()).isEqualTo(2);
+      assertThat(records.get(1).at("/values/collaborationTags").isMissingNode()).as(records.toString()).isTrue();
+
+      response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/1")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=alice" + sessionSuffix).GET().build(), HttpResponse.BodyHandlers.ofString());
+      JsonNode record = json(response, 200).get("record");
+      assertThat(record.at("/values/collaborationTags").asText()).isEqualTo("Review, urgent");
+      assertThat(record.at("/displayValues/collaborationTags").asText()).isEqualTo("Review, urgent");
+
+      response = client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/table/document/1")).timeout(Duration.ofSeconds(20))
+         .header("Cookie", "sessionUUID=outsider" + sessionSuffix).GET().build(), HttpResponse.BodyHandlers.ofString());
+      assertThat(response.body()).doesNotContain("Review, urgent", "First document");
+      assertThat(response.statusCode()).isEqualTo(404);
    }
 
    /*******************************************************************************
@@ -417,6 +706,21 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode candidate = ok("GET", "/mentions/candidates?table=document&pk=1&q=carol", null).at("/items/0");
       assertThat(candidate.at("/person/userId").asText()).isEqualTo("carol");
       assertThat(candidate.get("canRead").asText()).isEqualTo("true");
+      json(request("POST", "/records/document/1/comments", "{\"body\":\"Review @[Alice](user:alice)\"}", "carol"), 200);
+      ok("POST", "/records/document/1/comments", "{\"body\":\"Review @[Carol](user:carol)\"}");
+      // Delivery is external to this HTTP fixture; persist its receipt before testing read state.
+      for(var mention : CollaborationRecords.query(com.kingsrook.qbits.collaboration.model.CollaborationTables.MENTION,
+         new com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter()))
+      {
+         CollaborationRecords.update(com.kingsrook.qbits.collaboration.model.CollaborationTables.MENTION,
+            new com.kingsrook.qqq.backend.core.model.data.QRecord().withValue("id", mention.getValue("id")).withValue("notifiedAt", java.time.Instant.now()));
+      }
+      assertThat(ok("GET", "/my-work", null).get("unreadMentionCount").asLong()).isPositive();
+      assertThat(json(request("GET", "/my-work", null, "carol"), 200).get("unreadMentionCount").asLong()).isEqualTo(1);
+      ok("POST", "/my-work/mentions/read", null);
+      assertThat(ok("GET", "/my-work", null).get("unreadMentionCount").asLong()).isZero();
+      assertThat(json(request("GET", "/my-work", null, "carol"), 200).get("unreadMentionCount").asLong()).isEqualTo(1);
+      ok("POST", "/my-work/mentions/read", null);
       assertThat(ok("GET", "/records/document/1/follow", null).at("/follow/reason").asText()).isEqualTo("COMMENTED");
       JsonNode state = ok("PUT", "/records/document/1/follow", "{\"notifyOnChange\":false,\"notifyOnComment\":true}");
       assertThat(state.at("/follow/notifyOnChange").asBoolean()).isFalse();
@@ -524,7 +828,7 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
       JsonNode version = json(client.send(HttpRequest.newBuilder(URI.create(serverUrl + "/qqq/v1/version")).GET().build(),
          HttpResponse.BodyHandlers.ofString()), 200);
       assertThat(version.at("/extensions/0/name").asText()).isEqualTo("collaboration");
-      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.2.0");
+      assertThat(version.at("/extensions/0/version").asText()).isEqualTo("1.3.0");
    }
 
    /*******************************************************************************
@@ -568,7 +872,11 @@ class CollaborationApiHttpTest extends PersonalServiceFixture
             case "carol" -> "Carol Diaz";
             default -> caller;
          }));
-         session.withPermissions("document.read").withSecurityKeyValue("tenant", caller.equals("outsider") ? "b" : "a");
+         session.withPermissions("document.read").withSecurityKeyValue("tenant", (caller.equals("outsider") || caller.equals("nativeoutsider")) ? "b" : "a");
+         if(caller.startsWith("native"))
+         {
+            session.withPermissions("collaboration.view");
+         }
          if(caller.equals("alice") || caller.equals("carol"))
          {
             session.withPermissions("document.write");

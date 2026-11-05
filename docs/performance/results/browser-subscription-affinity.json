@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "checks": [
+    { "node": "first", "status": 200 },
+    { "node": "second", "status": 404 },
+    { "node": "first", "status": 200 }
+  ],
+  "errors": [],
+  "fixture_cleanup": true,
+  "fixture_checks": ["browser-six-presence", "browser-redis-admin", "browser-subscription-affinity"],
+  "frontend_jar_sha256": "c9fa2eb2381a47c8104f82f4e940d2bfa8ba67e2341298dde0de4e21ad3ff1ab",
+  "backend_source": "Published core cc3981bb3/collaboration ecff347/Redis7fe5492 snapshots; two independent JVMs, mock identities and memory records.",
+  "scope": "Same browser session and live SSE connection ID; change only test-router affinity. Not deployed Traefik qualification."
+}

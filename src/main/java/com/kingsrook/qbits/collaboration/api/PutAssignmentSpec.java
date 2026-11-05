@@ -76,7 +76,7 @@ public class PutAssignmentSpec extends CollaborationJsonSpec
    {
       var body = body(input, CollaborationWorkSchemas.CollaborationAssignmentRequestV1.class);
       return (CollaborationViews.assignment(new com.kingsrook.qbits.collaboration.assignment.AssignmentService()
-         .assign(table(input), pk(input), body.ownerUserId(), body.assigneeUserId())));
+         .assignRoles(table(input), pk(input), body.ownerUserId(), body.assigneeUserId(), input.getBody().keySet())));
    }
 
 }

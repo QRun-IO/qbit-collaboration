@@ -106,7 +106,7 @@ final class CollaborationViews
       Map<String, String> names = names(values.stream().map(AttachmentEntry::createdByUserId).toArray(String[]::new));
       return (values.stream().map(value -> new CollaborationAttachmentV1(
          value.id(), value.tableName(), value.recordId(), value.fileName(), value.contentType(), value.sizeBytes(), value.sha256(), value.description(), value.createdByUserId(), value.createDate(), value.canDelete(),
-         name(names, value.createdByUserId()))).toList());
+         name(names, value.createdByUserId()), value.canEdit())).toList());
    }
 
    /*******************************************************************************

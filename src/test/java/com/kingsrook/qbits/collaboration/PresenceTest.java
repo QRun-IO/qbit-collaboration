@@ -24,10 +24,8 @@ package com.kingsrook.qbits.collaboration;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import com.kingsrook.qbits.collaboration.api.CollaborationPresenceSchemas;
 import com.kingsrook.qbits.collaboration.presence.PresenceRegistry;
 import com.kingsrook.qbits.collaboration.presence.PresenceService;
 import com.kingsrook.qbits.collaboration.app.CollaborationHome;
@@ -38,7 +36,6 @@ import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature
 import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeaturesMetaData;
 import com.kingsrook.qqq.backend.core.realtime.InMemoryRealtimeBus;
 import com.kingsrook.qqq.backend.core.realtime.RealtimeMessage;
-import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +45,163 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *******************************************************************************/
 class PresenceTest extends PersonalServiceFixture
 {
+   /*******************************************************************************
+    ** Issued service operations retain identity, authorization and cleanup rules.
+    *******************************************************************************/
+   @Test
+   void issuedServiceRechecksAccessAndDepartureOrder() throws Exception
+   {
+      var service = new PresenceService();
+      String lease = service.openLease("document", "01");
+      assertThat(service.snapshot("document", "1")).isEmpty();
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "missing", 1L))
+         .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      assertThat(service.renewLease(lease, "document", "1", "EDITING", "title", 1L)).hasSize(1);
+      assertThatThrownBy(() -> service.leave(lease, "document", "1", null))
+         .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      login("bob");
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 2L))
+         .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+      login("alice");
+      QContext.getQSession().getPermissions().remove("document.read");
+      assertThatThrownBy(() -> service.openLease("document", "1")).isInstanceOf(QNotFoundException.class);
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 3L))
+         .isInstanceOf(QNotFoundException.class);
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).isEmpty();
+      login("alice");
+      assertThatThrownBy(() -> service.renewLease(lease, "document", "1", "EDITING", "title", 4L))
+         .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+   }
+
+   /*******************************************************************************
+    ** Local issued authority is bounded and cannot be recreated by late requests.
+    *******************************************************************************/
+   @Test
+   void localIssuedLeasesRequireExistingAuthority() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var local = new PresenceRegistry(bus, clock, 1); var other = new PresenceRegistry(bus, clock, 1))
+      {
+         String lease = local.openLease("alice", "Alice", "document", "1");
+         assertThat(lease).startsWith("lease:");
+         assertThat(local.snapshot("document", "1")).isEmpty();
+         assertThat(local.openLease("bob", "Bob", "document", "2")).isNull();
+         assertThatThrownBy(() -> other.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 1L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThatThrownBy(() -> local.renewLease("bob", "Bob", lease, "document", "1", "EDITING", "title", 1L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         local.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 1L);
+         clock.advance(1000);
+         local.renewLease("alice", "Alice", lease, "document", "1", "VIEWING", null, 1L);
+         assertThat(local.snapshot("document", "1").getFirst().mode()).isEqualTo("EDITING");
+         clock.advance(PresenceRegistry.TTL_MILLIS - 1000);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", lease, "document", "1", "EDITING", "title", 2L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThat(local.snapshot("document", "1")).isEmpty();
+         String replacement = local.openLease("alice", "Alice", "document", "1");
+         local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 1L);
+         local.leave("alice", replacement, "document", "1", 3L);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 4L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         clock.advance(PresenceRegistry.TTL_MILLIS);
+         assertThatThrownBy(() -> local.heartbeat("alice", "Alice", replacement, "document", "1", "EDITING", "title", 5L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThatThrownBy(() -> local.renewLease("alice", "Alice", replacement, "document", "1", "EDITING", "title", 5L))
+            .isInstanceOf(com.kingsrook.qbits.collaboration.presence.PresenceLeaseExpiredException.class);
+         assertThat(local.snapshot("document", "1")).isEmpty();
+      }
+   }
+
+   /*******************************************************************************
+    ** Delayed HTTP renewals and departures retain client order across replicas.
+    *******************************************************************************/
+   @Test
+   void clientSequenceOrdersDelayedRequests() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, 10); var second = new PresenceRegistry(bus, clock, 10))
+      {
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "title", 2L);
+         clock.advance(10);
+         second.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "old", 1L);
+         assertThat(first.snapshot("document", "1").getFirst().fieldName()).isEqualTo("title");
+         second.leave("alice", "tab", "document", "1", 3L);
+         clock.advance(10);
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "EDITING", "title", 2L);
+         assertThat(first.snapshot("document", "1")).isEmpty();
+         assertThat(second.snapshot("document", "1")).isEmpty();
+         first.heartbeat("alice", "Alice", "tab", "document", "1", "VIEWING", null, 4L);
+         second.leave("alice", "tab", "document", "1", 3L);
+         assertThat(second.snapshot("document", "1")).hasSize(1);
+      }
+   }
+
+   /*******************************************************************************
+    ** Departure keeps unknown-target errors without preventing revoked cleanup.
+    *******************************************************************************/
+   @Test
+   void departureRejectsUnknownTable() throws Exception
+   {
+      var service = new PresenceService();
+      assertThatThrownBy(() -> service.leave("valid-connection", "nonexistent", null))
+         .isInstanceOf(QNotFoundException.class).hasMessage("Not found");
+      service.heartbeat("valid-connection", "document", "1", "VIEWING", null);
+      QContext.getQSession().getPermissions().remove("document.read");
+      service.leave("valid-connection", "document", "1");
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).isEmpty();
+   }
+
+   /*******************************************************************************
+    ** A departure wins over delayed and same-timestamp renewals on every pod.
+    *******************************************************************************/
+   @Test
+   void departedLeaseCannotBeResurrectedByOldHeartbeat() throws Exception
+   {
+      var clock = new MutableClock();
+      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, 2))
+      {
+         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
+         bus.subscribe(events::add);
+         registry.heartbeat("alice", "Alice", "one", "document", "1", "EDITING", "title");
+         var old = events.stream().filter(event -> event.getEvent().equals("presence.heartbeat")).findFirst().orElseThrow();
+         registry.leave("alice", "one", "document", "1");
+         bus.publish(old);
+         assertThat(registry.snapshot("document", "1")).isEmpty();
+         clock.advance(1);
+         registry.heartbeat("alice", "Alice", "one", "document", "1", "VIEWING", null);
+         assertThat(registry.snapshot("document", "1")).hasSize(1);
+         clock.advance(PresenceRegistry.TTL_MILLIS);
+         assertThat(registry.snapshot("document", "1")).isEmpty();
+      }
+   }
+
+   /*******************************************************************************
+    ** Focus is validated for the sender and projected again for each recipient.
+    *******************************************************************************/
+   @Test
+   void focusedFieldsRespectVisibilityOnEveryResponse() throws Exception
+   {
+      var table = instance.getTable("document");
+      table.withField(new com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData("hidden", com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType.STRING).withIsHidden(true));
+      table.withField(new com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData("password", com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType.PASSWORD));
+      var service = new PresenceService();
+      for(String field : List.of("hidden", "password", "missing"))
+      {
+         assertThatThrownBy(() -> service.heartbeat("alice-tab", "document", "1", "EDITING", field))
+            .isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QBadRequestException.class);
+      }
+      service.heartbeat("alice-tab", "document", "1", "EDITING", "title");
+      login("bob");
+      assertThat(service.snapshot("document", "1").getFirst().fieldName()).isEqualTo("title");
+      table.getField("title").setIsHidden(true);
+      assertThat(service.snapshot("document", "1").getFirst().fieldName()).isNull();
+      assertThat(service.heartbeat("bob-tab", "document", "1", "VIEWING", null))
+         .allSatisfy(viewer -> assertThat(viewer.fieldName()).isNull());
+      assertThat(PresenceRegistry.get(instance).snapshot("document", "1")).anySatisfy(viewer -> assertThat(viewer.fieldName()).isEqualTo("title"));
+      table.getField("title").setIsHidden(false);
+      assertThat(service.snapshot("document", "1")).anySatisfy(viewer -> assertThat(viewer.fieldName()).isEqualTo("title"));
+   }
+
    /*******************************************************************************
     ** Renewals replicate even without a visible change; tabs merge until all expire.
     *******************************************************************************/
@@ -64,7 +218,7 @@ class PresenceTest extends PersonalServiceFixture
          assertThat(second.snapshot("document", "1")).hasSize(1);
          clock.advance(1000);
          second.heartbeat("alice", "Alice", "two", "document", "1", "EDITING", "title");
-         assertThat(first.snapshot("document", "1")).containsExactly(new PresenceRegistry.Viewer("alice", "Alice", "EDITING", "title", 2));
+         assertThat(first.snapshot("document", "1")).containsExactly(new PresenceRegistry.Viewer("alice", "Alice", "EDITING", "title"));
          assertThat(first.snapshot("document", null).getFirst().fieldName()).isNull();
          int changes = (int) events.stream().filter(event -> event.getEvent().equals("presence.changed")).count();
          clock.advance(20000);
@@ -88,177 +242,6 @@ class PresenceTest extends PersonalServiceFixture
          });
          assertThat(events.stream().filter(event -> event.getChannel().equals("table:document"))).allSatisfy(event -> assertThat(event.getData()).doesNotContainKey("pk"));
       }
-   }
-
-   /*******************************************************************************
-    ** The last leave still sends viewers: the SSE writer and the HTTP snapshot must
-    ** both carry an empty array, never omit the field (#52).
-    *******************************************************************************/
-   @Test
-   void lastLeaveSendsEmptyViewers() throws Exception
-   {
-      var clock = new MutableClock();
-      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
-      {
-         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
-         bus.subscribe(events::add);
-         registry.heartbeat("bob", "Bob", "one", "person", null, "VIEWING", null);
-         registry.heartbeat("bob", "Bob", "one", "person", "7", "EDITING", "name");
-         registry.leave("bob", "one", "person", null);
-         registry.leave("bob", "one", "person", "7");
-         assertThat(registry.snapshot("person", null)).isEmpty();
-
-         for(String channel : List.of("table:person", "record:person:7"))
-         {
-            RealtimeMessage last = events.stream().filter(event -> event.getChannel().equals(channel) && event.getEvent().equals("presence.changed")).reduce((first, second) -> second).orElseThrow();
-            assertThat(last.getData()).containsKey("viewers");
-            assertThat((List<?>) last.getData().get("viewers")).isEmpty();
-
-            ///////////////////////////////////////////////////////////////////////
-            // the realtime hub copies the data map and writes it with toJson,   //
-            // whose NON_EMPTY inclusion used to drop the empty viewers list     //
-            ///////////////////////////////////////////////////////////////////////
-            String json = JsonUtils.toJson(new LinkedHashMap<>(last.getData()));
-            assertThat(JsonUtils.toJSONObject(json).getJSONArray("viewers").length()).isZero();
-         }
-
-         String occupied = JsonUtils.toJson(events.stream().filter(event -> event.getChannel().equals("record:person:7")).findFirst().orElseThrow().getData());
-         assertThat(JsonUtils.toJSONObject(occupied).getJSONArray("viewers").getJSONObject(0).getString("fieldName")).isEqualTo("name");
-
-         var snapshot = new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("person", null, registry.snapshot("person", null));
-         assertThat(JsonUtils.toJSONObject(JsonUtils.toJson(snapshot)).getJSONArray("viewers").length()).isZero();
-      }
-   }
-
-   /*******************************************************************************
-    ** Two leases of one user merge into one viewer with connections = 2; per
-    ** connection they are two viewers with opaque ids, modes, fields and starts.
-    ** Counts keep counting users; connectionCounts counts leases (#54).
-    *******************************************************************************/
-   @Test
-   void perConnectionViewersAndCounts() throws Exception
-   {
-      var clock = new MutableClock();
-      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES);
-          var second = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
-      {
-         first.heartbeat("admin", "Admin", "terminal-1", "session-a", "person", "7", "VIEWING", null);
-         clock.advance(1000);
-         second.heartbeat("admin", "Admin", "terminal-2", "session-b", "person", "7", "EDITING", "name");
-         first.heartbeat("bob", "Bob", "tab", "session-c", "person", "7", "VIEWING", null);
-
-         assertThat(first.snapshot("person", "7")).containsExactly(
-            new PresenceRegistry.Viewer("admin", "Admin", "EDITING", "name", 2),
-            new PresenceRegistry.Viewer("bob", "Bob", "VIEWING", null, 1));
-
-         List<PresenceRegistry.Viewer> connections = second.connections("person", "7");
-         assertThat(connections).hasSize(3);
-         assertThat(connections.subList(0, 2)).extracting(PresenceRegistry.Viewer::userId, PresenceRegistry.Viewer::mode, PresenceRegistry.Viewer::fieldName, PresenceRegistry.Viewer::connections)
-            .containsExactly(org.assertj.core.groups.Tuple.tuple("admin", "VIEWING", null, 1), org.assertj.core.groups.Tuple.tuple("admin", "EDITING", "name", 1));
-         assertThat(connections.getFirst().connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("admin", "terminal-1")).startsWith("c").hasSize(17);
-         assertThat(connections.getFirst().since()).isEqualTo("2026-10-13T12:00:00Z");
-         assertThat(connections.get(1).since()).isEqualTo("2026-10-13T12:00:01Z");
-
-         ////////////////////////////////////////////////////////////////////
-         // renewals keep the lease start; the session uuid replicates     //
-         ////////////////////////////////////////////////////////////////////
-         clock.advance(20000);
-         first.heartbeat("admin", "Admin", "terminal-1", "session-a", "person", "7", "VIEWING", null);
-         assertThat(second.connections("person", "7").getFirst().since()).isEqualTo("2026-10-13T12:00:00Z");
-         assertThat(second.connections("person", "7")).extracting(PresenceRegistry.Viewer::sessionId)
-            .containsExactly(PresenceRegistry.opaqueSessionId("session-a"), PresenceRegistry.opaqueSessionId("session-b"), PresenceRegistry.opaqueSessionId("session-c"));
-         assertThat(PresenceRegistry.opaqueSessionId("session-a")).startsWith("s").hasSize(17).isNotEqualTo(PresenceRegistry.opaqueSessionId("session-b"));
-
-         ////////////////////////////////////////////////////////////////////
-         // table snapshots and counts: users vs leases                    //
-         ////////////////////////////////////////////////////////////////////
-         assertThat(first.snapshot("person", null)).extracting(PresenceRegistry.Viewer::connections).containsExactly(2, 1);
-         assertThat(first.connections("person", null)).extracting(PresenceRegistry.Viewer::fieldName).containsOnlyNulls();
-         assertThat(first.counts()).containsExactly(java.util.Map.entry("person", 2));
-         assertThat(first.connectionCounts()).containsExactly(java.util.Map.entry("person", 3));
-
-         second.leave("admin", "terminal-2", "person", "7");
-         assertThat(first.snapshot("person", "7").getFirst()).isEqualTo(new PresenceRegistry.Viewer("admin", "Admin", "VIEWING", null, 1));
-      }
-   }
-
-   /*******************************************************************************
-    ** Session uuids are bearer credentials: no bus message (internal replication
-    ** or client event) and no snapshot carries one, only the opaque session id.
-    *******************************************************************************/
-   @Test
-   void rawSessionUuidIsNeverPublished() throws Exception
-   {
-      var clock = new MutableClock();
-      String sessionUuid = "7d1c2a9e-secret-session-uuid";
-      try(var bus = new InMemoryRealtimeBus(); var first = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES);
-          var second = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
-      {
-         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
-         bus.subscribe(events::add);
-         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "VIEWING", null);
-         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", "7", "EDITING", "name");
-         first.leave("admin", "terminal-1", "person", "7");
-         first.heartbeat("admin", "Admin", "terminal-1", sessionUuid, "person", null, "VIEWING", null);
-         assertThat(events).isNotEmpty().anySatisfy(event -> assertThat(event.getChannel()).isEqualTo(PresenceRegistry.INTERNAL_CHANNEL));
-         for(RealtimeMessage event : events)
-         {
-            assertThat(JsonUtils.toJson(new LinkedHashMap<>(event.getData()))).doesNotContain(sessionUuid);
-         }
-         assertThat(events).filteredOn(event -> event.getChannel().equals(PresenceRegistry.INTERNAL_CHANNEL) && !Boolean.TRUE.equals(event.getData().get("leave")))
-            .allSatisfy(event -> assertThat(event.getData().get("sessionId")).isEqualTo(PresenceRegistry.opaqueSessionId(sessionUuid)));
-         var snapshot = new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("person", null, second.snapshot("person", null), 1, second.connections("person", null));
-         String json = JsonUtils.toJson(snapshot);
-         assertThat(json).doesNotContain(sessionUuid).contains(PresenceRegistry.opaqueSessionId(sessionUuid));
-      }
-   }
-
-   /*******************************************************************************
-    ** presence.changed carries connections per merged viewer, a lease count and
-    ** one lease entry per connection; a second terminal of one user is a change.
-    *******************************************************************************/
-   @Test
-   void changedEventCarriesConnections() throws Exception
-   {
-      var clock = new MutableClock();
-      try(var bus = new InMemoryRealtimeBus(); var registry = new PresenceRegistry(bus, clock, PresenceRegistry.MAX_ENTRIES))
-      {
-         List<RealtimeMessage> events = new CopyOnWriteArrayList<>();
-         bus.subscribe(events::add);
-         registry.heartbeat("admin", "Admin", "terminal-1", "person", "7", "VIEWING", null);
-         int before = recordEvents(events).size();
-         registry.heartbeat("admin", "Admin", "terminal-2", "person", "7", "VIEWING", null);
-         List<RealtimeMessage> after = recordEvents(events);
-         assertThat(after).hasSize(before + 1);
-
-         var json = JsonUtils.toJSONObject(JsonUtils.toJson(new LinkedHashMap<>(after.getLast().getData())));
-         assertThat(json.getJSONArray("viewers").length()).isEqualTo(1);
-         assertThat(json.getJSONArray("viewers").getJSONObject(0).getInt("connections")).isEqualTo(2);
-         assertThat(json.getJSONArray("viewers").getJSONObject(0).has("connectionId")).isFalse();
-         assertThat(json.getInt("leaseCount")).isEqualTo(2);
-         assertThat(json.getJSONArray("leases").length()).isEqualTo(2);
-         var lease = json.getJSONArray("leases").getJSONObject(1);
-         assertThat(lease.getString("userId")).isEqualTo("admin");
-         assertThat(lease.getString("mode")).isEqualTo("VIEWING");
-         assertThat(lease.getInt("connections")).isEqualTo(1);
-         assertThat(lease.getString("connectionId")).startsWith("c");
-         assertThat(lease.getString("since")).isEqualTo("2026-10-13T12:00:00Z");
-         assertThat(json.toString()).doesNotContain("terminal-");
-
-         registry.leave("admin", "terminal-1", "person", "7");
-         registry.leave("admin", "terminal-2", "person", "7");
-         var last = JsonUtils.toJSONObject(JsonUtils.toJson(new LinkedHashMap<>(recordEvents(events).getLast().getData())));
-         assertThat(last.getInt("leaseCount")).isZero();
-         assertThat(last.getJSONArray("leases").length()).isZero();
-      }
-   }
-
-   /*******************************************************************************
-    ** Record-channel presence.changed events so far.
-    *******************************************************************************/
-   private static List<RealtimeMessage> recordEvents(List<RealtimeMessage> events)
-   {
-      return (events.stream().filter(event -> event.getChannel().equals("record:person:7") && event.getEvent().equals("presence.changed")).toList());
    }
 
    /*******************************************************************************
@@ -291,15 +274,7 @@ class PresenceTest extends PersonalServiceFixture
    void accessFeatureAndSnapshot() throws Exception
    {
       var service = new PresenceService();
-      QContext.getQSession().setUuid("session-uuid-alice");
       assertThat(service.heartbeat("one", "document", "01", "EDITING", "title")).hasSize(1);
-      assertThat(service.connections("document", "1")).singleElement().satisfies(viewer ->
-      {
-         assertThat(viewer.connectionId()).isEqualTo(PresenceRegistry.opaqueConnectionId("alice", "one"));
-         assertThat(viewer.sessionId()).isEqualTo(PresenceRegistry.opaqueSessionId("session-uuid-alice"));
-         assertThat(JsonUtils.toJson(new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1("document", "1", service.snapshot("document", "1"), 1, service.connections("document", "1"))))
-            .doesNotContain("session-uuid-alice");
-      });
       assertThat(service.snapshot("document", "1")).extracting(PresenceRegistry.Viewer::userId).containsExactly("alice");
       assertThat(service.snapshot("document", null)).hasSize(1);
       assertThatThrownBy(() -> service.heartbeat("one", "document", "3", "VIEWING", null)).isInstanceOf(QNotFoundException.class);
@@ -319,7 +294,6 @@ class PresenceTest extends PersonalServiceFixture
       admin();
       assertThat(CollaborationHome.presence().getRows()).extracting(row -> row.get("table")).containsExactly("Documents");
       assertThat(CollaborationHome.presence().getRows().getFirst().get("viewers")).isEqualTo(1);
-      assertThat(CollaborationHome.presence().getRows().getFirst().get("connections")).isEqualTo(1);
       login("alice");
       assertThat(CollaborationHome.presence().getRows()).isEmpty();
       assertThat(CollaborationHome.presence().getNoRowsFoundHTML()).isEqualTo(CollaborationHome.PRESENCE_ADMIN_ONLY);

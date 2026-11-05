@@ -18,6 +18,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
    <properties>
+      <!-- Only the published Redis API package is a permitted cross-qbit boundary. -->
+      <qbit.guardrails.allowedApiPackages>com.kingsrook.qbits.objectstorage.api,com.kingsrook.qbits.email.api,com.kingsrook.qbits.redis.api</qbit.guardrails.allowedApiPackages>
+      <qbit.guardrails.allowedQbitArtifacts>com.kingsrook.qbits:qbit-object-storage,com.kingsrook.qbits:qbit-email,com.kingsrook.qbits:*-api,com.kingsrook.qbits:qbit-redis</qbit.guardrails.allowedQbitArtifacts>
       <revision>0.1.0-SNAPSHOT</revision>
       <maven.compiler.source>21</maven.compiler.source>
       <maven.compiler.target>21</maven.compiler.target>
@@ -72,6 +75,13 @@
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
          <artifactId>qqq-backend-module-rdbms</artifactId>
+      </dependency>
+      <dependency>
+         <groupId>com.kingsrook.qbits</groupId>
+         <artifactId>qbit-redis</artifactId>
+         <!-- Pending: repin to the published qbit-redis release once the redis integration PR is released (no PRIVATE/feature snapshot as final). -->
+         <version>0.1.0-SNAPSHOT</version>
+         <optional>true</optional>
       </dependency>
       <dependency>
          <groupId>com.kingsrook.qbits</groupId>

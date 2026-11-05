@@ -77,6 +77,6 @@ public class PostPresenceSpec extends CollaborationJsonSpec
    {
       var body = body(input, CollaborationPresenceSchemas.CollaborationPresenceRequestV1.class);
       return (new CollaborationPresenceSchemas.CollaborationPresenceSnapshotV1(body.table(), body.pk(),
-         new PresenceService().heartbeat(body.connectionId(), required(body.table(), "table"), body.pk(), body.mode(), body.fieldName())));
+         new PresenceService().heartbeat(body.connectionId(), required(body.table(), "table"), body.pk(), body.mode(), body.fieldName(), body.sequence())));
    }
 }

@@ -28,6 +28,7 @@ import com.kingsrook.qbits.collaboration.model.CollaborationTables;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
 
 /*******************************************************************************
  ** Internal activity writer; the calling service has already checked the parent.
@@ -46,8 +47,28 @@ public final class ActivityWriter
     *******************************************************************************/
    public static void write(String table, String recordId, String type, String summary, String refTable, String refId) throws QException
    {
-      CollaborationRecords.insert(CollaborationTables.ACTIVITY, new QRecord().withValue("tableName", table).withValue("recordId", recordId)
+      CollaborationRecords.insertActivity(new QRecord().withValue("tableName", table).withValue("recordId", recordId)
          .withValue("at", Instant.now()).withValue("actorUserId", CollaborationSecurity.userId(QContext.getQSession()))
-         .withValue("type", type).withValue("summary", summary).withValue("refTableName", refTable).withValue("refId", refId).withValue("parentDeleted", false));
+         .withValue("type", type).withValue("summary", summary).withValue("refTableName", refTable).withValue("refId", refId).withValue("parentDeleted", false), sourceFeature(refTable));
+   }
+
+   /*******************************************************************************
+    ** Source-specific activity requires that feature; generic events retain the
+    ** existing timeline authorization contract.
+    *******************************************************************************/
+   private static RecordFeature sourceFeature(String table)
+   {
+      return (switch(table == null ? "" : table)
+      {
+         case CollaborationTables.ATTACHMENT -> RecordFeature.ATTACHMENTS;
+         case CollaborationTables.COMMENT, CollaborationTables.COMMENT_REVISION, CollaborationTables.MENTION -> RecordFeature.COMMENTS;
+         case CollaborationTables.TAG, CollaborationTables.RECORD_TAG -> RecordFeature.TAGS;
+         case CollaborationTables.FIELD_DEFINITION, CollaborationTables.FIELD_VALUE -> RecordFeature.CUSTOM_FIELDS;
+         case CollaborationTables.TASK -> RecordFeature.TASKS;
+         case CollaborationTables.RECORD_ASSIGNMENT -> RecordFeature.ASSIGNMENT;
+         case CollaborationTables.FOLLOW, CollaborationTables.FOLLOW_DIGEST -> RecordFeature.FOLLOW;
+         case CollaborationTables.SHARE -> RecordFeature.SHARING;
+         default -> RecordFeature.TIMELINE;
+      });
    }
 }

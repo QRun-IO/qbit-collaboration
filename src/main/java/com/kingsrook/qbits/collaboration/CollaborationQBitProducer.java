@@ -155,6 +155,10 @@ public class CollaborationQBitProducer implements QBitMetaDataProducer<Collabora
    public MetaDataProducerMultiOutput produce(QInstance instance) throws QException
    {
       qBitConfig.validate(instance);
+      var realtime = com.kingsrook.qqq.backend.core.realtime.RealtimeMetaData.of(instance);
+      realtime.withAudienceProvider(com.kingsrook.qbits.collaboration.presence.RedisPresenceAudience.EVENT,
+         new com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference(com.kingsrook.qbits.collaboration.presence.RedisPresenceAudience.class));
+      instance.withSupplementalMetaData(realtime);
       QBitMetaData qBit = getQBitMetaData();
       instance.addQBit(qBit);
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();

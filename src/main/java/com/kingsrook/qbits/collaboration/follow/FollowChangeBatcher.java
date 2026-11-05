@@ -193,12 +193,17 @@ public class FollowChangeBatcher implements RecordChangeListenerInterface
             String user = batch.getValueString("userId");
             List<QRecord> follows = CollaborationRecords.query(CollaborationTables.FOLLOW,
                CollaborationRecords.parent(table, id).withCriteria("userId", QCriteriaOperator.EQUALS, user));
-            if(!follows.isEmpty() && eligible(follows.getFirst(), now))
+            if(!follows.isEmpty() && eligible(follows.getFirst(), now)
+               && new com.kingsrook.qbits.collaboration.security.CollaborationRecordAccessChecker().canRead(user, table, id).orElse(false))
             {
                Notifications.send(new CollaborationNotification(user, "Changes to a followed record", batch.getValueString("changes"),
-                  CollaborationNotification.Category.FOLLOW, table, id, Notifications.link(table, id)));
+                  CollaborationNotification.Category.FOLLOW, table, id, Notifications.link(table, id)).withEvent(batch.getValue("id"), null),
+                  () -> CollaborationRecords.delete(CollaborationTables.FOLLOW_DIGEST, batch.getValue("id")));
             }
-            CollaborationRecords.delete(CollaborationTables.FOLLOW_DIGEST, batch.getValue("id"));
+            else
+            {
+               CollaborationRecords.delete(CollaborationTables.FOLLOW_DIGEST, batch.getValue("id"));
+            }
          }
       }
    }

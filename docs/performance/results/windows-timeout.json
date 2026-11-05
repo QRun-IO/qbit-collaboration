@@ -1,0 +1,61 @@
+{
+  "status": "FAIL",
+  "parameters": {
+    "java": "java (Java 21)",
+    "nodes": 3,
+    "tenants": 2,
+    "users": 12,
+    "tabs": 4,
+    "rounds": 1000,
+    "workers": 8
+  },
+  "scope": "loopback HTTP, mock identities, memory records",
+  "current_round": 480,
+  "completed_rounds": 479,
+  "error": "HTTP 503 node=56028 user=load-t0-u5 path=/presence/leases/renew: {\"error\":\"Presence is temporarily unavailable. Please retry.\",\"code\":\"ERROR\",\"message\":\"Presence is temporarily unavailable. Please retry.\",\"traceId\":\"cea30b82-e82b-49ec-af8a-64d8b6bd5af6\"}",
+  "redis_slow_commands": [],
+  "redis_latency_events": [],
+  "resources": [
+    {
+      "node_log": "node-56027.log",
+      "samples": 1067,
+      "observed_wall_ms": 106600,
+      "cpu_seconds": 94.328125,
+      "cpu_core_equivalents": 0.8848792213883677,
+      "heapUsedBytes_sampled_max": 160559696,
+      "heapCommittedBytes_sampled_max": 178257920,
+      "poolActive_sampled_max": 5,
+      "poolIdle_sampled_max": 5,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    },
+    {
+      "node_log": "node-56028.log",
+      "samples": 1066,
+      "observed_wall_ms": 106501,
+      "cpu_seconds": 95.8125,
+      "cpu_core_equivalents": 0.8996394400052582,
+      "heapUsedBytes_sampled_max": 160251104,
+      "heapCommittedBytes_sampled_max": 178257920,
+      "poolActive_sampled_max": 5,
+      "poolIdle_sampled_max": 4,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    },
+    {
+      "node_log": "node-56029.log",
+      "samples": 1066,
+      "observed_wall_ms": 106500,
+      "cpu_seconds": 95.25,
+      "cpu_core_equivalents": 0.8943661971830986,
+      "heapUsedBytes_sampled_max": 157995216,
+      "heapCommittedBytes_sampled_max": 175112192,
+      "poolActive_sampled_max": 5,
+      "poolIdle_sampled_max": 4,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    }
+  ],
+  "cleanup": true,
+  "receipt_note": "Java executable path normalized; measurements unchanged. Disposable fixture identities only."
+}

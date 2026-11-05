@@ -1,0 +1,181 @@
+{
+  "status": "PASS",
+  "parameters": {
+    "java": "/path/to/java21",
+    "node_image": "eclipse-temurin@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99",
+    "nodes": 3,
+    "tenants": 2,
+    "users": 50,
+    "tabs": 4,
+    "rounds": 200,
+    "workers": 16,
+    "crash_round": 0,
+    "churn_every": 0,
+    "pause_redis": false
+  },
+  "scope": "loopback HTTP, mock identities, memory records",
+  "node_image_id": "sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99",
+  "current_round": 200,
+  "completed_rounds": 200,
+  "seconds": 102.56801009993069,
+  "renewals": {
+    "samples": 80000,
+    "p50_ms": 11.325599974952638,
+    "p95_ms": 21.764500066637993,
+    "p99_ms": 25.881099980324507,
+    "max_ms": 1007.4040000326931
+  },
+  "snapshots": {
+    "samples": 2400,
+    "p50_ms": 15.130399959161878,
+    "p95_ms": 16.613700077868998,
+    "p99_ms": 19.423600053414702,
+    "max_ms": 28.864299994893372
+  },
+  "renewal_throughput": 779.9702843221492,
+  "node_pids": [
+    105696,
+    4828,
+    117588
+  ],
+  "pid_kind": "docker-client",
+  "node_containers": [
+    "qqq-capacity-f58f3ddcf5f3-node-59675",
+    "qqq-capacity-f58f3ddcf5f3-node-59676",
+    "qqq-capacity-f58f3ddcf5f3-node-59677"
+  ],
+  "redis_slow_commands": [
+    {
+      "unix_time": 1793033347,
+      "duration_us": 1432,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033347,
+      "duration_us": 1612,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033340,
+      "duration_us": 1877,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033340,
+      "duration_us": 1313,
+      "command": "ZRANGE"
+    },
+    {
+      "unix_time": 1793033336,
+      "duration_us": 1316,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033305,
+      "duration_us": 1459,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033300,
+      "duration_us": 1767,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033290,
+      "duration_us": 1180,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033283,
+      "duration_us": 1421,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033260,
+      "duration_us": 1291,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033260,
+      "duration_us": 1551,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033260,
+      "duration_us": 1083,
+      "command": "ZRANGE"
+    },
+    {
+      "unix_time": 1793033255,
+      "duration_us": 1039,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793033254,
+      "duration_us": 1215,
+      "command": "EVALSHA"
+    }
+  ],
+  "redis_latency_events": [
+    [
+      "command",
+      1793033347,
+      1,
+      1
+    ]
+  ],
+  "redis_cpu_seconds_since_start": {
+    "used_cpu_sys": 23.737706,
+    "used_cpu_user": 35.526214
+  },
+  "redis_memory": {
+    "used_memory": 2415952,
+    "used_memory_peak": 2579896,
+    "used_memory_rss": 8777728
+  },
+  "resources": [
+    {
+      "node_log": "node-59675.log",
+      "samples": 1112,
+      "observed_wall_ms": 111099,
+      "cpu_seconds": 203.14,
+      "cpu_core_equivalents": 1.828459302063925,
+      "heapUsedBytes_sampled_max": 181098896,
+      "heapCommittedBytes_sampled_max": 211812352,
+      "poolActive_sampled_max": 7,
+      "poolIdle_sampled_max": 7,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8,
+      "residentBytes_sampled_max": 662786048
+    },
+    {
+      "node_log": "node-59676.log",
+      "samples": 1145,
+      "observed_wall_ms": 114399,
+      "cpu_seconds": 200.44,
+      "cpu_core_equivalents": 1.7521132177728826,
+      "heapUsedBytes_sampled_max": 185167416,
+      "heapCommittedBytes_sampled_max": 219152384,
+      "poolActive_sampled_max": 7,
+      "poolIdle_sampled_max": 7,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8,
+      "residentBytes_sampled_max": 662188032
+    },
+    {
+      "node_log": "node-59677.log",
+      "samples": 1159,
+      "observed_wall_ms": 115800,
+      "cpu_seconds": 200.16,
+      "cpu_core_equivalents": 1.728497409326425,
+      "heapUsedBytes_sampled_max": 179378632,
+      "heapCommittedBytes_sampled_max": 210763776,
+      "poolActive_sampled_max": 6,
+      "poolIdle_sampled_max": 7,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8,
+      "residentBytes_sampled_max": 703479808
+    }
+  ],
+  "cleanup": true
+}

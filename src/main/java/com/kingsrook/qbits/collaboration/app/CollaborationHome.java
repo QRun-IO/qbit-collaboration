@@ -267,19 +267,37 @@ public final class CollaborationHome
       List<Map<String, Object>> rows = new ArrayList<>();
       if(admin)
       {
-         var registry = PresenceRegistry.get(QContext.getQInstance());
-         Map<String, Integer> connections = registry.connectionCounts();
-         registry.counts().forEach((table, viewers) ->
+         var instance = QContext.getQInstance();
+         var redis = com.kingsrook.qbits.collaboration.presence.RedisPresenceConfig.forInstance(instance);
+         Map<String, Integer> counts;
+         if(redis == null)
+         {
+            counts = PresenceRegistry.get(instance).counts();
+         }
+         else
+         {
+            counts = new java.util.TreeMap<>();
+            var backend = new com.kingsrook.qbits.collaboration.presence.RedisPresenceBackend(redis);
+            // Read only known table rooms in the administrator's authenticated tenant.
+            // Never scan Redis keys or silently substitute local counts on failure.
+            for(String tableName : instance.getTables().keySet())
+            {
+               int viewers = backend.snapshot(tableName, null).size();
+               if(viewers > 0)
+               {
+                  counts.put(tableName, viewers);
+               }
+            }
+         }
+         counts.forEach((table, viewers) ->
          {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("table", tableLabel(table));
             row.put("viewers", viewers);
-            row.put("connections", connections.getOrDefault(table, viewers));
             rows.add(row);
          });
       }
-      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "left"), column("People", "viewers", "right"),
-         column("Connections", "connections", "right")));
+      return (table("Who's here", admin ? NOBODY_HERE : PRESENCE_ADMIN_ONLY, rows, column("Table", "table", "left"), column("People", "viewers", "right")));
    }
 
 

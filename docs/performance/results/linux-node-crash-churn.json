@@ -1,0 +1,117 @@
+{
+  "status": "PASS",
+  "parameters": {
+    "java": "java (Java 21)",
+    "node_image": "eclipse-temurin@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99",
+    "nodes": 3,
+    "tenants": 2,
+    "users": 12,
+    "tabs": 4,
+    "rounds": 100,
+    "workers": 8,
+    "crash_round": 50,
+    "churn_every": 20
+  },
+  "scope": "loopback HTTP, mock identities, memory records",
+  "node_image_id": "sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99",
+  "current_round": 100,
+  "completed_rounds": 100,
+  "churn_cycles": 5,
+  "departed_leases_rejected": 40,
+  "crash": {
+    "round": 50,
+    "http_port": 52824,
+    "surviving_nodes": 2,
+    "process_exit": 137
+  },
+  "seconds": 28.090077199973166,
+  "renewals": {
+    "samples": 9600,
+    "p50_ms": 7.532799965701997,
+    "p95_ms": 17.53149996511638,
+    "p99_ms": 29.359900043345988,
+    "max_ms": 88.13189994543791
+  },
+  "snapshots": {
+    "samples": 1092,
+    "p50_ms": 13.582199928350747,
+    "p95_ms": 15.386099927127361,
+    "p99_ms": 18.502700026147068,
+    "max_ms": 22.144700051285326
+  },
+  "renewal_throughput": 341.75769371004685,
+  "node_pids": [
+    22844,
+    66652,
+    61920
+  ],
+  "pid_kind": "docker-client",
+  "node_containers": [
+    "qqq-capacity-bb9ba87919d2-node-52824",
+    "qqq-capacity-bb9ba87919d2-node-52825",
+    "qqq-capacity-bb9ba87919d2-node-52827"
+  ],
+  "redis_slow_commands": [
+    {
+      "unix_time": 1793031681,
+      "duration_us": 1206,
+      "command": "EVALSHA"
+    },
+    {
+      "unix_time": 1793031681,
+      "duration_us": 1147,
+      "command": "EVALSHA"
+    }
+  ],
+  "redis_latency_events": [
+    [
+      "command",
+      1793031681,
+      1,
+      1
+    ]
+  ],
+  "resources": [
+    {
+      "node_log": "node-52824.log",
+      "samples": 212,
+      "observed_wall_ms": 21099,
+      "cpu_seconds": 29.48,
+      "cpu_core_equivalents": 1.3972226171856486,
+      "heapUsedBytes_sampled_max": 163641024,
+      "heapCommittedBytes_sampled_max": 188743680,
+      "poolActive_sampled_max": 3,
+      "poolIdle_sampled_max": 4,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    },
+    {
+      "node_log": "node-52825.log",
+      "samples": 354,
+      "observed_wall_ms": 35299,
+      "cpu_seconds": 43.09,
+      "cpu_core_equivalents": 1.22071446783195,
+      "heapUsedBytes_sampled_max": 168178592,
+      "heapCommittedBytes_sampled_max": 192937984,
+      "poolActive_sampled_max": 5,
+      "poolIdle_sampled_max": 5,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    },
+    {
+      "node_log": "node-52827.log",
+      "samples": 340,
+      "observed_wall_ms": 33900,
+      "cpu_seconds": 42.42,
+      "cpu_core_equivalents": 1.2513274336283187,
+      "heapUsedBytes_sampled_max": 166291160,
+      "heapCommittedBytes_sampled_max": 188743680,
+      "poolActive_sampled_max": 5,
+      "poolIdle_sampled_max": 5,
+      "poolWaiting_sampled_max": 0,
+      "poolMaximum_sampled_max": 8
+    }
+  ],
+  "cleanup": true,
+  "receipt_note": "Java executable path normalized; measurements unchanged. Disposable fixture identities only."
+}

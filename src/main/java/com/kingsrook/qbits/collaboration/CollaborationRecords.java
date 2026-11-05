@@ -23,6 +23,8 @@ package com.kingsrook.qbits.collaboration;
 
 import java.io.Serializable;
 import java.util.List;
+import com.kingsrook.qbits.collaboration.model.CollaborationTables;
+import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
@@ -36,6 +38,8 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordFeature;
+import com.kingsrook.qqq.backend.core.model.metadata.collaboration.RecordReferenceTableMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 /*******************************************************************************
@@ -74,7 +78,15 @@ public final class CollaborationRecords
     *******************************************************************************/
    public static List<QRecord> query(String table, QQueryFilter filter) throws QException
    {
-      QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(QContext.getQBackendTransaction());
+      return (query(table, filter, QContext.getQBackendTransaction()));
+   }
+
+   /*******************************************************************************
+    ** Provider reads participate in the originating query's explicit transaction.
+    *******************************************************************************/
+   public static List<QRecord> query(String table, QQueryFilter filter, QBackendTransaction transaction) throws QException
+   {
+      QueryInput input = new QueryInput(table).withFilter(filter).withShouldFetchHeavyFields(true).withTransaction(transaction);
       input.setTableMetaData(serviceMetadata(table));
       input.withPermissionBypass("Trusted collaboration service performs parent/ownership authorization.");
       return (new QueryAction().execute(input).getRecords().stream().map(QRecord::new).toList());
@@ -85,8 +97,34 @@ public final class CollaborationRecords
     *******************************************************************************/
    public static QRecord insert(String table, QRecord row) throws QException
    {
-      InsertInput input = new InsertInput(table).withRecords(List.of(row)).withTransaction(QContext.getQBackendTransaction());
-      input.setTableMetaData(serviceMetadata(table));
+      return (insert(serviceMetadata(table), row));
+   }
+
+   /*******************************************************************************
+    ** Activity belongs to the authorized source operation; timeline controls its
+    ** presentation. Preserve native parent checks and mirrored security keys.
+    *******************************************************************************/
+   public static QRecord insertActivity(QRecord row, RecordFeature sourceFeature) throws QException
+   {
+      QTableMetaData metadata = serviceMetadata(CollaborationTables.ACTIVITY);
+      RecordReferenceTableMetaData original = RecordReferenceTableMetaData.of(metadata);
+      if(original == null || sourceFeature == null)
+      {
+         throw (new QException("Activity source authorization metadata is required."));
+      }
+      RecordReferenceTableMetaData reference = (RecordReferenceTableMetaData) original.clone();
+      reference.withFeature(sourceFeature);
+      metadata.withSupplementalMetaData(reference);
+      return (insert(metadata, row));
+   }
+
+   /*******************************************************************************
+    ** A private metadata copy retains the same transaction and validation path.
+    *******************************************************************************/
+   private static QRecord insert(QTableMetaData metadata, QRecord row) throws QException
+   {
+      InsertInput input = new InsertInput(metadata.getName()).withRecords(List.of(row)).withTransaction(QContext.getQBackendTransaction());
+      input.setTableMetaData(metadata);
       input.withPermissionBypass("Trusted collaboration service authorized this write.");
       List<QRecord> result = new InsertAction().execute(input).getRecords();
       check(result);
